@@ -1,6 +1,7 @@
 import { App, Notice } from 'obsidian';
 import type { GCTask } from '../../types';
 import { updateTaskProperties, refreshTaskView } from '../../tasks/taskUpdater';
+import { taskUndo } from '../../tasks/taskUndo';
 import { Logger } from '../../utils/logger';
 import { i18n } from '../../i18n/i18n';
 
@@ -32,14 +33,21 @@ export async function restoreTask(
 		}
 
 		// 更新任务状态：取消取消状态，并清除取消日期
-		await updateTaskProperties(app, task, {
-			status: 'todo',
+		const updates = {
+			status: 'todo' as const,
 			cancelled: false,
 			cancelledDate: null
-		}, enabledFormats);
+		};
+		await updateTaskProperties(app, task, updates, enabledFormats);
 		await refreshTaskView(app, task.filePath);
 
-		new Notice(i18n.t('contextMenu.commands.restored'));
+		taskUndo.registerProperty({
+			app,
+			oldTask: task,
+			updates,
+			enabledFormats,
+			onRefresh,
+		}, i18n.t('contextMenu.commands.restored'));
 		onRefresh();
 	} catch (error) {
 		Logger.error('restoreTask', 'Failed to restore task:', error);

@@ -36,8 +36,8 @@ interface ActiveResize {
 }
 
 interface DragHandlers {
-	move: (e: MouseEvent) => void;
-	end: (e: MouseEvent) => void;
+	move: (e: PointerEvent) => void;
+	end: (e: PointerEvent) => void;
 }
 
 /**

@@ -47,6 +47,8 @@ export class Modal {
 export function setIcon(_el: HTMLElement, _icon: string): void {}
 export function getLanguage(): string { return 'en'; }
 export class Notice {
+	noticeEl: HTMLElement = { appendChild: () => {} } as unknown as HTMLElement;
+
 	constructor(_message: string, _timeout?: number) {}
 }
 

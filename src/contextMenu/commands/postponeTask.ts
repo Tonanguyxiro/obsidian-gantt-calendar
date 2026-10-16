@@ -2,6 +2,7 @@ import { App, Notice } from 'obsidian';
 import type { GCTask } from '../../types';
 import type { TaskUpdates } from '../../tasks/taskSerializer';
 import { updateTaskProperties, refreshTaskView } from '../../tasks/taskUpdater';
+import { taskUndo } from '../../tasks/taskUndo';
 import { Logger } from '../../utils/logger';
 import { i18n } from '../../i18n/i18n';
 
@@ -45,10 +46,19 @@ export async function postponeTask(
 
 		await updateTaskProperties(app, task, updates, enabledFormats);
 		await refreshTaskView(app, task.filePath);
-		onRefresh();
 
 		const dateStr = newDate.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
-		new Notice(fromNow ? i18n.t('contextMenu.commands.dueDateSet', { date: dateStr }) : i18n.t('contextMenu.commands.postponed', { days, date: dateStr }));
+		const successMessage = fromNow
+			? i18n.t('contextMenu.commands.dueDateSet', { date: dateStr })
+			: i18n.t('contextMenu.commands.postponed', { days, date: dateStr });
+		taskUndo.registerProperty({
+			app,
+			oldTask: task,
+			updates,
+			enabledFormats,
+			onRefresh,
+		}, successMessage);
+		onRefresh();
 	} catch (err) {
 		Logger.error('postponeTask', 'Failed to postpone task', err);
 		new Notice(i18n.t('contextMenu.commands.postponeFailed'));

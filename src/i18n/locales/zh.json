@@ -1216,9 +1216,16 @@
         "existsInDir": "指定目录下已存在文件: {{fileName}}.md"
       },
       "deleteTask": {
+        "confirmTitle": "删除任务",
+        "confirmMessage": "确定删除“{{description}}”？此操作无法撤销。",
+        "confirmAction": "删除",
+        "taskNotFound": "任务已不存在于源文件中",
         "fileNotFound": "找不到任务所在文件",
         "invalidLineNumber": "任务行号无效"
       },
+      "undoAction": "撤销",
+      "undoSuccess": "操作已撤销",
+      "undoFailed": "撤销失败",
       "restore": {
         "alreadyDone": "恢复任务失败:任务已完成",
         "alreadyRestored": "恢复任务失败:任务已经恢复"

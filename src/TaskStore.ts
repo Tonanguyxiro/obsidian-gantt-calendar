@@ -95,6 +95,12 @@ export class TaskStore {
 	 * 传递文件路径以便甘特图等组件进行增量更新
 	 */
 	private setupEventForwarding(): void {
+		this.eventBus.on('tasks:loaded', (data) => {
+			const loadedData = data as { sourceId?: string } | undefined;
+			Logger.debug('TaskStore', `Event: tasks:loaded from ${loadedData?.sourceId || 'unknown'}`);
+			this.invalidateCache();
+			this.notifyListenersDebounced();
+		});
 		this.eventBus.on('task:created', (data) => {
 			const taskData = data as { task?: { filePath?: string } } | undefined;
 			const filePath = taskData?.task?.filePath;

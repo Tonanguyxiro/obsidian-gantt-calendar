@@ -18,6 +18,7 @@ import { SyncManagerBridge } from './src/managers/SyncManagerBridge';
 import { DailyNoteIndex } from './src/utils/dailyNoteSettingsBridge';
 import { initModalHost, destroyModalHost } from './src/ui/modals/modalHost';
 import { useCalendarStore } from './src/ui/store/calendarStore';
+import { StatusBarPresenter } from './src/statusBar/statusBarPresenter';
 
 /** 视图筛选变更写回 data.json 的防抖间隔（点击级频率，无需即时时效） */
 const VIEW_FILTERS_SAVE_DEBOUNCE_MS = 800;
@@ -42,6 +43,7 @@ export default class GanttCalendarPlugin extends Plugin {
 	private statusBarItemEl: HTMLElement;
 	private statusBarIcon: HTMLElement;
 	private statusBarText: HTMLElement;
+	private statusBarPresenter: StatusBarPresenter | null = null;
 	private syncStatusText = '';
 	private lastSyncTime = '';
 
@@ -121,6 +123,7 @@ export default class GanttCalendarPlugin extends Plugin {
 			this.viewFiltersSaveTimer = null;
 			void this.settingsManager.saveSettings(this.settings);
 		}
+		this.statusBarPresenter?.cancelScheduledUpdate();
 		this.syncManagerBridge?.destroy();
 		this.dailyNoteIndex?.destroy();
 		this.themeManager?.destroy();
@@ -267,20 +270,17 @@ export default class GanttCalendarPlugin extends Plugin {
 		this.statusBarText.setText('...');
 
 		if (this.taskCache) {
-			this.taskCache.onUpdate(() => this.renderStatusBar());
+			this.statusBarPresenter = new StatusBarPresenter(
+				this.statusBarText,
+				() => this.taskCache.getAllTasks(),
+				() => ({ lastSync: this.formatLastSync(), syncStatus: this.syncStatusText || i18n.t('common.ready') }),
+			);
+			this.taskCache.onUpdate(() => this.statusBarPresenter?.scheduleUpdate());
+			this.statusBarPresenter.renderNow();
 		}
 	}
 
 	private renderStatusBar(): void {
-		if (!this.statusBarText || !this.taskCache) return;
-
-		const tasks = this.taskCache.getAllTasks();
-		const total = tasks.length;
-		const incomplete = tasks.filter(t => !t.completed).length;
-		const lastSync = this.formatLastSync();
-		const syncStatus = this.syncStatusText || i18n.t('common.ready');
-
-		// 始终并列显示：任务统计 | 同步时间 | 同步状态
-		this.statusBarText.setText(` ${incomplete}/${total} | ${lastSync} | ${syncStatus}`);
+		this.statusBarPresenter?.renderNow();
 	}
 }

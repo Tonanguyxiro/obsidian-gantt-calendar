@@ -1,6 +1,7 @@
 import { App, Notice } from 'obsidian';
 import type { GCTask } from '../../types';
 import { updateTaskProperties, refreshTaskView } from '../../tasks/taskUpdater';
+import { taskUndo } from '../../tasks/taskUndo';
 import { Logger } from '../../utils/logger';
 import { i18n } from '../../i18n/i18n';
 
@@ -34,14 +35,21 @@ export async function cancelTask(
 
 		// 更新任务状态：设置为取消，并添加取消日期
 		// 使用 status: 'canceled' 会自动将复选框设置为 [-]
-		await updateTaskProperties(app, task, {
-			status: 'canceled',
+		const updates = {
+			status: 'canceled' as const,
 			cancelled: true,
 			cancelledDate: new Date()
-		}, enabledFormats);
+		};
+		await updateTaskProperties(app, task, updates, enabledFormats);
 		await refreshTaskView(app, task.filePath);
 
-		new Notice(i18n.t('contextMenu.commands.cancelled'));
+		taskUndo.registerProperty({
+			app,
+			oldTask: task,
+			updates,
+			enabledFormats,
+			onRefresh,
+		}, i18n.t('contextMenu.commands.cancelled'));
 		onRefresh();
 	} catch (error) {
 		Logger.error('cancelTask', 'Failed to cancel task:', error);

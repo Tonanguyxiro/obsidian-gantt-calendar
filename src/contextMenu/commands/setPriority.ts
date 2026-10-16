@@ -1,6 +1,7 @@
 import { App, Notice } from 'obsidian';
 import type { GCTask } from '../../types';
 import { updateTaskProperties, refreshTaskView } from '../../tasks/taskUpdater';
+import { taskUndo } from '../../tasks/taskUndo';
 import { Logger } from '../../utils/logger';
 import { i18n } from '../../i18n/i18n';
 
@@ -26,8 +27,14 @@ export async function setTaskPriority(
 
 		await updateTaskProperties(app, task, updates, enabledFormats);
 		await refreshTaskView(app, task.filePath);
+		taskUndo.registerProperty({
+			app,
+			oldTask: task,
+			updates,
+			enabledFormats,
+			onRefresh,
+		}, i18n.t('contextMenu.commands.priorityUpdated'));
 		onRefresh();
-		new Notice(i18n.t('contextMenu.commands.priorityUpdated'));
 	} catch (err) {
 		Logger.error('setPriority', 'Failed to update task priority', err);
 		new Notice(i18n.t('contextMenu.commands.priorityUpdateFailed'));

@@ -81,7 +81,7 @@ export async function refreshTaskView(app: App, filePath: string): Promise<void>
 
 // ==================== 行内容校验 ====================
 
-function getGlobalTaskFilter(app: App): string {
+export function getGlobalTaskFilter(app: App): string {
 	const appWithPlugins = app as App & {
 		plugins?: { getPlugin?: (id: string) => { settings?: { globalTaskFilter?: string } } | null };
 	};
@@ -92,6 +92,14 @@ function lineMatchesTask(line: string, task: GCTask, globalFilter: string): bool
 	const parsed = parseSingleTaskLine(line, task.filePath, task.fileName, 1, ['tasks', 'dataview'], globalFilter);
 	if (!parsed) return false;
 	return parsed.content === task.content || parsed.description === task.description;
+}
+
+/**
+ * 在重读后的文件中定位任务行，兼容并发编辑导致的行号漂移。
+ * 返回 0-based 行索引；找不到返回 -1。
+ */
+export function locateTaskLine(lines: readonly string[], task: GCTask, globalFilter: string): number {
+	return lines.findIndex(line => lineMatchesTask(line, task, globalFilter));
 }
 
 

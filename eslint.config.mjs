@@ -82,6 +82,7 @@ export default [
 				beforeAll: "readonly",
 				afterAll: "readonly",
 				jest: "readonly",
+				setImmediate: "readonly",
 				test: "readonly",
 				fit: "readonly",
 				xit: "readonly",

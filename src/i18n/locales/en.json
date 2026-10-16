@@ -1216,9 +1216,16 @@
         "existsInDir": "File already exists in specified directory: {{fileName}}.md"
       },
       "deleteTask": {
+        "confirmTitle": "Delete Task",
+        "confirmMessage": "Delete “{{description}}”? This action cannot be undone.",
+        "confirmAction": "Delete",
+        "taskNotFound": "Task no longer exists in source file",
         "fileNotFound": "Task source file not found",
         "invalidLineNumber": "Invalid task line number"
       },
+      "undoAction": "Undo",
+      "undoSuccess": "Operation undone",
+      "undoFailed": "Undo failed",
       "restore": {
         "alreadyDone": "Restore failed: task is completed",
         "alreadyRestored": "Restore failed: task is already restored"

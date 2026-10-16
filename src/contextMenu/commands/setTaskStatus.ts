@@ -2,6 +2,7 @@ import { App, Notice } from 'obsidian';
 import type { GCTask } from '../../types';
 import type { TaskStatusType } from '../../tasks/taskStatus';
 import { updateTaskProperties, refreshTaskView } from '../../tasks/taskUpdater';
+import { taskUndo } from '../../tasks/taskUndo';
 import { getStatusByKey } from '../../tasks/taskStatus';
 import { Logger } from '../../utils/logger';
 import { i18n } from '../../i18n/i18n';
@@ -27,7 +28,13 @@ export async function setTaskStatus(
 
 		const statusInfo = getStatusByKey(status);
 		const label = statusInfo ? statusInfo.name : status;
-		new Notice(i18n.t('contextMenu.commands.statusUpdated', { label }));
+		taskUndo.registerProperty({
+			app,
+			oldTask: task,
+			updates: { status },
+			enabledFormats,
+			onRefresh,
+		}, i18n.t('contextMenu.commands.statusUpdated', { label }));
 		onRefresh();
 	} catch (err) {
 		Logger.error('setTaskStatus', 'Failed to update task status', err);

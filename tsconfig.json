@@ -1,7 +1,6 @@
 {
   "compilerOptions": {
     "baseUrl": ".",
-    
     "inlineSourceMap": true,
     "inlineSources": true,
     "module": "ESNext",
@@ -10,11 +9,11 @@
     "allowJs": true,
     "resolveJsonModule": true,
     "esModuleInterop": true,
-    "noImplicitAny": true,
-    "moduleResolution": "node",
+    "strict": true,
+    "strictPropertyInitialization": false,
+    "moduleResolution": "bundler",
     "importHelpers": true,
     "isolatedModules": true,
-    "strictNullChecks": true,
     "skipLibCheck": true,
     "downlevelIteration": true,
     "lib": [
@@ -27,7 +26,6 @@
     "**/*.tsx"
   ],
   "exclude": [
-    "node_modules",
-    "ref"
+    "node_modules"
   ]
 }

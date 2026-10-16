@@ -16,7 +16,9 @@ A powerful visual task management plugin for Obsidian.
 
 **Timeline Canvas** — Continuous minute-positioned timeline in Week/Day/Sidebar views: click-to-create, edge resize (15-min snap), WYSIWYG drag with landing preview
 
-**Mobile Ready** — Long-press menus as bottom sheets, touch drag, swipe paging, responsive layouts
+**Mobile Ready** — Long-press menus as bottom sheets, touch drag, swipe paging, floating navigation dock, responsive layouts
+
+**Instant Startup** — Skeleton screen renders immediately; the full-vault first scan runs asynchronously, so opening the layout is never blocked
 
 **Daily Note Integration** — Embedded editor with edit/preview mode toggle
 
@@ -283,6 +285,8 @@ The plugin uses a **toolbar + content area** layout:
 - **Toolbar Center** — Current date range / title
 - **Toolbar Right** — Functional buttons (sort, filter, navigation, add task, sync, refresh, settings)
 
+On mobile the toolbar is replaced by a floating **Navigation Dock** — one-thumb access to view switching and key actions. On desktop narrow windows (≤520px) the Day View switches to the same vertical split as mobile.
+
 ### Year View
 
 - **Year Overview** — 12 month cards showing full-year task distribution
@@ -335,6 +339,7 @@ The plugin uses a **toolbar + content area** layout:
   - Supports Obsidian core daily notes, Periodic Notes plugin, and custom paths
 - **Resizable Split** — Draggable divider between task and note panes (horizontal or vertical layout)
 - **Lunar Info Bar** — Lunar date, festivals, and solar terms
+- **Narrow Window** — At ≤520px width, switches to vertical split (timeline above, editor below) for comfortable use on small screens
 
 ### Task View
 

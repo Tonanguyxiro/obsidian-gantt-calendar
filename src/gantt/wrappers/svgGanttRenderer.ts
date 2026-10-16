@@ -1258,10 +1258,11 @@ export class SvgGanttRenderer {
 				e.stopPropagation(); // 阻止事件冒泡
 				this.handleTaskClick(task);
 			});
-			bar.addEventListener('mouseenter', (event: MouseEvent) => {
+			bar.addEventListener('mouseenter', (event) => {
 				if (isTouchNow()) return;
 				bar.setAttribute('opacity', '1');
-				this.showPopup(task, bar, { x: event.clientX, y: event.clientY });
+				const mouseEvent = event as MouseEvent;
+				this.showPopup(task, bar, { x: mouseEvent.clientX, y: mouseEvent.clientY });
 			});
 			bar.addEventListener('mouseleave', () => {
 				bar.setAttribute('opacity', '0.85');

@@ -1,8 +1,7 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "types": ["jest"],
-    "noImplicitAny": false
+    "types": ["jest"]
   },
   "include": ["tests/**/*.ts", "src/**/*.ts"],
   "exclude": ["node_modules"]

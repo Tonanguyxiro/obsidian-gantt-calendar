@@ -60,9 +60,9 @@ export function CountBadge({ count }: { count: number }): JSX.Element {
 }
 
 /** 底部胶囊切换器 */
-function SegmentedToggle({
+function SegmentedToggle<T extends string>({
 	options, value, onChange,
-}: { options: readonly string[]; value: string; onChange: (v: string) => void }): JSX.Element {
+}: { options: readonly T[]; value: T; onChange: (v: T) => void }): JSX.Element {
 	return (
 		<div style={{
 			display: 'flex', gap: '1px',

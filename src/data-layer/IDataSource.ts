@@ -17,7 +17,7 @@ import {
  * 数据源变更事件处理器
  */
 export interface ChangeEventHandler {
-	(changes: DataSourceChanges): void | Promise<void>;
+	(changes: DataSourceChanges, opts?: { initial?: boolean }): void | Promise<void>;
 }
 
 /**

@@ -91,7 +91,8 @@ export type TaskEvent =
 	| 'task:completed'
 	| 'sync:started'
 	| 'sync:completed'
-	| 'sync:conflict';
+	| 'sync:conflict'
+	| 'tasks:loaded';
 
 /**
  * 事件处理器类型

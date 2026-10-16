@@ -44,8 +44,8 @@ export class TaskRepository {
 	 */
 	registerDataSource(source: IDataSource): void {
 		this.dataSources.set(source.sourceId, source);
-		source.onChange(async (changes) => {
-			await this.handleSourceChanges(source.sourceId, changes);
+		source.onChange(async (changes, opts) => {
+			await this.handleSourceChanges(source.sourceId, changes, opts);
 		});
 	}
 
@@ -161,8 +161,10 @@ export class TaskRepository {
 	 */
 	private async handleSourceChanges(
 		sourceId: string,
-		changes: DataSourceChanges
+		changes: DataSourceChanges,
+		opts?: { initial?: boolean }
 	): Promise<void> {
+		const isInitialLoad = opts?.initial === true;
 		const startTime = performance.now();
 		Logger.debug('TaskRepository', `Processing changes from ${sourceId}:`, {
 			created: changes.created.length,
@@ -184,8 +186,10 @@ export class TaskRepository {
 				this.fileIndex.get(task.filePath)!.add(taskId);
 			}
 
-			// 发布事件
-			this.eventBus.emit('task:created', { task });
+			// 首扫只维护缓存，等批量加载完成后统一通知，避免大库产生任务数级别的定时器 churn
+			if (!isInitialLoad) {
+				this.eventBus.emit('task:created', { task });
+			}
 		}
 
 		// 处理更新任务
@@ -245,6 +249,13 @@ export class TaskRepository {
 					this.fileIndex.delete(filePath);
 				}
 			}
+		}
+
+		if (isInitialLoad) {
+			this.eventBus.emit('tasks:loaded', {
+				sourceId,
+				totalTasks: this.taskCache.size,
+			});
 		}
 
 		const elapsed = performance.now() - startTime;

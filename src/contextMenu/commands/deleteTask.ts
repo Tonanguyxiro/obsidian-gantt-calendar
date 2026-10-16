@@ -1,12 +1,14 @@
 import { App, Notice, TFile } from 'obsidian';
 import type { GCTask } from '../../types';
-import { refreshTaskView } from '../../tasks/taskUpdater';
+import { refreshTaskView, withFileLock, getGlobalTaskFilter, locateTaskLine } from '../../tasks/taskUpdater';
+import { taskUndo } from '../../tasks/taskUndo';
 import { Logger } from '../../utils/logger';
 import { i18n } from '../../i18n/i18n';
+import { showConfirmDialog } from '../../ui/modals/ConfirmDialog';
 
 /**
  * 删除任务
- * 从文件中删除任务所在行，不保留空行
+ * 删除前必须二次确认；写回前重读文件并重定位任务行，避免并发编辑时误删。
  * @param app Obsidian App 实例
  * @param task 要删除的任务
  * @param onRefresh 刷新回调
@@ -23,26 +25,46 @@ export async function deleteTask(
 			return;
 		}
 
-		const content = await app.vault.read(file);
-		const lines = content.split('\n');
-		const taskLineIndex = task.lineNumber - 1;
+		const confirmed = await showConfirmDialog(
+			app,
+			i18n.t('contextMenu.commands.deleteTask.confirmTitle'),
+			i18n.t('contextMenu.commands.deleteTask.confirmMessage', {
+				description: task.description || task.content,
+			}),
+			{
+				confirmText: i18n.t('contextMenu.commands.deleteTask.confirmAction'),
+				isDestructive: true,
+			}
+		);
+		if (!confirmed) return;
 
-		if (taskLineIndex < 0 || taskLineIndex >= lines.length) {
-			new Notice(i18n.t('contextMenu.commands.deleteTask.invalidLineNumber'));
-			return;
-		}
+		await withFileLock(task.filePath, async () => {
+			// 锁内重读，防止确认期间或并发操作后基于旧内容删行
+			const content = await app.vault.read(file);
+			const lines = content.split('\n');
+			const taskLineIndex = locateTaskLine(lines, task, getGlobalTaskFilter(app));
 
-		// 删除任务所在行
-		lines.splice(taskLineIndex, 1);
+			if (taskLineIndex === -1) {
+				new Notice(i18n.t('contextMenu.commands.deleteTask.taskNotFound'));
+				return;
+			}
 
-		// 写回文件
-		const newContent = lines.join('\n');
-		await app.vault.modify(file, newContent);
-		// 删除行走的是行号删改，立即重建缓存，避免下方任务行号错位视图停留 1~2s
-		await refreshTaskView(app, task.filePath);
+			// 删除任务所在行，不保留空行；先保存原文用于撤销
+			const deletedLine = lines[taskLineIndex];
+			lines.splice(taskLineIndex, 1);
+			await app.vault.modify(file, lines.join('\n'));
 
-		new Notice(i18n.t('contextMenu.commands.deleted'));
-		onRefresh();
+			// 删除行走的是行号删改，立即重建缓存，避免下方任务行号错位视图停留 1~2s
+			await refreshTaskView(app, task.filePath);
+			taskUndo.registerDeletedLine({
+				app,
+				filePath: task.filePath,
+				lineIndex: taskLineIndex,
+				line: deletedLine,
+				onRefresh,
+			}, i18n.t('contextMenu.commands.deleted'));
+			onRefresh();
+		});
 	} catch (error) {
 		Logger.error('deleteTask', 'Failed to delete task:', error);
 		new Notice(i18n.t('contextMenu.commands.deleteFailed'));

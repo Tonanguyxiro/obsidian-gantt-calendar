@@ -159,12 +159,12 @@ export class MarkdownDataSource implements IDataSource {
 			return;
 		}
 
-		void this.changeHandler({
+		await this.changeHandler({
 			sourceId: this.sourceId,
 			created: allTasks,
 			updated: [],
 			deleted: []
-		});
+		}, { initial: true });
 	}
 
 	/**

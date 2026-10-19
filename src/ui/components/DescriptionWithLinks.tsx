@@ -6,6 +6,7 @@ import { LinkClasses } from '../../utils/bem';
 import { i18n } from '../../i18n/i18n';
 import { openFileInExistingLeaf } from '../../utils/fileOpener';
 import { resolveLinkTarget, wikilinkDisplayText } from '../../utils/linkText';
+import { tokenizeInlineMarkdown, type InlineMarkdownToken } from '../../utils/inlineMarkdown';
 
 export interface LinkSegment {
 	type: 'obsidian' | 'markdown' | 'url';
@@ -98,6 +99,21 @@ export function parseDescriptionSegments(text: string): DescriptionSegment[] {
 /**
  * React 富文本描述组件：渲染任务描述中的可点击链接
  */
+/** 行内 Markdown 渲染为对应的 HTML 元素 */
+function InlineMarkdown({ text }: { text: string }): JSX.Element {
+	const render = (t: InlineMarkdownToken, i: number): JSX.Element => {
+		switch (t.kind) {
+			case 'bold': return <strong key={i}>{t.text}</strong>;
+			case 'italic': return <em key={i}>{t.text}</em>;
+			case 'strike': return <del key={i}>{t.text}</del>;
+			case 'mark': return <mark key={i}>{t.text}</mark>;
+			case 'code': return <code key={i}>{t.text}</code>;
+			default: return <Fragment key={i}>{t.text}</Fragment>;
+		}
+	};
+	return <>{tokenizeInlineMarkdown(text).map(render)}</>;
+}
+
 export function DescriptionWithLinks({ text, app, sourcePath = '' }: { text: string; app: App; sourcePath?: string }): JSX.Element {
 	const segments = useMemo(() => parseDescriptionSegments(text), [text]);
 
@@ -106,7 +122,7 @@ export function DescriptionWithLinks({ text, app, sourcePath = '' }: { text: str
 			{segments.map((seg, i) => {
 				// 链接段同样带 text 字段，必须按 type 区分
 				if (!('type' in seg)) {
-					return <Fragment key={i}>{seg.text}</Fragment>;
+					return <InlineMarkdown key={i} text={seg.text} />;
 				}
 				const link = seg;
 				if (link.type === 'obsidian') {

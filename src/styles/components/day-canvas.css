@@ -65,16 +65,19 @@
 }
 
 /* 块内卡片：高度由块容器按时长撑开（块为主），内容垂直居中（文本为从） */
-.gc-day-canvas__block .gc-task-card--timeline {
+:is(.gc-day-canvas__block, .gc-week-view__time-block) .gc-task-card.gc-task-card--timeline {
+	box-sizing: border-box;
 	height: 100%;
 	min-height: var(--gc-tl-card-h);
+	/* 顶部让出右上角时刻标签（约 14px）的位置，避免遮挡文字 */
+	padding-top: 14px;
 	flex-wrap: wrap;
 	/* 垂直居中；safe 在内容溢出块高时回退为顶部对齐（避免上下两端同时被裁） */
 	align-content: safe center;
 	align-items: center;
 }
 
-.gc-day-canvas__block .gc-task-card--timeline .gc-task-card__text {
+:is(.gc-day-canvas__block, .gc-week-view__time-block) .gc-task-card--timeline .gc-task-card__text {
 	white-space: normal;
 	word-break: break-word;
 	text-overflow: clip;
@@ -85,8 +88,43 @@
 	max-height: 100%;
 }
 
-.gc-day-canvas__block .gc-task-card--timeline .gc-task-card__tags {
+:is(.gc-day-canvas__block, .gc-week-view__time-block) {
+	/* 块尺寸由内联 top/height/width 决定，可用容器查询按块高度取舍标签 */
+	container-type: size;
+}
+
+/* 时间块内标签：另起一行排在文字下方，横向换行；仅保留第一行，放不下的整枚隐藏 */
+:is(.gc-day-canvas__block, .gc-week-view__time-block) .gc-task-card--timeline .gc-task-card__tags {
+	display: none;
+	flex: 0 0 100%;
+	max-width: none;
+	flex-direction: row;
+	flex-wrap: wrap;
+	align-items: flex-start;
+	align-content: flex-start;
+	height: 20px;
+	margin: 0;
+	padding-left: 24px;
+	overflow: hidden;
+}
+
+:is(.gc-day-canvas__block, .gc-week-view__time-block) .gc-task-card--timeline .gc-task-card__tags .gc-tag {
+	flex: none;
 	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* 块够高才显示标签行，并给文字让出这一行的高度；不够高则完全不显示 */
+@container (min-height: 76px) {
+	:is(.gc-day-canvas__block, .gc-week-view__time-block) .gc-task-card--timeline .gc-task-card__tags {
+		display: flex;
+	}
+
+	:is(.gc-day-canvas__block, .gc-week-view__time-block) .gc-task-card--timeline .gc-task-card__text {
+		max-height: calc(100% - 24px);
+	}
 }
 
 /* 延续分段：平角 + 箭头（跨午夜任务在本日之外的延续） */

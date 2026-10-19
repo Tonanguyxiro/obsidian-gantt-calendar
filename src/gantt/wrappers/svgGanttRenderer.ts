@@ -24,6 +24,7 @@ import { GanttClasses, setCssProps } from '../../utils/bem';
 import { TooltipManager, type MousePosition } from '../../utils/tooltipManager';
 import { isTouchNow } from '../../ui/utils/platform';
 import { Logger } from '../../utils/logger';
+import { globalFilterPrefix } from '../../utils/linkText';
 import { LinkRenderer } from '../../utils/linkRenderer';
 import { getTodayInTimezone } from '../../dateUtils/timezone';
 import { formatDate } from '../../dateUtils/dateUtilsIndex';
@@ -970,9 +971,7 @@ export class SvgGanttRenderer {
 
 			// 使用用户设置 showGlobalFilterInTaskText 控制是否显示全局过滤词
 			const gf = (this.plugin?.settings?.globalTaskFilter || '').trim();
-			const displayText = (this.plugin?.settings?.showGlobalFilterInTaskText && gf)
-				? gf + ' ' + task.name
-				: task.name;
+			const displayText = globalFilterPrefix(this.plugin?.settings?.showGlobalFilterInTaskText, gf) + task.name;
 			this.renderTaskDescriptionWithLinks(textContainer, task.rowKind === 'file' ? task.name : displayText, task.filePath);
 			contentDiv.appendChild(textContainer);
 
@@ -1642,9 +1641,7 @@ export class SvgGanttRenderer {
 					const textContainer = row.querySelector('.gantt-task-list-item__text');
 					if (textContainer instanceof HTMLElement) {
 						const gf = (this.plugin?.settings?.globalTaskFilter || '').trim();
-						const displayText = (this.plugin?.settings?.showGlobalFilterInTaskText && gf)
-							? gf + ' ' + task.name
-							: task.name;
+						const displayText = globalFilterPrefix(this.plugin?.settings?.showGlobalFilterInTaskText, gf) + task.name;
 						textContainer.empty();
 						this.renderTaskDescriptionWithLinks(textContainer, task.rowKind === 'file' ? task.name : displayText, task.filePath);
 					}

@@ -7,6 +7,7 @@ import { getStatusColor, DEFAULT_TASK_STATUSES, getCurrentThemeMode } from '../.
 import { formatDate } from '../../dateUtils/dateUtilsIndex';
 import { toISOStringLocal } from '../../dateUtils/timezone';
 import { usePlugin, useApp } from '../pluginContext';
+import { globalFilterPrefix } from '../../utils/linkText';
 import { DescriptionWithLinks } from './DescriptionWithLinks';
 import { TagPillSpan } from './TagPillSpan';
 import { ContextMenuTrigger, type ContextMenuSection } from './ContextMenu';
@@ -118,7 +119,7 @@ export const TaskCard = memo(function TaskCard({ task, config, targetDate, onCli
 			: undefined;
 		return (
 			<div className={textCls.join(' ')} style={style}>
-				{plugin.settings.showGlobalFilterInTaskText && gf ? `${gf} ` : ''}
+				{globalFilterPrefix(plugin.settings.showGlobalFilterInTaskText, gf)}
 				<DescriptionWithLinks text={taskDisplayText(task.description)} app={app} sourcePath={task.filePath} />
 			</div>
 		);

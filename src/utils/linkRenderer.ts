@@ -3,6 +3,7 @@ import { RegularExpressions } from './RegularExpressions';
 import { i18n } from '../i18n/i18n';
 import { openFileInExistingLeaf } from './fileOpener';
 import { resolveLinkTarget, wikilinkDisplayText } from './linkText';
+import { tokenizeInlineMarkdown } from './inlineMarkdown';
 
 /**
  * 链接渲染工具类
@@ -20,6 +21,15 @@ export class LinkRenderer {
 	 * @param text - 要渲染的文本
 	 * @param app - Obsidian App 实例，用于打开文件链接
 	 */
+	/** 纯文本段：行内 Markdown 渲染为对应元素 */
+	private static appendMarkdownText(container: HTMLElement, text: string): void {
+		const tags = { bold: 'strong', italic: 'em', strike: 'del', mark: 'mark', code: 'code' } as const;
+		for (const token of tokenizeInlineMarkdown(text)) {
+			if (token.kind === 'text') container.appendText(token.text);
+			else container.createEl(tags[token.kind], { text: token.text });
+		}
+	}
+
 	static renderTaskDescriptionWithLinks(container: HTMLElement, text: string, app: App, sourcePath = ''): void {
 		// 从统一正则入口获取链接正则表达式
 		const obsidianLinkRegex = RegularExpressions.Links.obsidianLinkRegex;
@@ -65,7 +75,7 @@ export class LinkRenderer {
 		for (const m of uniqueMatches) {
 			// 添加前面的普通文本
 			if (m.start > lastIndex) {
-				container.appendText(text.substring(lastIndex, m.start));
+				LinkRenderer.appendMarkdownText(container, text.substring(lastIndex, m.start));
 			}
 
 			// 添加链接
@@ -127,7 +137,7 @@ export class LinkRenderer {
 
 		// 添加剩余的普通文本
 		if (lastIndex < text.length) {
-			container.appendText(text.substring(lastIndex));
+			LinkRenderer.appendMarkdownText(container, text.substring(lastIndex));
 		}
 	}
 }

@@ -709,6 +709,14 @@ export class RegularExpressions {
     } as const;
 
     /**
+     * 任务文字中的行内 Markdown：**粗体** / __粗体__ / ~~删除线~~ / ==高亮== / `代码` / *斜体*
+     * 捕获组依次对应上述六种（仅一个非空）
+     */
+    static readonly InlineMarkdown = {
+        pattern: /\*\*(.+?)\*\*|__(.+?)__|~~(.+?)~~|==(.+?)==|`([^`]+)`|\*(?=\S)([^*]*[^*\s])\*/g,
+    } as const;
+
+    /**
      * 高级过滤（Bases 表达式 / Tasks 查询）使用的正则
      */
     static readonly Filters = {

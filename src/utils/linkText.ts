@@ -5,6 +5,7 @@
 import type { App, TFile } from 'obsidian';
 import { RegularExpressions } from './RegularExpressions';
 import { stripPlannerTime } from '../tasks/taskParser/utils';
+import { tokenizeInlineMarkdown } from './inlineMarkdown';
 
 /** 双链目标拆分为文件路径与子路径（#标题 / #^块） */
 export function splitLinkTarget(target: string): { path: string; subpath: string } {
@@ -37,9 +38,11 @@ export function resolveLinkTarget(app: App, target: string, sourcePath = ''): TF
  * 双链 → 显示文本，Markdown 链接 → 链接文字
  */
 export function linksToPlainText(text: string): string {
-	return text
+	const plain = text
 		.replace(RegularExpressions.Links.obsidianLinkRegex, (_m, target: string, alias?: string) => wikilinkDisplayText(target, alias))
 		.replace(RegularExpressions.Links.markdownLinkRegex, (_m, label: string) => label);
+	// 去掉粗体/斜体等标记符，只保留文字
+	return tokenizeInlineMarkdown(plain).map((t) => t.text).join('');
 }
 
 /**
@@ -48,4 +51,13 @@ export function linksToPlainText(text: string): string {
  */
 export function taskDisplayText(description: string): string {
 	return stripPlannerTime(description).trim();
+}
+
+/**
+ * 任务文字前缀：「显示全局筛选符」开启时在文字前补上筛选符。
+ * 标签形式的筛选符（#task）已作为标签在各视图/悬浮窗中显示，不再作为文字前缀重复出现
+ */
+export function globalFilterPrefix(showInText: boolean | undefined, globalFilter: string | undefined): string {
+	const gf = (globalFilter || '').trim();
+	return showInText && gf && !gf.startsWith('#') ? `${gf} ` : '';
 }

@@ -108,3 +108,21 @@ describe('全局筛选符作为标签', () => {
 		expect(t?.description).not.toContain('#task');
 	});
 });
+
+describe('任务文字渲染', () => {
+	it('行内 Markdown 分词', () => {
+		const { tokenizeInlineMarkdown } = jest.requireActual<typeof import('../src/utils/inlineMarkdown')>('../src/utils/inlineMarkdown');
+		expect(tokenizeInlineMarkdown('a **FACT: x** b ~~old~~ `c` *i* ==h==')).toEqual([
+			{ kind: 'text', text: 'a ' }, { kind: 'bold', text: 'FACT: x' }, { kind: 'text', text: ' b ' },
+			{ kind: 'strike', text: 'old' }, { kind: 'text', text: ' ' }, { kind: 'code', text: 'c' }, { kind: 'text', text: ' ' },
+			{ kind: 'italic', text: 'i' }, { kind: 'text', text: ' ' }, { kind: 'mark', text: 'h' },
+		]);
+		expect(tokenizeInlineMarkdown('2 * 3 * 4')).toEqual([{ kind: 'text', text: '2 * 3 * 4' }]);
+	});
+	it('标签形式的全局筛选符不再作为文字前缀', () => {
+		const { globalFilterPrefix } = jest.requireActual<typeof import('../src/utils/linkText')>('../src/utils/linkText');
+		expect(globalFilterPrefix(true, '#task')).toBe('');
+		expect(globalFilterPrefix(true, 'TODO')).toBe('TODO ');
+		expect(globalFilterPrefix(false, 'TODO')).toBe('');
+	});
+});

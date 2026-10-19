@@ -16,6 +16,12 @@
 
 ## ✅ 已完成（按日期倒序）
 
+### 2026-10-20（1.7.2）
+- [x] 日/周视图时间块：标签另起一行排在文字下方（横向换行，只留一行，放不下的整枚隐藏；块高 <76px 不显示）；顶部让出时刻标签位置，不再遮挡文字。周视图 `.gc-week-view__time-block` 与日视图 `.gc-day-canvas__block` 共用这套规则
+- [x] 任务文字渲染行内 Markdown（粗体/斜体/删除线/高亮/行内代码，`src/utils/inlineMarkdown.ts`），卡片/悬浮窗/甘特列表通用
+- [x] 标签形式的全局筛选符（#task）不再作为文字前缀（`globalFilterPrefix`），统一以标签显示
+- [ ] 已知限制：行内 Markdown 只处理单层，不嵌套；月视图/甘特列表的任务行本身不带标签行
+
 ### 2026-10-20（1.7.1）
 - [x] 筛选面板拆为 File / Task 两页（工具栏单一入口）：File = Bases 语法（可选 `.base` 文件的 filters + 视图 filters + 每行一条表达式，`src/filters/baseExpression.ts`/`baseFilter.ts`）；Task = 状态 + 标签树 + Tasks 查询语法（`taskQuery.ts`，支持 AND/OR/NOT、日期/标签/路径/描述/优先级/状态类型）。Obsidian 无公开的 Bases/Tasks 求值接口，故为自实现子集；不支持的写法在面板内报错而非静默清空。文件筛选同样作用于日/周/月/甘特的文件横跨条；状态持久化到 viewFilters（旧数据按字段回退默认）
 - [x] 甘特图今天线移到当天单元中心，并加色带阴影（表头同步）；"回到今天"按中心对齐

@@ -11,6 +11,7 @@ import { isPhoneNow, useIsNarrow } from '../utils/platform';
 import { applyStatusFilter, applyTagFilter, applySort } from '../utils/taskFilters';
 import { CalendarItemCard, FileTaskLayerProvider } from '../components/FileTaskCard';
 import { useFileTaskLayer } from '../utils/useFileTaskLayer';
+import { useAdvancedFilters } from '../utils/useAdvancedFilters';
 import { Icon } from '../components/Icon';
 import { useDropTarget } from '../utils/useDragAndDrop';
 import { useResizeDivider } from '../utils/useResizeDivider';
@@ -74,9 +75,10 @@ export function DayView(): JSX.Element {
 	}, [currentDate]);
 
 	// ===== 任务数据：视图筛选 + 虚拟周期实例 → 单日连续画布模型 =====
+	const advanced = useAdvancedFilters('day');
 	const scoped = useMemo(() => (
-		applySort(applyTagFilter(applyStatusFilter(tasks, filter.status), filter.tag), filter.sort)
-	), [tasks, filter]);
+		applySort(advanced.filterTasks(applyTagFilter(applyStatusFilter(tasks, filter.status), filter.tag)), filter.sort)
+	), [tasks, filter, advanced]);
 	// file-based task 图层：覆盖当日的文件进全天区；归类时文件内任务收进悬浮卡片，定时任务仍留在时间轴
 	const fileLayer = useFileTaskLayer('day', scoped, startField, endField, dateField);
 	const model = useMemo(() => {

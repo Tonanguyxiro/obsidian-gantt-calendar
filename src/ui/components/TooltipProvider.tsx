@@ -14,10 +14,14 @@ import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import type { GCTask } from '../../types';
 import { TooltipClasses } from '../../utils/bem';
+import { TagPill } from '../../components/tagPill';
 import { TagPillSpan } from './TagPillSpan';
+import { DescriptionWithLinks } from './DescriptionWithLinks';
+import { useApp } from '../pluginContext';
 import { MOTION, tooltipVariants, easeOutTransition } from '../motion';
 import {
 	buildTooltipSections,
+	groupTagsByRoot,
 	type TooltipSection,
 } from '../../components/tooltip/tooltipSections';
 import { computeTooltipPosition } from '../../components/tooltip/tooltipPosition';
@@ -25,7 +29,6 @@ import {
 	registerTooltipHolder,
 	claimExclusiveTooltip,
 } from '../../components/tooltip/tooltipCoordinator';
-import { linksToPlainText } from '../../utils/linkText';
 
 interface TooltipState {
 	task: GCTask;
@@ -136,7 +139,9 @@ function TooltipContent({ state, onClose }: { state: TooltipState; onClose: () =
 		setPosition({ left, top });
 	}, [state, anchor, mouse]);
 
+	const app = useApp();
 	const sections = useMemo(() => buildTooltipSections(task), [task]);
+	const tagGroups = useMemo(() => groupTagsByRoot(task.tags || []), [task]);
 
 	return createPortal(
 		<motion.div
@@ -150,7 +155,7 @@ function TooltipContent({ state, onClose }: { state: TooltipState; onClose: () =
 			transition={easeOutTransition(MOTION.dur.fast)}
 		>
 			<div className={TooltipClasses.elements.description}>
-				<strong>{linksToPlainText(task.description || '')}</strong>
+				<strong><DescriptionWithLinks text={task.description || ''} app={app} sourcePath={task.filePath} /></strong>
 			</div>
 			<div className={TooltipClasses.elements.properties}>
 				{sections.map((section: TooltipSection, idx: number) => (
@@ -159,8 +164,18 @@ function TooltipContent({ state, onClose }: { state: TooltipState; onClose: () =
 						<div className={TooltipClasses.elements.propertySection}>
 							{section.key === 'tags' ? (
 								<div className={TooltipClasses.elements.tags}>
-									{(task.tags || []).map((t) => (
-										<TagPillSpan key={t} label={t} showHash />
+									{tagGroups.map((g) => (
+										<span key={g.root} className={TooltipClasses.elements.tagGroup}>
+											<TagPillSpan label={g.root} showHash />
+											{g.children.length > 0 ? (
+												<>
+													<span className={TooltipClasses.elements.tagSeparator}>›</span>
+													{g.children.map((c) => (
+														<TagPillSpan key={c} label={c} showHash={false} colorIndex={TagPill.getColorIndex(g.root)} title={`#${g.root}/${c}`} />
+													))}
+												</>
+											) : null}
+										</span>
 									))}
 								</div>
 							) : section.key === 'file' ? (

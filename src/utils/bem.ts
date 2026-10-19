@@ -93,6 +93,8 @@ export const BLOCKS = {
 	SYNC_TASKLIST: 'sync-tasklist',
 	/** 下拉菜单 */
 	DROPDOWN_MENU: 'dropdown-menu',
+	/** 工具栏筛选面板（File / Task 两页） */
+	FILTER_PANEL: 'filter-panel',
 	/** React 模态框 */
 	MODAL: 'modal',
 	/** React 右键菜单 */
@@ -230,6 +232,8 @@ export const TooltipClasses = {
 		propertyValue: bem(BLOCKS.TASK_TOOLTIP, 'property-value'),
 		propertyDivider: bem(BLOCKS.TASK_TOOLTIP, 'property-divider'),
 		tags: bem(BLOCKS.TASK_TOOLTIP, 'tags'),
+		tagGroup: bem(BLOCKS.TASK_TOOLTIP, 'tag-group'),
+		tagSeparator: bem(BLOCKS.TASK_TOOLTIP, 'tag-separator'),
 		file: bem(BLOCKS.TASK_TOOLTIP, 'file'),
 		fileLocation: bem(BLOCKS.TASK_TOOLTIP, 'file-location'),
 	},
@@ -254,6 +258,27 @@ export const DropdownMenuClasses = {
 	itemIcon: bem(BLOCKS.DROPDOWN_MENU, 'item-icon'),
 	itemLabel: bem(BLOCKS.DROPDOWN_MENU, 'item-label'),
 	itemCheck: bem(BLOCKS.DROPDOWN_MENU, 'item-check'),
+};
+
+/** 筛选面板类名常量 */
+export const FilterPanelClasses = {
+	block: bem(BLOCKS.FILTER_PANEL),
+	tabs: bem(BLOCKS.FILTER_PANEL, 'tabs'),
+	tab: bem(BLOCKS.FILTER_PANEL, 'tab'),
+	tabActive: bem(BLOCKS.FILTER_PANEL, 'tab', 'active'),
+	badge: bem(BLOCKS.FILTER_PANEL, 'badge'),
+	body: bem(BLOCKS.FILTER_PANEL, 'body'),
+	section: bem(BLOCKS.FILTER_PANEL, 'section'),
+	label: bem(BLOCKS.FILTER_PANEL, 'label'),
+	row: bem(BLOCKS.FILTER_PANEL, 'row'),
+	select: bem(BLOCKS.FILTER_PANEL, 'select'),
+	textarea: bem(BLOCKS.FILTER_PANEL, 'textarea'),
+	hint: bem(BLOCKS.FILTER_PANEL, 'hint'),
+	error: bem(BLOCKS.FILTER_PANEL, 'error'),
+	statusList: bem(BLOCKS.FILTER_PANEL, 'status-list'),
+	statusItem: bem(BLOCKS.FILTER_PANEL, 'status-item'),
+	footer: bem(BLOCKS.FILTER_PANEL, 'footer'),
+	resetBtn: bem(BLOCKS.FILTER_PANEL, 'reset-btn'),
 };
 
 /**
@@ -449,6 +474,8 @@ export const GanttClasses = {
 		root: bem(BLOCKS.GANTT, 'root'),
 		rowBg: bem(BLOCKS.GANTT, 'row-bg'),
 		rowHighlight: bem(BLOCKS.GANTT, 'row-highlight'),
+		todayBand: bem(BLOCKS.GANTT, 'today-band'),
+		todayLine: bem(BLOCKS.GANTT, 'today-line'),
 		// 保留旧类名以兼容
 		headerContainer: bem(BLOCKS.GANTT, 'header-container'),
 		tasklistContainer: bem(BLOCKS.GANTT, 'tasklist-container'),

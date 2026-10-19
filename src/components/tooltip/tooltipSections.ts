@@ -30,6 +30,38 @@ const PRIORITY_ICONS: Record<string, string> = {
 	lowest: '⏬',
 };
 
+/** 多级标签聚合后的一组：同一根标签下的所有子路径 */
+export interface TagGroup {
+	/** 根标签（不含 #），保留首次出现的大小写 */
+	root: string;
+	/** 根下各标签相对根的路径（如 `b`、`c/d`）；仅有根标签本身时为空 */
+	children: string[];
+}
+
+/**
+ * 按根标签聚合多级标签：`#a #a/b #a/c/d #e` → a{b, c/d}、e
+ * 大小写不敏感去重（重复的 `#task #task` 只留一个），保持首次出现顺序
+ */
+export function groupTagsByRoot(tags: readonly string[]): TagGroup[] {
+	const groups = new Map<string, TagGroup>();
+	const seen = new Set<string>();
+	for (const tag of tags) {
+		const key = tag.toLowerCase();
+		if (!tag || seen.has(key)) continue;
+		seen.add(key);
+		const slash = tag.indexOf('/');
+		const root = slash < 0 ? tag : tag.slice(0, slash);
+		const rest = slash < 0 ? '' : tag.slice(slash + 1);
+		let group = groups.get(root.toLowerCase());
+		if (!group) {
+			group = { root, children: [] };
+			groups.set(root.toLowerCase(), group);
+		}
+		if (rest) group.children.push(rest);
+	}
+	return Array.from(groups.values());
+}
+
 export function buildTooltipSections(task: GCTask): TooltipSection[] {
 	const sections: TooltipSection[] = [];
 

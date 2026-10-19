@@ -8,6 +8,7 @@
     "delete": "Delete",
     "edit": "Edit",
     "close": "Close",
+    "open": "Open",
     "loading": "Loading...",
     "noTasks": "No tasks",
     "error": "Error",
@@ -1160,6 +1161,24 @@
     },
     "syncButton": {
       "defaultTitle": "Feishu Sync"
+    },
+    "filterPanel": {
+      "ariaLabel": "Filter",
+      "fileTab": "File",
+      "taskTab": "Task",
+      "status": "Status",
+      "tags": "Tags",
+      "query": "Task query (Tasks syntax)",
+      "queryPlaceholder": "not done\ndue before 2026-11-01\ntag includes #project\npriority above medium",
+      "queryHelp": "One filter per line (AND). Supports (A) OR (B), NOT (A). Filters: done, not done, due/scheduled/starts/created before|after|on <date>, has/no due date, tag includes, path/description includes, priority is|above|below, status.type is, is recurring.",
+      "baseFile": "Base file",
+      "baseNone": "None",
+      "baseView": "Base view",
+      "baseViewNone": "Top-level filters only",
+      "expression": "Filter expression (Bases syntax)",
+      "expressionPlaceholder": "file.hasTag(\"project\")\nfile.inFolder(\"Projects\")\nstatus != \"archived\"",
+      "expressionHelp": "One expression per line (AND). Filters notes, not tasks: file.hasTag(), file.inFolder(), file.name/path/ext/mtime, note properties, && || !, contains/startsWith/isEmpty. The Base file's filters are applied as well.",
+      "reset": "Reset filters"
     },
     "tagFilter": {
       "ariaLabel": "Tag Filter",

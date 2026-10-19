@@ -22,6 +22,7 @@ import { Logger } from '../../utils/logger';
 import type { DateFieldType } from '../../settings/types';
 import { useViewTasks } from '../utils/useViewTasks';
 import { useFileTaskLayer } from '../utils/useFileTaskLayer';
+import { useAdvancedFilters } from '../utils/useAdvancedFilters';
 import { CalendarItemCard, FileTaskLayerProvider } from '../components/FileTaskCard';
 
 /** lane 条带与格底之间的间隙 */
@@ -105,9 +106,10 @@ export function MonthView(): JSX.Element {
 	}, [currentDate, startOnMonday]);
 
 	// 全局筛选
+	const advanced = useAdvancedFilters('month');
 	const scoped = useMemo(() => (
-		applySort(applyTagFilter(applyStatusFilter(tasks, filter.status), filter.tag), filter.sort)
-	), [tasks, filter]);
+		applySort(advanced.filterTasks(applyTagFilter(applyStatusFilter(tasks, filter.status), filter.tag)), filter.sort)
+	), [tasks, filter, advanced]);
 
 	// 预生成整月虚拟周期实例
 	const virtualInstances = useMemo(() => {

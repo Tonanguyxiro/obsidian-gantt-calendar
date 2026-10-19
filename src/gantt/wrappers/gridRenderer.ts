@@ -98,7 +98,43 @@ export function renderGrid(
 }
 
 /**
- * 渲染今天线
+ * 今天所在单元的色带：水平渐变（两侧透明、中心 accent），表现为一道柔和的阴影
+ * 色带与中心线共用此渐变 id，避免重复 defs
+ */
+export const TODAY_GRADIENT_ID = 'gc-gantt-today-gradient';
+
+export function appendTodayGradient(ns: string, svg: SVGSVGElement): void {
+	if (svg.querySelector(`#${TODAY_GRADIENT_ID}`)) return;
+	const defs = activeDocument.createElementNS(ns, 'defs');
+	const gradient = activeDocument.createElementNS(ns, 'linearGradient');
+	gradient.setAttribute('id', TODAY_GRADIENT_ID);
+	gradient.setAttribute('x1', '0');
+	gradient.setAttribute('x2', '1');
+	gradient.setAttribute('y1', '0');
+	gradient.setAttribute('y2', '0');
+	const stops: Array<[string, string]> = [['0', '0'], ['0.5', '0.22'], ['1', '0']];
+	for (const [offset, opacity] of stops) {
+		const stop = activeDocument.createElementNS(ns, 'stop');
+		stop.setAttribute('offset', offset);
+		stop.setAttribute('stop-color', 'var(--interactive-accent)');
+		stop.setAttribute('stop-opacity', opacity);
+		gradient.appendChild(stop);
+	}
+	defs.appendChild(gradient);
+	svg.insertBefore(defs, svg.firstChild);
+}
+
+/** 今天所在单元的下标（起点为单元左边界）；今天不在范围内返回 -1 */
+export function getTodayUnitIndex(minDate: Date, totalUnits: number, granularity: TimeGranularity): number {
+	const config = GRANULARITY_CONFIGS[granularity];
+	const unitsDiff = (getTodayInTimezone().getTime() - minDate.getTime()) / config.milliseconds;
+	// +0.1：夏令时切换导致的不足一个单元的偏移不应落入前一单元
+	const index = Math.floor(unitsDiff + 0.1);
+	return index >= 0 && index < totalUnits ? index : -1;
+}
+
+/**
+ * 渲染今天：单元色带（阴影）+ 位于单元中心的虚线
  */
 export function renderTodayLine(
 	ns: string,
@@ -111,20 +147,32 @@ export function renderTodayLine(
 ): void {
 	if (!svg) return;
 
-	const today = getTodayInTimezone();
-	const config = GRANULARITY_CONFIGS[granularity];
-	const unitsDiff = (today.getTime() - minDate.getTime()) / config.milliseconds;
+	const index = getTodayUnitIndex(minDate, totalUnits, granularity);
+	if (index < 0) return;
 
-	if (unitsDiff >= 0 && unitsDiff <= totalUnits) {
-		const x = unitsDiff * columnWidth;
-		const line = activeDocument.createElementNS(ns, 'line');
-		line.setAttribute('x1', String(x));
-		line.setAttribute('y1', '0');
-		line.setAttribute('x2', String(x));
-		line.setAttribute('y2', String(height));
-		line.setAttribute('stroke', 'var(--interactive-accent)');
-		line.setAttribute('stroke-width', '1');
-		line.setAttribute('stroke-dasharray', '4 4');
-		svg.appendChild(line);
-	}
+	appendTodayGradient(ns, svg);
+	const left = index * columnWidth;
+	const centerX = left + columnWidth / 2;
+
+	const band = activeDocument.createElementNS(ns, 'rect');
+	band.setAttribute('x', String(left));
+	band.setAttribute('y', '0');
+	band.setAttribute('width', String(columnWidth));
+	band.setAttribute('height', String(height));
+	band.setAttribute('fill', `url(#${TODAY_GRADIENT_ID})`);
+	band.setAttribute('pointer-events', 'none');
+	addSvgClass(band, GanttClasses.elements.todayBand);
+	svg.appendChild(band);
+
+	const line = activeDocument.createElementNS(ns, 'line');
+	line.setAttribute('x1', String(centerX));
+	line.setAttribute('y1', '0');
+	line.setAttribute('x2', String(centerX));
+	line.setAttribute('y2', String(height));
+	line.setAttribute('stroke', 'var(--interactive-accent)');
+	line.setAttribute('stroke-width', '1');
+	line.setAttribute('stroke-dasharray', '4 4');
+	line.setAttribute('pointer-events', 'none');
+	addSvgClass(line, GanttClasses.elements.todayLine);
+	svg.appendChild(line);
 }

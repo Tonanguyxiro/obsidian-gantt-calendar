@@ -572,3 +572,8 @@ body.gc-is-phone {
 .gc-gantt-view__task-content-cell--nested {
 	color: var(--text-muted);
 }
+
+/* 今天：单元色带 + 中心虚线，带柔和光晕 */
+.gc-gantt-view__today-line {
+	filter: drop-shadow(0 0 3px var(--interactive-accent));
+}

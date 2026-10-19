@@ -6,6 +6,7 @@ import { TaskViewClasses, ViewClasses } from '../../utils/bem';
 import { usePlugin } from '../pluginContext';
 import { useCalendarStore, selectViewFilter } from '../store/calendarStore';
 import { applyStatusFilter, applyTagFilter, applySort } from '../utils/taskFilters';
+import { useAdvancedFilters } from '../utils/useAdvancedFilters';
 import { TaskCard } from '../components/TaskCard';
 import { i18n } from '../../i18n/i18n';
 import { generateVirtualInstances } from '../../tasks/virtualTaskGenerator';
@@ -19,6 +20,7 @@ export function TaskView(): JSX.Element {
 	const tasks = useCalendarStore((s) => s.tasks);
 	const filter = useCalendarStore((s) => selectViewFilter(s, 'task'));
 	const refreshTasks = useCalendarStore((s) => s.refreshTasks);
+	const advanced = useAdvancedFilters('task');
 	// 稳定回调：TaskCard 已 memo，内联箭头函数会使 memo 失效
 	const handleCardRefresh = useCallback(() => refreshTasks(), [refreshTasks]);
 
@@ -58,7 +60,7 @@ export function TaskView(): JSX.Element {
 					return taskDate >= rangeStart && taskDate <= rangeEnd;
 				});
 			}
-			scoped = applyTagFilter(scoped, filter.tag);
+			scoped = advanced.filterTasks(applyTagFilter(scoped, filter.tag));
 			scoped = applySort(scoped, filter.sort);
 
 			// 重复任务：按日期范围生成虚拟实例并与真实任务合并
@@ -85,7 +87,7 @@ export function TaskView(): JSX.Element {
 			Logger.error('TaskView', 'Error rendering task view', error);
 			return null;
 		}
-	}, [tasks, filter, dateRangeMode, timeFieldFilter]);
+	}, [tasks, filter, advanced, dateRangeMode, timeFieldFilter]);
 
 	if (viewData === null) {
 		return (

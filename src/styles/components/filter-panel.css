@@ -1,0 +1,130 @@
+/* 工具栏筛选面板：File / Task 两页 */
+.gc-filter-panel {
+	display: flex;
+	flex-direction: column;
+	width: 300px;
+	max-width: 90vw;
+}
+
+.gc-filter-panel,
+.gc-filter-panel * {
+	box-sizing: border-box;
+}
+
+.gc-filter-panel__tabs {
+	display: flex;
+	gap: 2px;
+	padding: 4px;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.gc-filter-panel__tab {
+	flex: 1;
+	min-width: 0;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	padding: 4px 0;
+	border: none;
+	border-radius: var(--radius-s);
+	background: transparent;
+	box-shadow: none;
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	cursor: pointer;
+}
+
+.gc-filter-panel__tab--active {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+	font-weight: 600;
+}
+
+.gc-filter-panel__badge {
+	min-width: 16px;
+	padding: 0 4px;
+	border-radius: 8px;
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	font-size: 10px;
+	line-height: 16px;
+	text-align: center;
+}
+
+.gc-filter-panel__body {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	padding: 8px;
+	max-height: 60vh;
+	overflow-y: auto;
+}
+
+.gc-filter-panel__section {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.gc-filter-panel__label {
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	font-weight: 600;
+}
+
+.gc-filter-panel__row {
+	display: flex;
+	gap: 6px;
+}
+
+.gc-filter-panel__select {
+	flex: 1;
+	min-width: 0;
+	font-size: var(--font-ui-small);
+}
+
+.gc-filter-panel__textarea {
+	width: 100%;
+	min-height: 64px;
+	resize: vertical;
+	font-family: var(--font-monospace);
+	font-size: var(--font-ui-smaller);
+	line-height: 1.4;
+}
+
+.gc-filter-panel__hint {
+	color: var(--text-faint);
+	font-size: var(--font-ui-smaller);
+	line-height: 1.4;
+}
+
+.gc-filter-panel__error {
+	color: var(--text-error);
+	font-size: var(--font-ui-smaller);
+	line-height: 1.4;
+}
+
+.gc-filter-panel__status-list {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px 12px;
+}
+
+.gc-filter-panel__status-item {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	font-size: var(--font-ui-small);
+	cursor: pointer;
+}
+
+.gc-filter-panel__footer {
+	display: flex;
+	justify-content: flex-end;
+	padding: 4px 8px 8px;
+}
+
+.gc-filter-panel__reset-btn {
+	font-size: var(--font-ui-smaller);
+}

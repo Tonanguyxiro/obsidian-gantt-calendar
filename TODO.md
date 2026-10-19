@@ -16,6 +16,15 @@
 
 ## ✅ 已完成（按日期倒序）
 
+### 2026-10-20（1.7.1）
+- [x] 筛选面板拆为 File / Task 两页（工具栏单一入口）：File = Bases 语法（可选 `.base` 文件的 filters + 视图 filters + 每行一条表达式，`src/filters/baseExpression.ts`/`baseFilter.ts`）；Task = 状态 + 标签树 + Tasks 查询语法（`taskQuery.ts`，支持 AND/OR/NOT、日期/标签/路径/描述/优先级/状态类型）。Obsidian 无公开的 Bases/Tasks 求值接口，故为自实现子集；不支持的写法在面板内报错而非静默清空。文件筛选同样作用于日/周/月/甘特的文件横跨条；状态持久化到 viewFilters（旧数据按字段回退默认）
+- [x] 甘特图今天线移到当天单元中心，并加色带阴影（表头同步）；"回到今天"按中心对齐
+- [x] 悬浮窗：描述渲染双链/链接；多级标签按根聚合（`#nlp › decoding/spec, eval`，大小写去重）
+- [x] 修复：`DescriptionWithLinks` 用 `'text' in seg` 判断纯文本，链接段也带 text，导致所有双链/URL 被当纯文本渲染（卡片与悬浮窗）；缺失的 `common.open` 文案
+- [x] 修复：甘特图标签筛选只做精确匹配（选父标签不含子标签），改用与日历一致的层级匹配
+- [x] 标签识别：`#` 前允许标点/零宽字符（`(#task)`、`**#a/b**`、`,#x`），仍排除 `[[Note#H]]`、`[[#H]]`、`/#frag`、`&#39;`
+- [x] 修复：Tasks 全局筛选符（`#task`）此前在提取标签前被剥掉，导致用 Tasks 创建的任务没有这个标签；现从原始行提取
+
 ### 2026-10-19
 - [x] 启动首扫竞态修复：首扫时 metadataCache 未索引而跳过的文件，在 metadataCache 'changed' 时补扫（扫描期间已索引的在初始化末尾补一次），'resolved' 后停止跟踪，不额外读取其它笔记（`tests/startupScanRace.test.ts` + 真机：关闭 Obsidian 后外部新建的笔记重启即出现）
 - [x] 计划日期回退：仅有 ⏳ 的任务按计划日期显示（🛫/📅 缺失时的第二顺位）；Day Planner 行首时间前缀（`09:00 - 10:00`）定位到时段，日历中隐藏前缀；拖拽/勾选写回只改 ⏳ 与前缀（`src/tasks/scheduledFallback.ts`，jest + 真机验证）

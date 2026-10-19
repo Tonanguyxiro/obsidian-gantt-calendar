@@ -1907,8 +1907,8 @@ export class SvgGanttRenderer {
 		const unitsDiff = (today.getTime() - this.minDate.getTime()) / config.milliseconds;
 
 		if (unitsDiff >= 0 && unitsDiff <= this.totalUnits) {
-			// 计算今天的 x 坐标
-			const todayX = unitsDiff * this.columnWidth;
+			// 今天线位于当天单元中心
+			const todayX = (Math.floor(unitsDiff + 0.1) + 0.5) * this.columnWidth;
 
 			// 获取容器宽度
 			const containerWidth = this.ganttContainer.clientWidth;

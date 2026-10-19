@@ -122,3 +122,21 @@
 	font-size: 11px;
 	color: var(--text-muted);
 }
+
+/* 多级标签聚合：根标签 › 子路径 */
+.gc-task-tooltip .gc-task-tooltip__tag-group {
+	display: inline-flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 3px;
+}
+
+.gc-task-tooltip .gc-task-tooltip__tag-separator {
+	color: var(--text-faint);
+}
+
+/* 描述中的链接（悬浮窗不可交互，仅渲染外观） */
+.gc-task-tooltip__description a {
+	color: var(--link-color);
+	text-decoration: none;
+}

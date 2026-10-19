@@ -17,6 +17,8 @@ import { i18n } from '../../i18n/i18n';
 import { usePlugin, useApp } from '../pluginContext';
 import type { FileTask } from '../../types';
 import { useCalendarStore, selectViewFilter } from '../store/calendarStore';
+import { useAdvancedFilters } from '../utils/useAdvancedFilters';
+import { applyTagFilter } from '../utils/taskFilters';
 import { buildGanttRows, isFileTaskFeatureOn } from '../../fileTasks/fileTaskLayer';
 import { writeFileTaskDates } from '../../fileTasks/fileTaskWriter';
 import { openEditTaskModal } from '../modals/TaskFormModal';
@@ -61,15 +63,12 @@ export function GanttView(): JSX.Element {
 		updateHandlerRef.current = new TaskUpdateHandler(app, plugin);
 	}
 
+	const advanced = useAdvancedFilters('gantt');
 	const filteredTasks = useMemo(() => {
-		const withAssigned = TaskDataAdapter.applyFilters(
-			tasks,
-			filter.status,
-			filter.tag.selectedTags,
-			filter.tag.operator
-		);
-		return sortTasks(withAssigned, filter.sort);
-	}, [tasks, filter]);
+		// 标签走与日历视图一致的层级匹配（选父标签包含其子标签）
+		const byTag = applyTagFilter(TaskDataAdapter.applyFilters(tasks, filter.status), filter.tag);
+		return sortTasks(advanced.filterTasks(byTag), filter.sort);
+	}, [tasks, filter, advanced]);
 
 	// 重复任务：为甘特图生成虚拟实例
 	const tasksWithVirtuals = useMemo(() => {
@@ -88,7 +87,10 @@ export function GanttView(): JSX.Element {
 	// 归类开启时任务移到所属文件行下，下方只剩不属于 file-based task 的任务
 	const allFileTasks = useCalendarStore((s) => s.fileTasks);
 	const fileOptions = plugin.settings.fileTaskViews?.gantt;
-	const fileTasks = isFileTaskFeatureOn(plugin.settings) && fileOptions?.show ? allFileTasks : EMPTY_FILE_TASKS;
+	const fileTasks = useMemo(
+		() => (isFileTaskFeatureOn(plugin.settings) && fileOptions?.show ? advanced.filterFileTasks(allFileTasks) : EMPTY_FILE_TASKS),
+		[plugin.settings, fileOptions?.show, advanced, allFileTasks],
+	);
 	const groupTasks = !!fileOptions?.groupTasks;
 
 	// 文件行折叠状态（持久化到设置，重开视图后保持）

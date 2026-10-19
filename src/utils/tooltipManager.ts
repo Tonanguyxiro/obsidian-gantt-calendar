@@ -3,6 +3,7 @@ import { TooltipClasses, setCssProps } from './bem';
 import { TagPill } from '../components/tagPill';
 import {
 	buildTooltipSections,
+	groupTagsByRoot,
 	type TooltipPropRow,
 } from '../components/tooltip/tooltipSections';
 import { computeTooltipPosition } from '../components/tooltip/tooltipPosition';
@@ -10,7 +11,7 @@ import {
 	registerTooltipHolder,
 	claimExclusiveTooltip,
 } from '../components/tooltip/tooltipCoordinator';
-import { linksToPlainText } from './linkText';
+import { LinkRenderer } from './linkRenderer';
 
 interface TooltipConfig {
 	showDelay?: number;
@@ -141,7 +142,7 @@ export class TooltipManager {
 		// === 描述 ===
 		this.cachedElements.description.empty();
 		const strongEl = this.cachedElements.description.createEl('strong');
-		strongEl.setText(linksToPlainText(task.description || ''));
+		LinkRenderer.renderTaskDescriptionWithLinks(strongEl, task.description || '', this.plugin.app, task.filePath);
 
 		const sections = buildTooltipSections(task);
 
@@ -161,7 +162,18 @@ export class TooltipManager {
 
 					if (section.key === 'tags') {
 						const tagsRow = sectionEl.createDiv(TooltipClasses.elements.tags);
-						TagPill.createMultiple(task.tags!, tagsRow, { showHash: true });
+						for (const g of groupTagsByRoot(task.tags!)) {
+							const groupEl = tagsRow.createSpan(TooltipClasses.elements.tagGroup);
+							groupEl.appendChild(TagPill.create({ label: g.root, showHash: true }));
+							if (g.children.length === 0) continue;
+							groupEl.createSpan({ cls: TooltipClasses.elements.tagSeparator, text: '›' });
+							const colorIndex = TagPill.getColorIndex(g.root);
+							for (const c of g.children) {
+								const pill = TagPill.create({ label: c, showHash: false, colorIndex });
+								pill.setAttr('title', `#${g.root}/${c}`);
+								groupEl.appendChild(pill);
+							}
+						}
 					} else if (section.key === 'file') {
 						this.appendPropertyRow(sectionEl, section.rows[0], true);
 					} else {

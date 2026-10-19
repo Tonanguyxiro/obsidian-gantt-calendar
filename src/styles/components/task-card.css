@@ -443,3 +443,19 @@
 }
 
 
+
+/* 描述中的链接（双链 / Markdown 链接 / URL） */
+.gc-link--obsidian,
+.gc-link--markdown,
+.gc-link--url {
+	color: var(--link-color);
+	cursor: pointer;
+	text-decoration: none;
+}
+
+.gc-link--obsidian:hover,
+.gc-link--markdown:hover,
+.gc-link--url:hover {
+	color: var(--link-color-hover);
+	text-decoration: underline;
+}

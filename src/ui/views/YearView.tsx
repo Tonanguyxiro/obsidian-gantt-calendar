@@ -6,6 +6,7 @@ import { YearViewClasses } from '../../utils/bem';
 import { usePlugin } from '../pluginContext';
 import { useCalendarStore, selectViewFilter } from '../store/calendarStore';
 import { applyTagFilter } from '../utils/taskFilters';
+import { useAdvancedFilters } from '../utils/useAdvancedFilters';
 import { generateVirtualInstances } from '../../tasks/virtualTaskGenerator';
 import { i18n } from '../../i18n/i18n';
 import { useViewTasks } from '../utils/useViewTasks';
@@ -17,6 +18,7 @@ export function YearView(): JSX.Element {
 	const plugin = usePlugin();
 	const currentDate = useCalendarStore((s) => s.currentDate);
 	const filter = useCalendarStore((s) => selectViewFilter(s, 'year'));
+	const advanced = useAdvancedFilters('year');
 	const setCurrentDate = useCalendarStore((s) => s.setCurrentDate);
 	const setViewType = useCalendarStore((s) => s.setViewType);
 
@@ -30,7 +32,7 @@ export function YearView(): JSX.Element {
 	const data = useMemo(() => {
 		const start = new Date(year, 0, 1);
 		const end = new Date(year, 11, 31);
-		const scoped = applyTagFilter(tasks, filter.tag);
+		const scoped = advanced.filterTasks(applyTagFilter(tasks, filter.tag));
 
 		// 重复任务：生成虚拟实例并合并计数
 		const recurringLimit = plugin.settings.recurringTaskDisplayLimit ?? 5;
@@ -46,7 +48,7 @@ export function YearView(): JSX.Element {
 			counts.set(key, (counts.get(key) || 0) + 1);
 		}
 		return counts;
-	}, [tasks, filter, year, dateField]);
+	}, [tasks, filter, advanced, year, dateField]);
 
 	const months = useMemo(() => {
 		const palette = plugin.settings.yearHeatmapPalette || 'blue';

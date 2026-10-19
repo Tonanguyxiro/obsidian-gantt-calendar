@@ -115,7 +115,7 @@ export function parseTasksFromListItems(
         };
 
         // 解析标签
-        const tags = extractTags(contentWithoutFilter);
+        const tags = extractTags(rawContent); // 含全局筛选符（Tasks 的 #task 本身也是标签）
         if (tags.length > 0) {
             task.tags = tags;
         }
@@ -319,7 +319,7 @@ export function parseSingleTaskLine(
     };
 
     // 解析标签
-    const tags = extractTags(contentWithoutFilter);
+    const tags = extractTags(rawContent); // 含全局筛选符（Tasks 的 #task 本身也是标签）
     if (tags.length > 0) {
         task.tags = tags;
     }

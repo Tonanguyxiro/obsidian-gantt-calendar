@@ -104,16 +104,18 @@ export function DescriptionWithLinks({ text, app, sourcePath = '' }: { text: str
 	return (
 		<Fragment>
 			{segments.map((seg, i) => {
-				if ('text' in seg) {
+				// 链接段同样带 text 字段，必须按 type 区分
+				if (!('type' in seg)) {
 					return <Fragment key={i}>{seg.text}</Fragment>;
 				}
-				const link = seg as LinkSegment;
+				const link = seg;
 				if (link.type === 'obsidian') {
 					return (
 						<a
 							key={i}
 							className={LinkClasses.modifiers.obsidian}
-							href="javascript:void(0)"
+							role="link"
+							data-href={link.href}
 							title={link.title}
 							onClick={(e) => {
 								e.preventDefault();

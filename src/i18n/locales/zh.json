@@ -8,6 +8,7 @@
     "delete": "删除",
     "edit": "编辑",
     "close": "关闭",
+    "open": "打开",
     "loading": "加载中...",
     "noTasks": "暂无任务",
     "error": "错误",
@@ -1160,6 +1161,24 @@
     },
     "syncButton": {
       "defaultTitle": "飞书同步"
+    },
+    "filterPanel": {
+      "ariaLabel": "筛选",
+      "fileTab": "文件",
+      "taskTab": "任务",
+      "status": "状态",
+      "tags": "标签",
+      "query": "任务查询（Tasks 语法）",
+      "queryPlaceholder": "not done\ndue before 2026-11-01\ntag includes #project\npriority above medium",
+      "queryHelp": "每行一个过滤器（AND）。支持 (A) OR (B)、NOT (A)。可用：done、not done、due/scheduled/starts/created before|after|on <日期>、has/no due date、tag includes、path/description includes、priority is|above|below、status.type is、is recurring。",
+      "baseFile": "Base 文件",
+      "baseNone": "不使用",
+      "baseView": "Base 视图",
+      "baseViewNone": "仅顶层过滤器",
+      "expression": "过滤表达式（Bases 语法）",
+      "expressionPlaceholder": "file.hasTag(\"project\")\nfile.inFolder(\"Projects\")\nstatus != \"archived\"",
+      "expressionHelp": "每行一个表达式（AND）。筛选的是笔记而非任务：file.hasTag()、file.inFolder()、file.name/path/ext/mtime、笔记属性、&& || !、contains/startsWith/isEmpty。所选 Base 文件的过滤器同时生效。",
+      "reset": "重置筛选"
     },
     "tagFilter": {
       "ariaLabel": "标签筛选",

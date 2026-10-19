@@ -248,6 +248,24 @@ export interface StatusFilterState {
 	selectedStatuses: string[];
 }
 
+/**
+ * 文件筛选状态：按笔记（而非任务）过滤，语义对齐 Obsidian Bases
+ */
+export interface FileFilterState {
+	/** 引用的 .base 文件路径（取其 filters）；空表示不使用 */
+	baseFile: string;
+	/** .base 中的视图名（叠加该视图的 filters）；空表示仅顶层 filters */
+	baseView: string;
+	/** Bases 过滤表达式，每行一条，行间 AND */
+	expression: string;
+}
+
+export const DEFAULT_FILE_FILTER_STATE: FileFilterState = {
+	baseFile: '',
+	baseView: '',
+	expression: '',
+};
+
 /** 默认状态筛选状态（默认只显示待办任务） */
 export const DEFAULT_STATUS_FILTER_STATE: StatusFilterState = {
 	selectedStatuses: ['todo']

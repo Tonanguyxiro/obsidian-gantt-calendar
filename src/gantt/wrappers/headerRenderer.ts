@@ -9,6 +9,7 @@ import type { TimeGranularity } from '../types';
 import { GRANULARITY_CONFIGS } from '../types';
 import { getDateForUnit, isSameUnit } from './dateGeometry';
 import { getTodayInTimezone } from '../../dateUtils/timezone';
+import { appendTodayGradient, TODAY_GRADIENT_ID } from './gridRenderer';
 
 export interface HeaderRenderOptions {
 	svg: SVGSVGElement | null;
@@ -47,6 +48,16 @@ export function renderHeader(opts: HeaderRenderOptions): void {
 		const y = headerHeight / 2;
 
 		const isCurrentUnit = isSameUnit(unitDate, today, granularity);
+		if (isCurrentUnit) {
+			appendTodayGradient(ns, svg);
+			const band = activeDocument.createElementNS(ns, 'rect');
+			band.setAttribute('x', String(gridLineX));
+			band.setAttribute('y', '0');
+			band.setAttribute('width', String(columnWidth));
+			band.setAttribute('height', String(headerHeight));
+			band.setAttribute('fill', `url(#${TODAY_GRADIENT_ID})`);
+			svg.appendChild(band);
+		}
 
 		const text = activeDocument.createElementNS(ns, 'text');
 		text.setAttribute('x', String(cellCenterX));

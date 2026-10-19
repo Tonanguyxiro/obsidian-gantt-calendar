@@ -11,7 +11,7 @@ import type GanttCalendarPlugin from '../../../main';
 import type { TaskStatus } from '../../tasks/taskStatus';
 import { DEFAULT_TASK_STATUSES } from '../../tasks/taskStatus';
 import { Icon } from './Icon';
-import { TagTreeFilter } from './TagTreeFilter';
+import { FilterPanel } from './FilterPanel';
 import { DropdownMenu, type MenuItemDef, type DropdownMenuSection } from './DropdownMenu';
 import type { DateFieldType, GanttCalendarSettings } from '../../settings/types';
 import { useIsNarrow } from '../utils/platform';
@@ -41,7 +41,6 @@ export function ToolbarBar(): JSX.Element {
 	const setViewType = useCalendarStore((s) => s.setViewType);
 	const setCurrentDate = useCalendarStore((s) => s.setCurrentDate);
 	const setStatusFilter = useCalendarStore((s) => s.setStatusFilter);
-	const setTagFilter = useCalendarStore((s) => s.setTagFilter);
 	const setSort = useCalendarStore((s) => s.setSort);
 	const setTasks = useCalendarStore((s) => s.setTasks);
 
@@ -226,6 +225,15 @@ export function ToolbarBar(): JSX.Element {
 	const isCalendar = viewType === 'year' || viewType === 'month' || viewType === 'week' || viewType === 'day';
 	const showStatusSort = viewType === 'month' || viewType === 'week' || viewType === 'day';
 	const requestGanttScroll = useCalendarStore((s) => s.requestGanttScroll);
+	const filterButton = (
+		<div className={ToolbarClasses.components.navButtons.group}>
+			<DropdownMenu content={() => <FilterPanel scope={scope} />} align="right">
+				{({ onClick, 'aria-expanded': expanded }) => (
+					<ToolbarBtn icon="filter" label={i18n.t('toolbar.filterPanel.ariaLabel')} ariaExpanded={expanded} onClick={onClick} />
+				)}
+			</DropdownMenu>
+		</div>
+	);
 	// 空间适配：窄窗口即收纳（桌面窄分栏同样受益），非视图形态判定
 	const isPhone = useIsNarrow();
 
@@ -261,13 +269,6 @@ export function ToolbarBar(): JSX.Element {
 						{!isPhone && (
 							<>
 								<div className={ToolbarClasses.components.navButtons.group}>
-									<DropdownMenu sections={statusMenuSections()}>
-										{({ onClick, 'aria-expanded': expanded }) => (
-											<ToolbarBtn icon="filter" label={i18n.t('toolbar.statusFilter.ariaLabel')} ariaExpanded={expanded} onClick={onClick} />
-										)}
-									</DropdownMenu>
-								</div>
-								<div className={ToolbarClasses.components.navButtons.group}>
 									<DropdownMenu sections={fieldMenuSections()}>
 										{({ onClick, 'aria-expanded': expanded }) => (
 											<ToolbarBtn icon="calendar-clock" label={i18n.t('toolbar.fieldFilter.label')} ariaExpanded={expanded} onClick={onClick} />
@@ -290,49 +291,11 @@ export function ToolbarBar(): JSX.Element {
 								</div>
 							</>
 						)}
-						<div className={ToolbarClasses.components.navButtons.group}>
-							<DropdownMenu
-								content={() => (
-									<TagTreeFilter
-										allTags={(() => {
-											const set = new Set<string>();
-											for (const t of plugin.taskCache.getAllTasks()) {
-												for (const tag of t.tags || []) set.add(tag);
-											}
-											return Array.from(set).sort();
-										})()}
-										selectedTags={filter?.tag.selectedTags || []}
-										onToggle={(fp) => {
-											const selected = filter?.tag.selectedTags || [];
-											const next = selected.includes(fp)
-												? selected.filter(t => t !== fp)
-												: [...selected, fp];
-											setTagFilter(scope, { selectedTags: next, operator: filter?.tag.operator || 'OR' });
-										}}
-										operator={filter?.tag.operator || 'OR'}
-										onOperatorChange={(op) => setTagFilter(scope, { selectedTags: filter?.tag.selectedTags || [], operator: op })}
-									/>
-								)}
-								align="right"
-							>
-								{({ onClick, 'aria-expanded': expanded }) => (
-									<ToolbarBtn icon="tag" label={i18n.t('toolbar.tagFilter.ariaLabel')} ariaExpanded={expanded} onClick={onClick} />
-								)}
-							</DropdownMenu>
-						</div>
+						{filterButton}
 					</>
 				)}
 				{isCalendar && (
 					<>
-						{showStatusSort && !isPhone && (
-							<div className={ToolbarClasses.components.navButtons.group}>
-								<DropdownMenu sections={statusMenuSections()}>
-									{({ onClick, 'aria-expanded': expanded }) => (
-										<ToolbarBtn icon="filter" label={i18n.t('toolbar.statusFilter.ariaLabel')} ariaExpanded={expanded} onClick={onClick} />
-									)}
-								</DropdownMenu>
-							</div>
-						)}
 						{showStatusSort && !isPhone && (
 							<div className={ToolbarClasses.components.navButtons.group}>
 								<DropdownMenu sections={sortMenuSections()}>
@@ -342,36 +305,7 @@ export function ToolbarBar(): JSX.Element {
 								</DropdownMenu>
 							</div>
 						)}
-						<div className={ToolbarClasses.components.navButtons.group}>
-							<DropdownMenu
-								content={() => (
-									<TagTreeFilter
-										allTags={(() => {
-											const set = new Set<string>();
-											for (const t of plugin.taskCache.getAllTasks()) {
-												for (const tag of t.tags || []) set.add(tag);
-											}
-											return Array.from(set).sort();
-										})()}
-										selectedTags={filter?.tag.selectedTags || []}
-										onToggle={(fp) => {
-											const selected = filter?.tag.selectedTags || [];
-											const next = selected.includes(fp)
-												? selected.filter(t => t !== fp)
-												: [...selected, fp];
-											setTagFilter(scope, { selectedTags: next, operator: filter?.tag.operator || 'OR' });
-										}}
-										operator={filter?.tag.operator || 'OR'}
-										onOperatorChange={(op) => setTagFilter(scope, { selectedTags: filter?.tag.selectedTags || [], operator: op })}
-									/>
-								)}
-								align="right"
-							>
-								{({ onClick, 'aria-expanded': expanded }) => (
-									<ToolbarBtn icon="tag" label={i18n.t('toolbar.tagFilter.ariaLabel')} ariaExpanded={expanded} onClick={onClick} />
-								)}
-							</DropdownMenu>
-						</div>
+						{filterButton}
 
 						<div className={ToolbarClasses.components.navButtons.group}>
 							<ToolbarBtn
@@ -415,13 +349,6 @@ export function ToolbarBar(): JSX.Element {
 						{!isPhone && (
 							<>
 								<div className={ToolbarClasses.components.navButtons.group}>
-									<DropdownMenu sections={statusMenuSections()}>
-										{({ onClick, 'aria-expanded': expanded }) => (
-											<ToolbarBtn icon="filter" label={i18n.t('toolbar.statusFilter.ariaLabel')} ariaExpanded={expanded} onClick={onClick} />
-										)}
-									</DropdownMenu>
-								</div>
-								<div className={ToolbarClasses.components.navButtons.group}>
 									<DropdownMenu sections={sortMenuSections()}>
 										{({ onClick, 'aria-expanded': expanded }) => (
 											<ToolbarBtn icon="arrow-down-up" label={i18n.t('toolbar.sort.ariaLabel')} ariaExpanded={expanded} onClick={onClick} />
@@ -430,38 +357,7 @@ export function ToolbarBar(): JSX.Element {
 								</div>
 							</>
 						)}
-						{!isPhone && (
-						<div className={ToolbarClasses.components.navButtons.group}>
-							<DropdownMenu
-								content={() => (
-									<TagTreeFilter
-										allTags={(() => {
-											const set = new Set<string>();
-											for (const t of plugin.taskCache.getAllTasks()) {
-												for (const tag of t.tags || []) set.add(tag);
-											}
-											return Array.from(set).sort();
-										})()}
-										selectedTags={filter?.tag.selectedTags || []}
-										onToggle={(fp) => {
-											const selected = filter?.tag.selectedTags || [];
-											const next = selected.includes(fp)
-												? selected.filter(t => t !== fp)
-												: [...selected, fp];
-											setTagFilter(scope, { selectedTags: next, operator: filter?.tag.operator || 'OR' });
-										}}
-										operator={filter?.tag.operator || 'OR'}
-										onOperatorChange={(op) => setTagFilter(scope, { selectedTags: filter?.tag.selectedTags || [], operator: op })}
-									/>
-								)}
-								align="right"
-							>
-								{({ onClick, 'aria-expanded': expanded }) => (
-									<ToolbarBtn icon="tag" label={i18n.t('toolbar.tagFilter.ariaLabel')} ariaExpanded={expanded} onClick={onClick} />
-								)}
-								</DropdownMenu>
-							</div>
-							)}
+						{!isPhone && filterButton}
 						</>
 					)}
 

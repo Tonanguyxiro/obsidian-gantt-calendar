@@ -10,6 +10,7 @@ import { generateVirtualInstances } from '../../tasks/virtualTaskGenerator';
 import { i18n } from '../../i18n/i18n';
 import { buildWeekTimelineModel, isOnTimeAxis } from './week/timelineModel';
 import { useFileTaskLayer } from '../utils/useFileTaskLayer';
+import { useAdvancedFilters } from '../utils/useAdvancedFilters';
 import { FileTaskLayerProvider } from '../components/FileTaskCard';
 import { WeekTimelineGrid } from './week/WeekTimelineGrid';
 import { useIsPhone } from '../utils/platform';
@@ -63,9 +64,10 @@ export function WeekView(): JSX.Element {
 	}, [weekData]);
 
 	// 全局筛选 + 排序
+	const advanced = useAdvancedFilters('week');
 	const scoped = useMemo(() => (
-		applySort(applyTagFilter(applyStatusFilter(tasks, filter.status), filter.tag), filter.sort)
-	), [tasks, filter]);
+		applySort(advanced.filterTasks(applyTagFilter(applyStatusFilter(tasks, filter.status), filter.tag)), filter.sort)
+	), [tasks, filter, advanced]);
 
 	// 预生成整周的虚拟周期实例
 	const virtualInstances = useMemo(() => (

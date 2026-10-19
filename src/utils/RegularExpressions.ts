@@ -488,8 +488,9 @@ export class RegularExpressions {
          * 注意：正则中包含 \s* 以匹配标签后的空格
          * 这与现有的 removePriorityEmoji、removeTasksDate 保持一致
          *
-         * 与 Obsidian 标签语法对齐：# 前须为行首或空白（避免误删 [[Note#Heading]]、
-         * URL 片段 /#x 等），标签体允许任意字母/数字/emoji 与 _ - /，且至少含一个非数字字符
+         * 与 Obsidian 标签语法对齐：# 前不能是字母数字/下划线/斜杠/&/#/[（避免误删
+         * [[Note#Heading]]、[[#Heading]]、URL 片段 /#x、&#39; 等），但允许标点与零宽字符
+         * 紧邻，如 (#task)、**#task**、,#task。标签体允许任意字母/数字/emoji 与 _ - /，且至少含一个非数字字符
          *
          * @example
          * "任务 #work #urgent" -> "任务  "
@@ -497,7 +498,7 @@ export class RegularExpressions {
          * "跟进 #project-x 进度" -> "跟进  进度"
          * "[[Note#Heading]]" -> 不匹配（双链标题锚点保留）
          */
-        removeTags: /(?<![^\s])#((?:[\p{L}\p{N}\p{M}\p{Extended_Pictographic}_/-])*[\p{L}\p{M}\p{Extended_Pictographic}_/-][\p{L}\p{N}\p{M}\p{Extended_Pictographic}_/-]*)\s*/gu,
+        removeTags: /(?<![\p{L}\p{N}\p{M}_/&#[])#((?:[\p{L}\p{N}\p{M}\p{Extended_Pictographic}_/-])*[\p{L}\p{M}\p{Extended_Pictographic}_/-][\p{L}\p{N}\p{M}\p{Extended_Pictographic}_/-]*)\s*/gu,
 
         /**
          * 匹配标签（用于提取标签内容）
@@ -506,7 +507,7 @@ export class RegularExpressions {
          * @example
          * "任务 #work #urgent" -> 可以提取出 ["work", "urgent"]
          */
-        matchTags: /(?<![^\s])#((?:[\p{L}\p{N}\p{M}\p{Extended_Pictographic}_/-])*[\p{L}\p{M}\p{Extended_Pictographic}_/-][\p{L}\p{N}\p{M}\p{Extended_Pictographic}_/-]*)/gu,
+        matchTags: /(?<![\p{L}\p{N}\p{M}_/&#[])#((?:[\p{L}\p{N}\p{M}\p{Extended_Pictographic}_/-])*[\p{L}\p{M}\p{Extended_Pictographic}_/-][\p{L}\p{N}\p{M}\p{Extended_Pictographic}_/-]*)/gu,
 
         /**
          * 提取 %%content%% ticktick 内容（非贪婪，支持多个块）
@@ -705,5 +706,21 @@ export class RegularExpressions {
          * "普通文本内容" -> 不匹配
          */
         anyLinkRegex: /(\[\[([^\]|]+)(?:\|([^\]]+))?\]\]|\[([^\]]+)\]\(([^)]+)\)|https?:\/\/[^\s<>")]+)/,
+    } as const;
+
+    /**
+     * 高级过滤（Bases 表达式 / Tasks 查询）使用的正则
+     */
+    static readonly Filters = {
+        /** YYYY-MM-DD */
+        isoDate: /^\d{4}-\d{2}-\d{2}$/,
+        /** /pattern/flags 形式的正则字面量 */
+        regexLiteral: /^\/(.+)\/([a-z]*)$/,
+        /** Bases 时长字符串："7d"、"1 week"、"2 months" */
+        duration: /^(\d+(?:\.\d+)?)\s*([a-zA-Z]+)$/,
+        /** Tasks 相对日期："in 3 days"、"2 weeks ago" */
+        relativeDate: /^(?:in\s+)?(\d+)\s+(day|days|week|weeks)(\s+ago)?$/,
+        /** 空白序列 */
+        whitespace: /\s+/,
     } as const;
 }

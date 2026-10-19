@@ -6,21 +6,30 @@ import type {
 	SortState,
 	TagFilterState,
 	StatusFilterState,
+	FileFilterState,
 } from '../../types';
 import {
 	DEFAULT_SORT_STATE,
 	DEFAULT_TAG_FILTER_STATE,
 	DEFAULT_STATUS_FILTER_STATE,
+	DEFAULT_FILE_FILTER_STATE,
 } from '../../types';
 
 export type ViewScope = 'year' | 'month' | 'week' | 'day' | 'task' | 'gantt' | 'sidebar';
 
 export type GanttScrollAction = 'left' | 'today' | 'right';
 
+/** data.json 中的持久化形态：旧版本缺少后加的字段，按字段回退默认 */
+export type PersistedViewFilters = Partial<Record<ViewScope, Partial<ViewFilterState>>>;
+
 export interface ViewFilterState {
 	status: StatusFilterState;
 	tag: TagFilterState;
 	sort: SortState;
+	/** 文件筛选（Bases 语法） */
+	file: FileFilterState;
+	/** 任务查询（Tasks 语法，每行一条） */
+	taskQuery: string;
 }
 
 interface CalendarStoreState {
@@ -53,11 +62,13 @@ interface CalendarStoreState {
 	/** 请求甘特图滚动（每次调用自增 seq，GanttView 订阅执行） */
 	requestGanttScroll: (action: GanttScrollAction) => void;
 	/** 插件启动时从 data.json 恢复持久化筛选（main.ts 在 loadSettings 后调用） */
-	hydrateViewFilters: (filters?: Partial<Record<ViewScope, ViewFilterState>> | null) => void;
+	hydrateViewFilters: (filters?: PersistedViewFilters | null) => void;
 
 	setStatusFilter: (scope: ViewScope, state: StatusFilterState) => void;
 	setTagFilter: (scope: ViewScope, tag: TagFilterState) => void;
 	setSort: (scope: ViewScope, sort: SortState) => void;
+	setFileFilter: (scope: ViewScope, file: FileFilterState) => void;
+	setTaskQuery: (scope: ViewScope, taskQuery: string) => void;
 	applyFilter: (scope: ViewScope, status: StatusFilterState, tag: TagFilterState, sort: SortState) => void;
 	/** 任务写回后触发一次顺带重渲染（数据最终由事件总线回流） */
 	refreshTasks: () => void;
@@ -67,6 +78,8 @@ const defaultFilter = (): ViewFilterState => ({
 	status: { selectedStatuses: [...DEFAULT_STATUS_FILTER_STATE.selectedStatuses] },
 	tag: { selectedTags: [], operator: DEFAULT_TAG_FILTER_STATE.operator },
 	sort: { ...DEFAULT_SORT_STATE },
+	file: { ...DEFAULT_FILE_FILTER_STATE },
+	taskQuery: '',
 });
 
 const buildInitialFilters = (): Record<ViewScope, ViewFilterState> => {
@@ -82,7 +95,7 @@ const buildInitialFilters = (): Record<ViewScope, ViewFilterState> => {
  * 缺失的 scope / 字段用默认值补全）
  */
 export function mergeViewFilters(
-	partial?: Partial<Record<ViewScope, ViewFilterState>> | null
+	partial?: PersistedViewFilters | null
 ): Record<ViewScope, ViewFilterState> {
 	const base = buildInitialFilters();
 	if (partial) {
@@ -192,9 +205,13 @@ export const useCalendarStore = create<CalendarStoreState>((set) => ({
 			const vf = { ...s.viewFilters, [scope]: { ...s.viewFilters[scope], sort } };
 			return { viewFilters: vf };
 		}),
+	setFileFilter: (scope, file) =>
+		set((s) => ({ viewFilters: { ...s.viewFilters, [scope]: { ...s.viewFilters[scope], file } } })),
+	setTaskQuery: (scope, taskQuery) =>
+		set((s) => ({ viewFilters: { ...s.viewFilters, [scope]: { ...s.viewFilters[scope], taskQuery } } })),
 	applyFilter: (scope, status, tag, sort) =>
 		set((s) => {
-			const vf = { ...s.viewFilters, [scope]: { status, tag, sort } };
+			const vf = { ...s.viewFilters, [scope]: { ...s.viewFilters[scope], status, tag, sort } };
 			return { viewFilters: vf };
 		}),
 }));

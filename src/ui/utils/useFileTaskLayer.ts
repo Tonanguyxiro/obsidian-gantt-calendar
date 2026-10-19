@@ -3,6 +3,7 @@ import type { GCTask } from '../../types';
 import type { DateFieldType, FileTaskViewKey } from '../../settings/types';
 import { useCalendarStore } from '../store/calendarStore';
 import { usePlugin } from '../pluginContext';
+import { useAdvancedFilters } from './useAdvancedFilters';
 import { fileTaskToCalendarTask, groupTasksByFile, excludeGroupedTasks, isFileTaskFeatureOn } from '../../fileTasks/fileTaskLayer';
 
 export interface FileTaskLayer {
@@ -33,7 +34,9 @@ export function useFileTaskLayer(
 	dateField: DateFieldType,
 ): FileTaskLayer {
 	const plugin = usePlugin();
-	const fileTasks = useCalendarStore((s) => s.fileTasks);
+	const allFileTasks = useCalendarStore((s) => s.fileTasks);
+	const { filterFileTasks } = useAdvancedFilters(view);
+	const fileTasks = useMemo(() => filterFileTasks(allFileTasks), [filterFileTasks, allFileTasks]);
 	const options = plugin.settings.fileTaskViews?.[view];
 	const enabled = isFileTaskFeatureOn(plugin.settings) && !!options?.show && fileTasks.length > 0;
 	const groupTasks = enabled && !!options?.groupTasks;

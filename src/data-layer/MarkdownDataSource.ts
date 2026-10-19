@@ -107,6 +107,11 @@ export class MarkdownDataSource implements IDataSource {
 	private fileWatchersRegistered: boolean = false;
 	// 保存事件监听器引用，用于清理
 	private vaultEventRefs: EventRef[] = [];
+	// 首扫时 metadataCache 无 listItems 而被跳过的文件。启动时 Obsidian 关闭期间
+	// 在磁盘上新建/修改的笔记可能尚未索引，且之后不会再有 vault create 事件；
+	// 待其 metadataCache 'changed' 时补扫，'resolved'（全部索引完成）后清空
+	private scanSkippedPaths: Set<string> = new Set();
+	private metadataEventRefs: EventRef[] = [];
 
 	constructor(app: App, eventBus: EventBus, config: DataSourceConfig) {
 		this.app = app;
@@ -145,6 +150,14 @@ export class MarkdownDataSource implements IDataSource {
 
 		// 通知数据源已初始化，发送所有任务（使用扫描阶段收集的任务）
 		await this.notifyInitialTasks(allTasks);
+
+		// 扫描期间（监听器注册前）已完成索引的跳过文件，'changed' 已错过，这里补一次
+		for (const path of Array.from(this.scanSkippedPaths)) {
+			const file = this.app.vault.getAbstractFileByPath(path);
+			if (file instanceof TFile && this.app.metadataCache.getFileCache(file)?.listItems?.length) {
+				this.rescanSkippedFile(path);
+			}
+		}
 
 		const scanElapsed = performance.now() - scanStartTime;
 		Logger.stats('MarkdownDataSource', `initialize() completed in ${scanElapsed.toFixed(2)}ms`);
@@ -263,6 +276,18 @@ export class MarkdownDataSource implements IDataSource {
 		this.debounceTimers.set(path, timer);
 	}
 
+	/** 补扫首扫时被跳过的文件（走 modify 同款防抖 + 字段级 diff） */
+	private rescanSkippedFile(path: string): void {
+		this.scanSkippedPaths.delete(path);
+		this.scheduleFileDebounce(path, () => {
+			if (this.processingFiles.has(path)) {
+				this.pendingFileChecks.add(path);
+				return;
+			}
+			void this.processFileModification(path);
+		});
+	}
+
 	private async processFileModification(filePath: string): Promise<void> {
 		this.processingFiles.add(filePath);
 		Logger.debug('MarkdownDataSource', `Processing file modification: ${filePath}`);
@@ -318,6 +343,11 @@ export class MarkdownDataSource implements IDataSource {
 			this.app.vault.offref(eventRef);
 		});
 		this.vaultEventRefs = [];
+		this.metadataEventRefs.forEach((eventRef) => {
+			this.app.metadataCache.offref(eventRef);
+		});
+		this.metadataEventRefs = [];
+		this.scanSkippedPaths.clear();
 		this.fileWatchersRegistered = false;
 
 		this.debounceTimers.forEach((timer) => window.clearTimeout(timer));
@@ -384,10 +414,13 @@ export class MarkdownDataSource implements IDataSource {
 			);
 
 			// 将结果合并到 allTasks
-			for (const result of batchResults) {
+			for (let i = 0; i < batchResults.length; i++) {
+				const result = batchResults[i];
 				if (result) {
 					allTasks.push(...result.tasks);
 					this.cache.set(result.filePath, result.cache);
+				} else if (!this.cache.has(batch[i].path)) {
+					this.scanSkippedPaths.add(batch[i].path);
 				}
 			}
 
@@ -600,6 +633,17 @@ export class MarkdownDataSource implements IDataSource {
 			}
 		});
 		this.vaultEventRefs.push(renameRef);
+
+		// 启动首扫竞态：首扫跳过的文件完成索引后补扫（只处理跳过集合内的文件，
+		// 不额外读取其它笔记；普通编辑已由 modify 路径处理）
+		this.metadataEventRefs.push(this.app.metadataCache.on('changed', (file) => {
+			if (this.scanSkippedPaths.has(file.path)) {
+				this.rescanSkippedFile(file.path);
+			}
+		}));
+		this.metadataEventRefs.push(this.app.metadataCache.on('resolved', () => {
+			this.scanSkippedPaths.clear();
+		}));
 
 		// 【开发模式】监听 metadataCache 变化
 		// 用于调试和验证问题，避免生产环境性能开销

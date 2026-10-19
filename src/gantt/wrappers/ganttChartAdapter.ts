@@ -184,6 +184,15 @@ export class GanttChartAdapter {
 	}
 
 	/**
+	 * 全量重绘任务（行顺序变化时使用；保持滚动位置，不重建引擎）
+	 */
+	refreshTasks(ganttTasks: GanttChartTask[]): void {
+		if (this.renderer) {
+			this.renderer.refresh(ganttTasks);
+		}
+	}
+
+	/**
 	 * 销毁实例
 	 */
 	destroy(): void {

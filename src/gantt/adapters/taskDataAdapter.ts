@@ -8,6 +8,7 @@ import { getTaskDateField } from '../../types';
 import { buildIntervalTimeLabel } from '../../ui/views/week/timelineModel';
 import type { GanttChartTask, DateFieldType } from '../types';
 import type { StatusFilterState } from '../../types';
+import { taskDisplayText } from '../../utils/linkText';
 
 /**
  * 任务数据适配器
@@ -69,7 +70,7 @@ export class TaskDataAdapter {
 
 		return {
 			id: id ?? this.generateTaskId(task),
-			name: task.description || '无标题任务',
+			name: taskDisplayText(task.description) || '无标题任务',
 			timeLabel: buildIntervalTimeLabel(
 				startDate, normalizedEndDate,
 				task.datePrecision?.[startField] === 'time',
@@ -105,6 +106,8 @@ export class TaskDataAdapter {
 			repeat: task.repeat,
 			datePrecision: task.datePrecision,
 			metadataFields: task.metadataFields,
+			plannerTime: task.plannerTime,
+			scheduledProxy: task.scheduledProxy,
 		};
 	}
 

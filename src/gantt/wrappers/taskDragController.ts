@@ -41,7 +41,8 @@ function updateTaskBarVisual(
 	const rowIndex = Math.max(0, ctx.tasks.findIndex(t => t.id === dragState.task?.id));
 
 	const x = getGridUnitX(startUnitIndex, ctx.columnWidth);
-	const y = rowIndex * ctx.rowHeight + (ctx.rowHeight - 24) / 2;
+	const y = ctx.rowBarY(rowIndex);
+	const visualOffset = (ctx.rowBarHeight(rowIndex) - 8) / 2;
 	const duration = endUnitIndex - startUnitIndex;
 	const barWidth = Math.max(duration * ctx.columnWidth, 20);
 
@@ -60,7 +61,7 @@ function updateTaskBarVisual(
 	}
 	if (dragState.leftVisualElement) {
 		dragState.leftVisualElement.setAttribute('x', String(x + 2));
-		dragState.leftVisualElement.setAttribute('y', String(y + 8));
+		dragState.leftVisualElement.setAttribute('y', String(y + visualOffset));
 	}
 
 	// 更新右手柄
@@ -71,7 +72,7 @@ function updateTaskBarVisual(
 	}
 	if (dragState.rightVisualElement) {
 		dragState.rightVisualElement.setAttribute('x', String(rightHandleX + HANDLE_HIT_AREA - 2 - HANDLE_VISUAL_SIZE));
-		dragState.rightVisualElement.setAttribute('y', String(y + 8));
+		dragState.rightVisualElement.setAttribute('y', String(y + visualOffset));
 	}
 
 	// 同步更新引导条（创建 → 开始）

@@ -482,3 +482,93 @@ body.gc-is-phone {
 	font-variant-numeric: tabular-nums;
 	user-select: none;
 }
+
+/* ========== file-based task 分区（文件时间轴 / 任务时间轴） ========== */
+.gc-gantt-view__header-row-bg {
+	fill: var(--background-secondary);
+}
+
+.gc-gantt-view__section-label,
+.gc-gantt-view__project-label {
+	display: flex;
+	align-items: center;
+	height: 100%;
+	padding: 0 10px;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.gc-gantt-view__section-label {
+	font-size: 12px;
+	font-weight: 700;
+	color: var(--text-normal);
+	letter-spacing: 0.02em;
+}
+
+.gc-gantt-view__project-label {
+	padding-left: 18px;
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--text-muted);
+}
+
+.gc-gantt-view__file-label {
+	display: inline-flex;
+	flex-shrink: 0;
+	color: var(--gc-file-task-color);
+}
+
+.gc-gantt-view__file-label svg {
+	width: 14px;
+	height: 14px;
+}
+
+/* 文件行折叠按钮（无归类任务时占位对齐） */
+.gc-gantt-view__collapse-toggle {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	width: 16px;
+	height: 16px;
+	border-radius: var(--radius-s);
+	color: var(--text-muted);
+	cursor: pointer;
+}
+
+.gc-gantt-view__collapse-toggle:hover {
+	background-color: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+.gc-gantt-view__collapse-toggle svg {
+	width: 14px;
+	height: 14px;
+}
+
+.gc-gantt-view__collapse-toggle--empty {
+	cursor: default;
+}
+
+.gc-gantt-view__collapse-toggle--empty:hover {
+	background-color: transparent;
+}
+
+/* 折叠后显示收起的任务数 */
+.gc-gantt-view__file-child-count {
+	flex-shrink: 0;
+	min-width: 16px;
+	padding: 0 4px;
+	border-radius: 8px;
+	background-color: var(--gc-file-task-color);
+	color: var(--text-on-accent);
+	font-size: 10px;
+	line-height: 16px;
+	text-align: center;
+}
+
+/* 归类到文件下的紧凑任务行 */
+.gc-gantt-view__task-content-cell--nested {
+	color: var(--text-muted);
+}

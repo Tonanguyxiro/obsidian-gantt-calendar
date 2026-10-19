@@ -27,8 +27,9 @@ export interface GridRenderOptions {
 	totalUnits: number;
 	granularity: TimeGranularity;
 	columnWidth: number;
-	rowHeight: number;
-	tasksLength: number;
+	/** 各行顶部 y 与行高（行高可变：标题行/归类任务行更紧凑） */
+	rowTops: number[];
+	rowHeights: number[];
 	width: number;
 	height: number;
 	padding: number;
@@ -43,7 +44,8 @@ export function renderGrid(
 	opts: GridRenderOptions,
 	rowBgStorage: SVGRectElement[]
 ): void {
-	const { svg, totalUnits, granularity, columnWidth, rowHeight, tasksLength, width, height } = opts;
+	const { svg, totalUnits, granularity, columnWidth, rowTops, rowHeights, width, height } = opts;
+	const tasksLength = rowTops.length;
 	if (!svg) return;
 
 	const gridGroup = activeDocument.createElementNS(ns, 'g');
@@ -65,12 +67,12 @@ export function renderGrid(
 
 	// 行背景（斑马纹）
 	for (let i = 0; i < tasksLength; i++) {
-		const y = i * rowHeight;
+		const y = rowTops[i];
 		const rowBg = activeDocument.createElementNS(ns, 'rect') as SVGRectElement;
 		rowBg.setAttribute('x', '0');
 		rowBg.setAttribute('y', String(y));
 		rowBg.setAttribute('width', String(width));
-		rowBg.setAttribute('height', String(rowHeight));
+		rowBg.setAttribute('height', String(rowHeights[i]));
 		rowBg.setAttribute('data-row-index', String(i));
 		addSvgClass(rowBg, GanttClasses.elements.rowBg);
 		rowBg.setAttribute('fill', i % 2 === 0 ? 'var(--background-secondary)' : 'transparent');
@@ -81,7 +83,7 @@ export function renderGrid(
 
 	// 水平线（任务行分隔）
 	for (let i = 0; i <= tasksLength; i++) {
-		const y = i * rowHeight;
+		const y = i < tasksLength ? rowTops[i] : (tasksLength > 0 ? rowTops[tasksLength - 1] + rowHeights[tasksLength - 1] : 0);
 		const line = activeDocument.createElementNS(ns, 'line');
 		line.setAttribute('x1', '0');
 		line.setAttribute('y1', String(y));

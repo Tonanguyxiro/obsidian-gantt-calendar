@@ -35,6 +35,10 @@ export interface IRenderContext {
 	// ---- 尺寸配置 ----
 	readonly columnWidth: number;
 	readonly rowHeight: number;
+	/** 某行任务条的顶部 y（行高可变） */
+	rowBarY(rowIndex: number): number;
+	/** 某行任务条的高度 */
+	rowBarHeight(rowIndex: number): number;
 	readonly headerHeight: number;
 	readonly taskNumberColumnWidth: number;
 	readonly resizerWidth: number;

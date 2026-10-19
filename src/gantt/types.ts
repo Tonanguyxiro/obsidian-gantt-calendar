@@ -5,7 +5,7 @@
  */
 
 import type { TaskStatusType } from '../tasks/taskStatus';
-import type { StatusFilterState, MetadataField } from '../types';
+import type { StatusFilterState, MetadataField, PlannerTime, ScheduledProxyInfo, FileTask } from '../types';
 
 /**
  * 甘特图任务格式
@@ -82,6 +82,27 @@ export interface GanttChartTask {
 	datePrecision?: Partial<Record<'createdDate' | 'startDate' | 'scheduledDate' | 'dueDate' | 'cancelledDate' | 'completionDate', 'day' | 'time'>>;
 	/** 结构化内联元数据字段 (%%[key::value]%%) */
 	metadataFields?: MetadataField[];
+	/** Day Planner 时间前缀（透传） */
+	plannerTime?: PlannerTime;
+	/** 计划日期回退代理（透传，写回时还原为 ⏳ + 时间前缀） */
+	scheduledProxy?: ScheduledProxyInfo;
+
+	// ==================== file-based task 分区 ====================
+	/**
+	 * 行类型：section = 分区标题（文件时间轴 / 任务时间轴），project = 项目分组标题，
+	 * file = file-based task 行，缺省 = 普通任务行。标题行无任务条、不参与日期范围计算
+	 */
+	rowKind?: 'section' | 'project' | 'file';
+	/** 任务行缩进层级（归类到文件下的任务为 1） */
+	indent?: number;
+	/** 项目标题行指向的文件（folder note），点击可打开 */
+	linkPath?: string;
+	/** file 行对应的 file-based task（拖拽写回 frontmatter） */
+	fileTask?: FileTask;
+	/** file 行下归类的任务数（>0 时显示折叠按钮） */
+	childCount?: number;
+	/** file 行是否已折叠（其归类任务不渲染） */
+	collapsed?: boolean;
 }
 
 /**
@@ -119,6 +140,10 @@ export interface GanttChartConfig {
 	custom_popup_html?: (task: GanttChartTask) => string;
 	/** 点击任务回调 */
 	on_click?: (task: GanttChartTask) => void;
+	/** 双击任务回调（设置后单击延迟到双击判定窗口之后触发） */
+	on_dblclick?: (task: GanttChartTask) => void;
+	/** 文件行折叠/展开回调 */
+	on_toggle_collapse?: (task: GanttChartTask) => void;
 	/** 日期变更回调 */
 	on_date_change?: (task: GanttChartTask, start: Date, end: Date) => void;
 	/** 进度变更回调 */

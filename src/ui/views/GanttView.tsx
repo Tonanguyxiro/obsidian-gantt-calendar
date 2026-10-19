@@ -15,7 +15,14 @@ import {
 } from '../../gantt';
 import { i18n } from '../../i18n/i18n';
 import { usePlugin, useApp } from '../pluginContext';
+import type { FileTask } from '../../types';
 import { useCalendarStore, selectViewFilter } from '../store/calendarStore';
+import { buildGanttRows, isFileTaskFeatureOn } from '../../fileTasks/fileTaskLayer';
+import { writeFileTaskDates } from '../../fileTasks/fileTaskWriter';
+import { openEditTaskModal } from '../modals/TaskFormModal';
+import { openFileInExistingLeaf } from '../../utils/fileOpener';
+import { formatDate } from '../../dateUtils/dateUtilsIndex';
+import { useViewTasks } from '../utils/useViewTasks';
 
 const GANTT_CONFIG: Omit<GanttChartConfig, 'on_click' | 'on_date_change' | 'on_progress_change'> = {
 	view_mode: 'week',
@@ -34,13 +41,13 @@ const GANTT_CONFIG: Omit<GanttChartConfig, 'on_click' | 'on_date_change' | 'on_p
 export function GanttView(): JSX.Element {
 	const plugin = usePlugin();
 	const app = useApp();
-	const tasks = useCalendarStore((s) => s.tasks);
 	const filter = useCalendarStore((s) => selectViewFilter(s, 'gantt'));
 	const ganttScroll = useCalendarStore((s) => s.ganttScroll);
 	const refreshTasks = useCalendarStore((s) => s.refreshTasks);
 
 	const startField = plugin.settings.ganttStartField;
 	const endField = plugin.settings.ganttEndField;
+	const tasks = useViewTasks(startField, endField, endField);
 
 	const containerRef = useRef<HTMLDivElement | null>(null);
 	const engineRef = useRef<GanttChartAdapter | null>(null);
@@ -77,9 +84,64 @@ export function GanttView(): JSX.Element {
 		return [...filteredTasks, ...virtuals];
 	}, [filteredTasks, startField, plugin.settings.recurringTaskDisplayLimit]);
 
-	const ganttTasks = useMemo(() => (
-		TaskDataAdapter.toGanttChartTasks(tasksWithVirtuals, startField, endField)
-	), [tasksWithVirtuals, startField, endField]);
+	// file-based task 分区：上方文件时间轴（按项目分组，无项目在分区底部），下方任务时间轴；
+	// 归类开启时任务移到所属文件行下，下方只剩不属于 file-based task 的任务
+	const allFileTasks = useCalendarStore((s) => s.fileTasks);
+	const fileOptions = plugin.settings.fileTaskViews?.gantt;
+	const fileTasks = isFileTaskFeatureOn(plugin.settings) && fileOptions?.show ? allFileTasks : EMPTY_FILE_TASKS;
+	const groupTasks = !!fileOptions?.groupTasks;
+
+	// 文件行折叠状态（持久化到设置，重开视图后保持）
+	const [collapsedFiles, setCollapsedFiles] = useState<ReadonlySet<string>>(
+		() => new Set(plugin.settings.ganttCollapsedFileTasks ?? []),
+	);
+	const handleToggleCollapse = useCallback((ganttTask: GanttChartTask) => {
+		const path = ganttTask.fileTask?.filePath;
+		if (!path) return;
+		setCollapsedFiles((prev) => {
+			const next = new Set(prev);
+			if (next.has(path)) next.delete(path);
+			else next.add(path);
+			plugin.settings.ganttCollapsedFileTasks = Array.from(next);
+			void plugin.saveSettings();
+			return next;
+		});
+	}, [plugin]);
+
+	const ganttTasks = useMemo(() => {
+		const items = TaskDataAdapter.toGanttChartTasks(tasksWithVirtuals, startField, endField);
+		const rows = buildGanttRows(fileTasks, items, (t) => t.filePath, groupTasks, collapsedFiles);
+		return rows.map((row): GanttChartTask => {
+			switch (row.kind) {
+				case 'section':
+					return {
+						id: row.id, start: '', end: '', progress: 0, rowKind: 'section',
+						name: i18n.t(row.section === 'files' ? 'fileTasks.ganttFilesSection' : 'fileTasks.ganttTasksSection'),
+					};
+				case 'project':
+					return {
+						id: row.id, start: '', end: '', progress: 0, rowKind: 'project',
+						name: row.label || i18n.t('fileTasks.noProject'), linkPath: row.linkPath,
+					};
+				case 'file':
+					return {
+						id: row.id,
+						name: row.fileTask.title,
+						start: formatDate(row.fileTask.start, 'yyyy-MM-dd'),
+						end: formatDate(row.fileTask.end, 'yyyy-MM-dd'),
+						progress: 0,
+						rowKind: 'file',
+						filePath: row.fileTask.filePath,
+						fileName: row.fileTask.title,
+						fileTask: row.fileTask,
+						childCount: row.childCount,
+						collapsed: row.collapsed,
+					};
+				case 'task':
+					return row.nested ? { ...row.item, indent: 1 } : row.item;
+			}
+		});
+	}, [tasksWithVirtuals, startField, endField, fileTasks, groupTasks, collapsedFiles]);
 
 	const hasTasks = ganttTasks.length > 0;
 
@@ -103,6 +165,11 @@ export function GanttView(): JSX.Element {
 			new Notice(i18n.t('views.ganttView.invalidDateRange'));
 			return;
 		}
+		if (ganttTask.fileTask) {
+			// file 行：写回 frontmatter 起止属性
+			await writeFileTaskDates(app, ganttTask.fileTask, start, end, plugin.settings);
+			return;
+		}
 		try {
 			await updateHandler.handleDateChange(
 				ganttTask,
@@ -116,7 +183,7 @@ export function GanttView(): JSX.Element {
 		} catch (error) {
 			Logger.error('GanttView', 'Error handling date change:', error);
 		}
-	}, [refreshTasks]);
+	}, [app, plugin, refreshTasks]);
 
 	const handleProgressChange = useCallback(async (ganttTask: GanttChartTask, progress: number) => {
 		const updateHandler = updateHandlerRef.current;
@@ -129,12 +196,27 @@ export function GanttView(): JSX.Element {
 		}
 	}, [refreshTasks]);
 
+	// 双击：file 行打开文件；任务行按设置弹出编辑面板（默认）或跳转源文件
+	const doubleClickAction = plugin.settings.taskCardDoubleClickAction ?? 'editModal';
+	const handleTaskDoubleClick = useCallback((ganttTask: GanttChartTask) => {
+		if (!ganttTask.filePath) return;
+		if (ganttTask.rowKind === 'file' || doubleClickAction === 'openFile') {
+			void openFileInExistingLeaf(app, ganttTask.filePath, ganttTask.rowKind === 'file' ? 0 : ganttTask.lineNumber);
+			return;
+		}
+		const task = tasksRef.current.find((t) => t.filePath === ganttTask.filePath && t.lineNumber === ganttTask.lineNumber);
+		if (!task) return;
+		openEditTaskModal(app, task, plugin.settings.enabledTaskFormats || ['tasks'], () => refreshTasks(), true);
+	}, [app, plugin, doubleClickAction, refreshTasks]);
+
 	const config = useMemo<GanttChartConfig>(() => ({
 		...GANTT_CONFIG,
 		on_click: handleTaskClick,
+		on_dblclick: doubleClickAction === 'none' ? undefined : handleTaskDoubleClick,
+		on_toggle_collapse: handleToggleCollapse,
 		on_date_change: (task, start, end) => { void handleDateChange(task, start, end); },
 		on_progress_change: (task, progress) => { void handleProgressChange(task, progress); },
-	}), [handleTaskClick, handleDateChange, handleProgressChange]);
+	}), [handleTaskClick, handleTaskDoubleClick, handleToggleCollapse, doubleClickAction, handleDateChange, handleProgressChange]);
 
 	const destroyEngine = useCallback(() => {
 		engineRef.current?.destroy();
@@ -184,8 +266,8 @@ export function GanttView(): JSX.Element {
 		const oldTasks = lastGanttRef.current;
 		lastGanttRef.current = ganttTasks;
 		if (shouldFullRefresh(oldTasks, ganttTasks)) {
-			destroyEngine();
-			buildEngine();
+			// 行顺序变化（含折叠/展开文件行）：同一引擎全量重绘，保留滚动位置
+			engine.refreshTasks(ganttTasks);
 			return;
 		}
 		engine.updateTasks(ganttTasks);
@@ -246,8 +328,10 @@ export function GanttView(): JSX.Element {
 	);
 }
 
+const EMPTY_FILE_TASKS: FileTask[] = [];
+
 function tasksSignature(tasks: GanttChartTask[]): string {
-	return tasks.map((t) => `${t.id}|${t.start}|${t.end}|${t.leadStart || ''}|${t.progress}|${t.completed}|${t.name}|${t.custom_class || ''}`).join('\u0001');
+	return tasks.map((t) => `${t.id}|${t.indent || 0}|${t.collapsed ? 1 : 0}|${t.childCount || 0}|${t.start}|${t.end}|${t.leadStart || ''}|${t.progress}|${t.completed}|${t.name}|${t.custom_class || ''}`).join('\u0001');
 }
 
 /**

@@ -28,7 +28,7 @@ import { LinkRenderer } from '../../utils/linkRenderer';
 import { getTodayInTimezone } from '../../dateUtils/timezone';
 import { formatDate } from '../../dateUtils/dateUtilsIndex';
 import { openFileInExistingLeaf } from '../../utils/fileOpener';
-import { App } from 'obsidian';
+import { App, setIcon } from 'obsidian';
 
 /**
  * SVG 元素辅助方法
@@ -41,6 +41,22 @@ function addSvgClass(element: Element, className: string): void {
 	}
 	element.setAttribute('class', classes.join(' '));
 }
+
+/** 分区/项目标题行：无任务条、不参与日期范围与序号 */
+function isHeaderRow(task: GanttChartTask): boolean {
+	return task.rowKind === 'section' || task.rowKind === 'project';
+}
+
+/** 归类到文件下的紧凑任务行：行高与任务条高度 */
+const NESTED_ROW_HEIGHT = 28;
+const NESTED_BAR_HEIGHT = 16;
+/** 分区/项目标题行行高 */
+const HEADER_ROW_HEIGHT = 32;
+/** 常规任务条高度 */
+const BAR_HEIGHT = 24;
+
+/** 单击延迟判定窗口（设置了双击回调时，单击需等待确认不是双击的前半段） */
+const DOUBLE_CLICK_WINDOW_MS = 250;
 
 /**
  * SVG 甘特图渲染器
@@ -66,6 +82,10 @@ export class SvgGanttRenderer {
 	// 尺寸相关
 	private headerHeight = 50;
 	private rowHeight = 40;
+	/** 行布局：各行顶部 y 与行高（标题行/归类任务行比常规行矮） */
+	private rowTops: number[] = [];
+	private rowHeights: number[] = [];
+	private rowsTotalHeight = 0;
 	private columnWidth = 50;
 	private taskNumberColumnWidth = 40;  // 任务序号列宽度
 	private taskColumnWidth = 240;  // 任务列宽度（包含序号列）
@@ -132,6 +152,41 @@ export class SvgGanttRenderer {
 		this.granularity = config.granularity ?? TimeGranularity.DAY;
 	}
 
+	/** 根据行类型计算行布局（任务集变化后必须重算） */
+	private computeRowLayout(): void {
+		this.rowTops = [];
+		this.rowHeights = [];
+		let top = 0;
+		for (const task of this.tasks) {
+			const h = isHeaderRow(task) ? HEADER_ROW_HEIGHT : task.indent ? NESTED_ROW_HEIGHT : this.rowHeight;
+			this.rowTops.push(top);
+			this.rowHeights.push(h);
+			top += h;
+		}
+		this.rowsTotalHeight = top;
+	}
+
+	/** 某行任务条的高度 */
+	rowBarHeight(index: number): number {
+		return this.tasks[index]?.indent ? NESTED_BAR_HEIGHT : BAR_HEIGHT;
+	}
+
+	/** 某行任务条的顶部 y（行内垂直居中） */
+	rowBarY(index: number): number {
+		const top = this.rowTops[index] ?? index * this.rowHeight;
+		const h = this.rowHeights[index] ?? this.rowHeight;
+		return top + (h - this.rowBarHeight(index)) / 2;
+	}
+
+	/** 由内容区 y 坐标反查行号（超出范围返回 -1） */
+	private rowIndexAt(y: number): number {
+		if (y < 0 || y >= this.rowsTotalHeight) return -1;
+		for (let i = this.rowTops.length - 1; i >= 0; i--) {
+			if (y >= this.rowTops[i]) return i;
+		}
+		return -1;
+	}
+
 	/**
 	 * 初始化渲染器
 	 */
@@ -182,6 +237,7 @@ export class SvgGanttRenderer {
 	updateTasks(newTasks: GanttChartTask[]): void {
 		const oldTasks = this.tasks;
 		this.tasks = newTasks;
+		this.computeRowLayout();
 
 		// 构建任务ID映射
 		const oldTaskMap = new Map(oldTasks.map(t => [t.id, t]));
@@ -228,6 +284,7 @@ export class SvgGanttRenderer {
 	 * 增量更新复用既有网格，越界任务必须触发全量重绘重建日期范围。
 	 */
 	private isTaskOutsideRenderedRange(task: GanttChartTask): boolean {
+		if (isHeaderRow(task)) return false;
 		if (!this.minDate) return true;
 		const start = SvgGanttRenderer.parseLocalDate(task.leadStart ?? task.start);
 		const end = SvgGanttRenderer.parseLocalDate(task.end);
@@ -276,8 +333,9 @@ export class SvgGanttRenderer {
 		this.totalUnits = totalUnits;
 
 		// 计算尺寸
+		this.computeRowLayout();
 		const ganttWidth = totalUnits * this.columnWidth + this.padding * 2;
-		const ganttHeight = this.headerHeight + this.tasks.length * this.rowHeight;
+		const ganttHeight = this.headerHeight + this.rowsTotalHeight;
 		const taskListHeight = ganttHeight;
 
 		// 创建单个 Grid 容器
@@ -358,8 +416,9 @@ export class SvgGanttRenderer {
 		granularity: TimeGranularity
 	} {
 		const config = GRANULARITY_CONFIGS[this.granularity];
+		const datedRows = this.tasks.filter(t => !isHeaderRow(t));
 
-		if (this.tasks.length === 0) {
+		if (datedRows.length === 0) {
 			const today = getTodayInTimezone();
 			const defaultUnits = 30; // 默认30个单元
 			return {
@@ -370,7 +429,7 @@ export class SvgGanttRenderer {
 			};
 		}
 
-		const dates = this.tasks.flatMap(t => [
+		const dates = datedRows.flatMap(t => [
 			SvgGanttRenderer.parseLocalDate(t.start),
 			SvgGanttRenderer.parseLocalDate(t.end),
 			...(t.leadStart ? [SvgGanttRenderer.parseLocalDate(t.leadStart)] : [])
@@ -592,6 +651,11 @@ export class SvgGanttRenderer {
 			if (rowIndex < 0 || rowIndex >= this.tasks.length || rowIndex === this.currentHighlightRow) {
 				return;
 			}
+			// 标题行不参与悬停高亮（其背景为分区色，恢复逻辑按奇偶行会覆盖）
+			if (isHeaderRow(this.tasks[rowIndex])) {
+				clearHighlight();
+				return;
+			}
 
 			// 清除之前的高亮
 			if (this.currentHighlightRow >= 0) {
@@ -683,8 +747,7 @@ export class SvgGanttRenderer {
 		this.taskListContainer.addEventListener('mousemove', (e) => {
 			const rect = this.taskListContainer!.getBoundingClientRect();
 			const offsetY = e.clientY - rect.top + this.taskListContainer!.scrollTop;
-			const rowIndex = Math.floor(offsetY / this.rowHeight);
-			updateHighlight(rowIndex);
+			updateHighlight(this.rowIndexAt(offsetY));
 		});
 
 		// 监听任务列表容器的鼠标离开
@@ -696,8 +759,7 @@ export class SvgGanttRenderer {
 		this.ganttContainer.addEventListener('mousemove', (e) => {
 			const rect = this.ganttContainer!.getBoundingClientRect();
 			const offsetY = e.clientY - rect.top + this.ganttContainer!.scrollTop;
-			const rowIndex = Math.floor(offsetY / this.rowHeight);
-			updateHighlight(rowIndex);
+			updateHighlight(this.rowIndexAt(offsetY));
 		});
 
 		// 监听甘特图容器的鼠标离开
@@ -798,14 +860,21 @@ export class SvgGanttRenderer {
 		bg.setAttribute('x', '0');
 		bg.setAttribute('y', '0');
 		bg.setAttribute('width', String(contentWidth + numberWidth));
-		bg.setAttribute('height', String(this.tasks.length * this.rowHeight));
+		bg.setAttribute('height', String(this.rowsTotalHeight));
 		bg.setAttribute('fill', 'var(--background-primary)');
 		svg.appendChild(bg);
 
+		const rowNumbers = this.computeRowNumbers();
+
 		// 绘制任务名称
 		this.tasks.forEach((task, index) => {
-			const y = index * this.rowHeight;
-			const taskNumber = index + 1;
+			const y = this.rowTops[index];
+			const rowH = this.rowHeights[index];
+			if (isHeaderRow(task)) {
+				svg.appendChild(this.renderHeaderRow(task, index, contentWidth + numberWidth));
+				return;
+			}
+			const taskNumber = rowNumbers.get(task.id) ?? index + 1;
 
 			// Row wrapper with stable data-task-row id: enables incremental
 			// add/remove/update of individual rows by task id.
@@ -820,7 +889,7 @@ export class SvgGanttRenderer {
 			rowBg.setAttribute('x', '0');
 			rowBg.setAttribute('y', String(y));
 			rowBg.setAttribute('width', String(contentWidth + numberWidth));
-			rowBg.setAttribute('height', String(this.rowHeight));
+			rowBg.setAttribute('height', String(rowH));
 			rowBg.setAttribute('data-row-index', String(index));
 			addSvgClass(rowBg, GanttClasses.elements.rowBg);
 			// 偶数行使用默认背景色
@@ -838,7 +907,7 @@ export class SvgGanttRenderer {
 			numberForeignObj.setAttribute('x', '0');
 			numberForeignObj.setAttribute('y', String(y));
 			numberForeignObj.setAttribute('width', String(numberWidth));
-			numberForeignObj.setAttribute('height', String(this.rowHeight));
+			numberForeignObj.setAttribute('height', String(rowH));
 
 			const numberDiv = createDiv();
 			numberDiv.className = GanttClasses.elements.taskNumberCell;
@@ -853,7 +922,7 @@ export class SvgGanttRenderer {
 			contentForeignObj.setAttribute('x', String(numberWidth));
 			contentForeignObj.setAttribute('y', String(y));
 			contentForeignObj.setAttribute('width', String(contentWidth));
-			contentForeignObj.setAttribute('height', String(this.rowHeight));
+			contentForeignObj.setAttribute('height', String(rowH));
 
 			// 创建 HTML 内容容器
 			const contentDiv = createDiv();
@@ -861,9 +930,24 @@ export class SvgGanttRenderer {
 			contentDiv.addClass('gc-u-flex', 'gc-u-items-center', 'gc-u-w-full');
 			setCssProps(contentDiv, { height: '100%', fontSize: '12px', color: 'var(--text-normal)', gap: '8px', padding: '0 8px' });
 
-			// === 创建复选框 ===
-			const checkbox = this.createTaskCheckbox(task, isCompleted);
-			contentDiv.appendChild(checkbox);
+			// 归类到文件下的任务缩进一级
+			// 归类到文件下的任务：紧凑行（小字号、小复选框、缩进对齐到文件名）
+			if (task.indent) {
+				contentDiv.addClass(GanttClasses.modifiers.taskNested);
+				setCssProps(contentDiv, { paddingLeft: `${8 + task.indent * 22}px`, fontSize: '11px', gap: '6px' });
+			}
+
+			// === 复选框（file 行显示折叠按钮 + 文件图标） ===
+			if (task.rowKind === 'file') {
+				contentDiv.appendChild(this.createCollapseToggle(task));
+				const icon = createSpan({ cls: GanttClasses.elements.fileLabel });
+				setIcon(icon, 'file-text');
+				contentDiv.appendChild(icon);
+			} else {
+				const checkbox = this.createTaskCheckbox(task, isCompleted);
+				if (task.indent) setCssProps(checkbox, { width: '13px', height: '13px' });
+				contentDiv.appendChild(checkbox);
+			}
 
 			// === 创建可点击的文本容器 ===
 			const textContainer = createDiv();
@@ -875,8 +959,13 @@ export class SvgGanttRenderer {
 			textContainer.addEventListener('click', (e) => {
 				if ((e.target as HTMLElement).tagName !== 'A') {
 					e.stopPropagation(); // 阻止事件冒泡
-					this.handleTaskListItemClick(task);
+					this.withDoubleClickWindow(() => this.handleTaskListItemClick(task));
 				}
+			});
+			textContainer.addEventListener('dblclick', (e) => {
+				if ((e.target as HTMLElement).tagName === 'A') return;
+				e.stopPropagation();
+				this.handleTaskDoubleClick(task);
 			});
 
 			// 使用用户设置 showGlobalFilterInTaskText 控制是否显示全局过滤词
@@ -884,8 +973,13 @@ export class SvgGanttRenderer {
 			const displayText = (this.plugin?.settings?.showGlobalFilterInTaskText && gf)
 				? gf + ' ' + task.name
 				: task.name;
-			this.renderTaskDescriptionWithLinks(textContainer, displayText);
+			this.renderTaskDescriptionWithLinks(textContainer, task.rowKind === 'file' ? task.name : displayText, task.filePath);
 			contentDiv.appendChild(textContainer);
+
+			// 折叠的文件行：显示收起的任务数
+			if (task.rowKind === 'file' && task.collapsed && task.childCount) {
+				contentDiv.appendChild(createSpan({ cls: GanttClasses.elements.fileChildCount, text: String(task.childCount) }));
+			}
 
 			contentForeignObj.appendChild(contentDiv);
 			rowGroup.appendChild(contentForeignObj);
@@ -895,7 +989,7 @@ export class SvgGanttRenderer {
 			dividerLine.setAttribute('x1', String(numberWidth));
 			dividerLine.setAttribute('y1', String(y));
 			dividerLine.setAttribute('x2', String(numberWidth));
-			dividerLine.setAttribute('y2', String((index + 1) * this.rowHeight));
+			dividerLine.setAttribute('y2', String(y + rowH));
 			dividerLine.setAttribute('stroke', 'var(--background-modifier-border)');
 			dividerLine.setAttribute('stroke-width', '1');
 			rowGroup.appendChild(dividerLine);
@@ -903,9 +997,9 @@ export class SvgGanttRenderer {
 			// 底部分隔线
 			const line = activeDocument.createElementNS(ns, 'line');
 			line.setAttribute('x1', '0');
-			line.setAttribute('y1', String((index + 1) * this.rowHeight));
+			line.setAttribute('y1', String(y + rowH));
 			line.setAttribute('x2', String(contentWidth + numberWidth));
-			line.setAttribute('y2', String((index + 1) * this.rowHeight));
+			line.setAttribute('y2', String(y + rowH));
 			line.setAttribute('stroke', 'var(--background-modifier-border)');
 			line.setAttribute('stroke-width', '0.5');
 			rowGroup.appendChild(line);
@@ -917,9 +1011,9 @@ export class SvgGanttRenderer {
 	 * 渲染任务描述为富文本（包含可点击的链接）
 	 * 支持与 BaseViewRenderer 相同的链接格式
 	 */
-	private renderTaskDescriptionWithLinks(container: HTMLElement, text: string): void {
+	private renderTaskDescriptionWithLinks(container: HTMLElement, text: string, sourcePath = ''): void {
 		if (this.app) {
-			LinkRenderer.renderTaskDescriptionWithLinks(container, text, this.app);
+			LinkRenderer.renderTaskDescriptionWithLinks(container, text, this.app, sourcePath);
 		} else {
 			container.textContent = text;
 		}
@@ -966,10 +1060,120 @@ export class SvgGanttRenderer {
 	 * 处理任务列表项点击事件 - 跳转到文件
 	 */
 	private handleTaskListItemClick(task: GanttChartTask): void {
-		if (!task.filePath || !task.lineNumber || !this.app) return;
+		if (!task.filePath || !this.app) return;
+		if (task.rowKind !== 'file' && !task.lineNumber) return;
 
-		// 使用 openFileInExistingLeaf 跳转到文件
-		void openFileInExistingLeaf(this.app, task.filePath, task.lineNumber);
+		// 使用 openFileInExistingLeaf 跳转到文件（file 行跳到文件开头）
+		void openFileInExistingLeaf(this.app, task.filePath, task.rowKind === 'file' ? 0 : task.lineNumber);
+	}
+
+	/**
+	 * 文件行的折叠/展开按钮；没有归类任务时占位保持对齐
+	 */
+	private createCollapseToggle(task: GanttChartTask): HTMLElement {
+		const toggle = createSpan({ cls: GanttClasses.elements.collapseToggle });
+		if (!task.childCount) {
+			toggle.addClass(GanttClasses.modifiers.collapseToggleEmpty);
+			return toggle;
+		}
+		setIcon(toggle, task.collapsed ? 'chevron-right' : 'chevron-down');
+		toggle.setAttribute('role', 'button');
+		toggle.setAttribute('aria-label', task.collapsed ? 'Expand' : 'Collapse');
+		toggle.addEventListener('click', (e) => {
+			e.stopPropagation();
+			this.config.on_toggle_collapse?.(task);
+		});
+		toggle.addEventListener('dblclick', (e) => e.stopPropagation());
+		return toggle;
+	}
+
+	/** 行序号：只给任务/文件行编号，分区与项目标题行不占号 */
+	private computeRowNumbers(): Map<string, number> {
+		const numbers = new Map<string, number>();
+		let n = 0;
+		for (const t of this.tasks) {
+			if (!isHeaderRow(t)) numbers.set(t.id, ++n);
+		}
+		return numbers;
+	}
+
+	/** 分区标题（文件时间轴 / 任务时间轴）与项目分组标题行 */
+	private renderHeaderRow(task: GanttChartTask, index: number, width: number): SVGGElement {
+		const ns = 'http://www.w3.org/2000/svg';
+		const y = this.rowTops[index];
+		const rowH = this.rowHeights[index];
+		const rowGroup = activeDocument.createElementNS(ns, 'g');
+		rowGroup.setAttribute('data-task-row', task.id);
+
+		const rowBg = activeDocument.createElementNS(ns, 'rect');
+		rowBg.setAttribute('x', '0');
+		rowBg.setAttribute('y', String(y));
+		rowBg.setAttribute('width', String(width));
+		rowBg.setAttribute('height', String(rowH));
+		rowBg.setAttribute('data-row-index', String(index));
+		addSvgClass(rowBg, GanttClasses.elements.headerRowBg);
+		rowGroup.appendChild(rowBg);
+		this.rowBgElements.taskList.push(rowBg);
+
+		const fo = activeDocument.createElementNS(ns, 'foreignObject');
+		fo.setAttribute('x', '0');
+		fo.setAttribute('y', String(y));
+		fo.setAttribute('width', String(width));
+		fo.setAttribute('height', String(rowH));
+		const label = createDiv({
+			cls: task.rowKind === 'section' ? GanttClasses.elements.sectionLabel : GanttClasses.elements.projectLabel,
+		});
+		if (task.rowKind === 'project' && task.linkPath && this.app) {
+			const app = this.app;
+			const linkPath = task.linkPath;
+			const link = label.createEl('a', { text: task.name, cls: 'gc-link gc-link--obsidian' });
+			link.href = 'javascript:void(0)';
+			link.addEventListener('click', (e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				void openFileInExistingLeaf(app, linkPath, 0);
+			});
+		} else {
+			label.setText(task.name);
+		}
+		fo.appendChild(label);
+		rowGroup.appendChild(fo);
+
+		const line = activeDocument.createElementNS(ns, 'line');
+		line.setAttribute('x1', '0');
+		line.setAttribute('y1', String(y + rowH));
+		line.setAttribute('x2', String(width));
+		line.setAttribute('y2', String(y + rowH));
+		line.setAttribute('stroke', 'var(--background-modifier-border)');
+		line.setAttribute('stroke-width', '0.5');
+		rowGroup.appendChild(line);
+		return rowGroup;
+	}
+
+	/**
+	 * 单击动作：设置了双击回调时延迟到双击判定窗口之后执行，
+	 * 被随后的双击取消（避免单击先跳转到源文件）
+	 */
+	private clickTimer: number | null = null;
+	private withDoubleClickWindow(action: () => void): void {
+		if (!this.config.on_dblclick) {
+			action();
+			return;
+		}
+		if (this.clickTimer !== null) return;
+		this.clickTimer = window.setTimeout(() => {
+			this.clickTimer = null;
+			action();
+		}, DOUBLE_CLICK_WINDOW_MS);
+	}
+
+	private handleTaskDoubleClick(task: GanttChartTask): void {
+		if (this.clickTimer !== null) {
+			window.clearTimeout(this.clickTimer);
+			this.clickTimer = null;
+		}
+		this.hidePopup();
+		this.config.on_dblclick?.(task);
 	}
 
 	/**
@@ -1020,6 +1224,14 @@ export class SvgGanttRenderer {
 
 		// 绘制网格线（传递 width 用于水平线）
 		this.renderGrid(ns, svg, minDate, totalUnits, width, height, granularity);
+		// 分区/项目标题行使用分区底色
+		this.tasks.forEach((task, index) => {
+			const rowBg = this.rowBgElements.gantt[index];
+			if (!rowBg || !isHeaderRow(task)) return;
+			rowBg.setAttribute('class', GanttClasses.elements.headerRowBg);
+			rowBg.removeAttribute('fill');
+			rowBg.removeAttribute('opacity');
+		});
 
 		// 绘制今天线
 		renderTodayLine(ns, svg, minDate, totalUnits, height, granularity, this.columnWidth);
@@ -1084,8 +1296,8 @@ export class SvgGanttRenderer {
 	): void {
 		renderGrid(
 			ns,
-			{ svg, minDate, totalUnits, granularity, columnWidth: this.columnWidth, rowHeight: this.rowHeight,
-			  tasksLength: this.tasks.length, width, height, padding: this.padding },
+			{ svg, minDate, totalUnits, granularity, columnWidth: this.columnWidth,
+			  rowTops: this.rowTops, rowHeights: this.rowHeights, width, height, padding: this.padding },
 			this.rowBgElements.gantt,
 		);
 	}
@@ -1106,6 +1318,7 @@ export class SvgGanttRenderer {
 		addSvgClass(tasksGroup, GanttClasses.elements.tasks);
 
 		this.tasks.forEach((task, index) => {
+			if (isHeaderRow(task)) return;
 			const taskStart = SvgGanttRenderer.parseLocalDate(task.start);
 			const taskEnd = SvgGanttRenderer.parseLocalDate(task.end);
 
@@ -1115,7 +1328,9 @@ export class SvgGanttRenderer {
 
 			// 计算位置（与网格垂直线使用相同的计算方式）
 			const x = this.getGridUnitX(startUnitIndex);
-			const y = index * this.rowHeight + (this.rowHeight - 24) / 2;
+			const y = this.rowBarY(index);
+			const barH = this.rowBarHeight(index);
+			const barHStr = String(barH);
 			const duration = endUnitIndex - startUnitIndex;
 			const barWidth = Math.max(duration * this.columnWidth, 20);  // 不减 8，确保右端对齐网格线
 
@@ -1137,7 +1352,7 @@ export class SvgGanttRenderer {
 					leadBar.setAttribute('x', String(leadX));
 					leadBar.setAttribute('y', String(y));
 					leadBar.setAttribute('width', String(leadWidth));
-					leadBar.setAttribute('height', '24');
+					leadBar.setAttribute('height', barHStr);
 					leadBar.setAttribute('rx', '4');
 					leadBar.classList.add(GanttClasses.elements.leadBar);
 				}
@@ -1148,12 +1363,14 @@ export class SvgGanttRenderer {
 			bar.setAttribute('x', String(x));
 			bar.setAttribute('y', String(y));
 			bar.setAttribute('width', String(Math.max(barWidth, 20)));
-			bar.setAttribute('height', '24');
+			bar.setAttribute('height', barHStr);
 			bar.setAttribute('rx', '4');
 
 			// 根据状态设置颜色
 			let fillColor = 'var(--interactive-accent)';
-			if (task.progress === 100) {
+			if (task.rowKind === 'file') {
+				fillColor = 'var(--gc-file-task-color, var(--color-purple))';
+			} else if (task.progress === 100) {
 				fillColor = 'var(--gc-task-completed, #52c41a)';
 			} else if (task.custom_class) {
 				// 解析自定义类名获取颜色
@@ -1172,6 +1389,7 @@ export class SvgGanttRenderer {
 			bar.setAttribute('opacity', '0.85');
 			bar.setAttribute('cursor', 'pointer');
 			bar.classList.add('task-bar');
+			if (task.rowKind === 'file') bar.classList.add(GanttClasses.elements.fileBar);
 
 			// 进度条
 			let progressElement: SVGRectElement | null = null;
@@ -1181,7 +1399,7 @@ export class SvgGanttRenderer {
 				elem.setAttribute('x', String(x));
 				elem.setAttribute('y', String(y));
 				elem.setAttribute('width', String(Math.max(progressWidth - 8, 0)));
-				elem.setAttribute('height', '24');
+				elem.setAttribute('height', barHStr);
 				elem.setAttribute('rx', '4');
 				elem.setAttribute('fill', fillColor);
 				elem.setAttribute('opacity', '0.4');
@@ -1194,7 +1412,7 @@ export class SvgGanttRenderer {
 			if (task.timeLabel) {
 				timeBadge = activeDocument.createElementNS(ns, 'text') as SVGTextElement;
 				timeBadge.setAttribute('x', String(x + barWidth + 6));
-				timeBadge.setAttribute('y', String(y + 16));
+				timeBadge.setAttribute('y', String(y + barH / 2 + 4));
 				timeBadge.setAttribute('font-size', '9');
 				timeBadge.setAttribute('fill', 'var(--text-muted)');
 				timeBadge.setAttribute('pointer-events', 'none');
@@ -1211,7 +1429,7 @@ export class SvgGanttRenderer {
 			leftHandle.setAttribute('x', String(x));
 			leftHandle.setAttribute('y', String(y));
 			leftHandle.setAttribute('width', String(HANDLE_HIT_AREA));
-			leftHandle.setAttribute('height', '24');
+			leftHandle.setAttribute('height', barHStr);
 			leftHandle.setAttribute('fill', 'transparent');
 			setCssProps(leftHandle as unknown as HTMLElement, { cursor: 'w-resize' });
 			leftHandle.classList.add(GanttClasses.elements.handleLeft);
@@ -1219,7 +1437,7 @@ export class SvgGanttRenderer {
 			// 左侧视觉提示
 			const leftVisual = activeDocument.createElementNS(ns, 'rect');
 			leftVisual.setAttribute('x', String(x + 2));
-			leftVisual.setAttribute('y', String(y + 8));
+			leftVisual.setAttribute('y', String(y + (barH - 8) / 2));
 			leftVisual.setAttribute('width', String(HANDLE_VISUAL_SIZE));
 			leftVisual.setAttribute('height', '8');
 			leftVisual.setAttribute('rx', '1');
@@ -1233,7 +1451,7 @@ export class SvgGanttRenderer {
 			rightHandle.setAttribute('x', String(rightHandleX));
 			rightHandle.setAttribute('y', String(y));
 			rightHandle.setAttribute('width', String(HANDLE_HIT_AREA));
-			rightHandle.setAttribute('height', '24');
+			rightHandle.setAttribute('height', barHStr);
 			rightHandle.setAttribute('fill', 'transparent');
 			setCssProps(rightHandle as unknown as HTMLElement, { cursor: 'e-resize' });
 			rightHandle.classList.add(GanttClasses.elements.handleRight);
@@ -1241,7 +1459,7 @@ export class SvgGanttRenderer {
 			// 右侧视觉提示
 			const rightVisual = activeDocument.createElementNS(ns, 'rect');
 			rightVisual.setAttribute('x', String(rightHandleX + HANDLE_HIT_AREA - 2 - HANDLE_VISUAL_SIZE));
-			rightVisual.setAttribute('y', String(y + 8));
+			rightVisual.setAttribute('y', String(y + (barH - 8) / 2));
 			rightVisual.setAttribute('width', String(HANDLE_VISUAL_SIZE));
 			rightVisual.setAttribute('height', '8');
 			rightVisual.setAttribute('rx', '1');
@@ -1256,10 +1474,18 @@ export class SvgGanttRenderer {
 			bar.addEventListener('click', (e) => {
 				if (this.taskDragState.justFinishedDragging) return;
 				e.stopPropagation(); // 阻止事件冒泡
-				this.handleTaskClick(task);
+				this.withDoubleClickWindow(() => this.handleTaskClick(task));
+			});
+			bar.addEventListener('dblclick', (e) => {
+				e.stopPropagation();
+				this.handleTaskDoubleClick(task);
 			});
 			bar.addEventListener('mouseenter', (event) => {
 				if (isTouchNow()) return;
+				if (task.rowKind === 'file') {
+					bar.setAttribute('opacity', '1');
+					return;
+				}
 				bar.setAttribute('opacity', '1');
 				const mouseEvent = event as MouseEvent;
 				this.showPopup(task, bar, { x: mouseEvent.clientX, y: mouseEvent.clientY });
@@ -1396,6 +1622,7 @@ export class SvgGanttRenderer {
 
 		// 2. 更新现有任务
 		const modifiedIds = new Set(modified.map(t => t.id));
+		const rowNumbers = this.computeRowNumbers();
 		allTasks.forEach((task, index) => {
 			const row = svg.querySelector(`[data-task-row="${task.id}"]`);
 			if (row) {
@@ -1408,7 +1635,7 @@ export class SvgGanttRenderer {
 				// 更新序号
 				const numberCell = row.querySelector(`.${GanttClasses.elements.taskNumberCell}`);
 				if (numberCell) {
-					numberCell.textContent = String(index + 1);
+					numberCell.textContent = String(rowNumbers.get(task.id) ?? index + 1);
 				}
 				// 任务名变更时重渲染文本（此前改名后列表显示旧标题直到全量重绘）
 				if (modifiedIds.has(task.id)) {
@@ -1419,7 +1646,7 @@ export class SvgGanttRenderer {
 							? gf + ' ' + task.name
 							: task.name;
 						textContainer.empty();
-						this.renderTaskDescriptionWithLinks(textContainer, displayText);
+						this.renderTaskDescriptionWithLinks(textContainer, task.rowKind === 'file' ? task.name : displayText, task.filePath);
 					}
 				}
 			}
@@ -1433,7 +1660,7 @@ export class SvgGanttRenderer {
 			}
 			this.renderTaskList(svg);
 			// Keep SVG height in sync with the new row count (old height would clip).
-			const listHeight = this.headerHeight + this.tasks.length * this.rowHeight;
+			const listHeight = this.headerHeight + this.rowsTotalHeight;
 			svg.setAttribute('height', String(listHeight));
 			if (this.ganttSvg) {
 				this.ganttSvg.setAttribute('height', String(listHeight));
@@ -1484,7 +1711,7 @@ export class SvgGanttRenderer {
 			this.minDate = minDate;
 			this.totalUnits = totalUnits;
 			const ganttWidth = totalUnits * this.columnWidth + this.padding * 2;
-			const ganttHeight = this.headerHeight + this.tasks.length * this.rowHeight;
+			const ganttHeight = this.headerHeight + this.rowsTotalHeight;
 
 			this.ganttSvg.setAttribute('width', String(ganttWidth));
 			this.ganttSvg.setAttribute('height', String(ganttHeight));
@@ -1528,7 +1755,8 @@ export class SvgGanttRenderer {
 
 		// 计算位置（与网格垂直线使用相同的计算方式）
 		const x = this.getGridUnitX(startUnitIndex);
-		const y = rowIndex * this.rowHeight + (this.rowHeight - 24) / 2;
+		const y = this.rowBarY(rowIndex);
+		const barH = this.rowBarHeight(rowIndex);
 		const duration = endUnitIndex - startUnitIndex;
 		const barWidth = Math.max(duration * this.columnWidth, 20);  // 不减 8，确保右端对齐网格线
 
@@ -1588,7 +1816,7 @@ export class SvgGanttRenderer {
 		);
 		if (leftVisual) {
 			leftVisual.setAttribute('x', String(x + 2));
-			leftVisual.setAttribute('y', String(y + 8));
+			leftVisual.setAttribute('y', String(y + (barH - 8) / 2));
 		}
 
 		// 右侧手柄
@@ -1606,7 +1834,7 @@ export class SvgGanttRenderer {
 		);
 		if (rightVisual) {
 			rightVisual.setAttribute('x', String(rightHandleX + HANDLE_HIT_AREA - 2 - HANDLE_VISUAL_SIZE));
-			rightVisual.setAttribute('y', String(y + 8));
+			rightVisual.setAttribute('y', String(y + (barH - 8) / 2));
 		}
 	}
 
@@ -1653,7 +1881,7 @@ export class SvgGanttRenderer {
 		let target = leadBar;
 		if (!target) {
 			target = createSvg('rect');
-			target.setAttribute('height', '24');
+			target.setAttribute('height', barGroup.querySelector('.task-bar')?.getAttribute('height') ?? String(BAR_HEIGHT));
 			target.setAttribute('rx', '4');
 			target.classList.add(GanttClasses.elements.leadBar);
 			// 引导条必须位于主条/进度条之下（DOM 顺序即层级）
@@ -1740,6 +1968,10 @@ export class SvgGanttRenderer {
 	 */
 	destroy(): void {
 		this.hidePopup();
+		if (this.clickTimer !== null) {
+			window.clearTimeout(this.clickTimer);
+			this.clickTimer = null;
+		}
 
 		// Detach document-level listeners: destroying the view during an active
 		// drag/resize would otherwise keep this renderer alive forever.

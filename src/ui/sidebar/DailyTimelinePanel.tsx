@@ -17,6 +17,7 @@ import { useCalendarStore } from '../store/calendarStore';
 import { useDropTarget } from '../utils/useDragAndDrop';
 import { Icon } from '../components/Icon';
 import { TaskCard } from '../components/TaskCard';
+import { useViewTasks } from '../utils/useViewTasks';
 
 /** dataTransfer.taskId（filePath:lineNumber）→ 任务查找 */
 function findTaskById(tasks: GCTask[], taskId: string): GCTask | null {
@@ -48,7 +49,6 @@ function shiftDay(date: Date, delta: number): Date {
 export function DailyTimelinePanel(): JSX.Element {
 	const plugin = usePlugin();
 	const app = useApp();
-	const tasks = useCalendarStore((s) => s.tasks);
 	const refreshTasks = useCalendarStore((s) => s.refreshTasks);
 
 	/** 手动选定的日期；null = 跟随"今天"（默认态，时钟跨天后自动前进） */
@@ -81,6 +81,7 @@ export function DailyTimelinePanel(): JSX.Element {
 	const dateField: DateFieldType = 'dueDate';
 	const startField = plugin.settings.ganttStartField || 'startDate';
 	const endField = plugin.settings.ganttEndField || 'dueDate';
+	const tasks = useViewTasks(startField, endField, dateField);
 	const enabledFormats = plugin.settings.enabledTaskFormats || [];
 
 	const candidates = useMemo(() => tasks.filter((t) => !t.cancelled), [tasks]);

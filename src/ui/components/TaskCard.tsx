@@ -1,4 +1,4 @@
-import { memo, useMemo, type CSSProperties, type JSX } from 'react';
+import { memo, useEffect, useMemo, useRef, type CSSProperties, type JSX } from 'react';
 import type { GCTask } from '../../types';
 import type { TaskCardConfig } from '../../components/TaskCard/TaskCardConfig';
 import { TaskCardClasses, TimeBadgeClasses } from '../../utils/bem';
@@ -27,6 +27,11 @@ import { setTaskStatus } from '../../contextMenu/commands/setTaskStatus';
 import { setTaskPriority } from '../../contextMenu/commands/setPriority';
 import { i18n } from '../../i18n/i18n';
 import { Logger } from '../../utils/logger';
+import { unwrapTask } from '../../tasks/scheduledFallback';
+import { taskDisplayText } from '../../utils/linkText';
+
+/** 单击延迟判定窗口：双击有动作时，单击需等待确认不是双击的前半段 */
+const DOUBLE_CLICK_WINDOW_MS = 250;
 
 export interface ReactTaskCardProps {
 	task: GCTask;
@@ -114,14 +119,17 @@ export const TaskCard = memo(function TaskCard({ task, config, targetDate, onCli
 		return (
 			<div className={textCls.join(' ')} style={style}>
 				{plugin.settings.showGlobalFilterInTaskText && gf ? `${gf} ` : ''}
-				<DescriptionWithLinks text={task.description} app={app} />
+				<DescriptionWithLinks text={taskDisplayText(task.description)} app={app} sourcePath={task.filePath} />
 			</div>
 		);
-	}, [config.showDescription, config.maxLines, plugin.settings, task.description, app]);
+	}, [config.showDescription, config.maxLines, plugin.settings, task.description, task.filePath, app]);
 
 	// ===== 右键菜单（声明式 sections，复用 contextMenu 命令模块） =====
+	const viewTask = task;
 	const menuSections = useMemo<ContextMenuSection[]>(() => {
 		if (virtual) return [];
+		// 右键命令以真实任务字段为准（计划日期回退代理不参与，如"设置截止日期"应真正写 📅）
+		const task = unwrapTask(viewTask);
 		const enabledFormats = plugin.settings.enabledTaskFormats || ['tasks'];
 		const taskNotePath = plugin.settings.taskNotePath || 'Tasks';
 		const refresh = onRefresh || (() => {});
@@ -249,7 +257,7 @@ export const TaskCard = memo(function TaskCard({ task, config, targetDate, onCli
 				],
 			},
 		];
-	}, [task, app, plugin.settings.enabledTaskFormats, plugin.settings.taskNotePath, virtual, onRefresh]);
+	}, [viewTask, app, plugin.settings.enabledTaskFormats, plugin.settings.taskNotePath, virtual, onRefresh]);
 
 	// ===== 拖拽（useDragSource 封装） =====
 	const dragProps = useDragSource({
@@ -261,6 +269,13 @@ export const TaskCard = memo(function TaskCard({ task, config, targetDate, onCli
 	// ===== 交互事件 =====
 	// 点击行为由设置决定（跳转源文件 / 编辑面板）；重复任务虚拟实例一律跳回源任务，
 	// 因为编辑面板需要真实行号定位
+	const openEdit = () => {
+		openEditTaskModal(app, task, plugin.settings.enabledTaskFormats || ['tasks'], onRefresh || (() => {}), true);
+	};
+	const openSource = () => {
+		void openFileInExistingLeaf(app, task.filePath, task.lineNumber);
+	};
+
 	const handleClick = () => {
 		if (virtual) {
 			void (async () => {
@@ -276,7 +291,7 @@ export const TaskCard = memo(function TaskCard({ task, config, targetDate, onCli
 		if (!config.clickable) return;
 		if (plugin.settings.taskCardClickAction === 'editModal') {
 			// 与右键菜单「编辑任务」同一入口，保证编辑态一致
-			openEditTaskModal(app, task, plugin.settings.enabledTaskFormats || ['tasks'], onRefresh || (() => {}), true);
+			openEdit();
 			onClick?.(task);
 			return;
 		}
@@ -284,6 +299,36 @@ export const TaskCard = memo(function TaskCard({ task, config, targetDate, onCli
 			await openFileInExistingLeaf(app, task.filePath, task.lineNumber);
 			onClick?.(task);
 		})();
+	};
+
+	// 双击行为（默认弹出编辑面板）；有双击动作时单击延迟到双击窗口之后，避免单击先跳走
+	const doubleClickAction = plugin.settings.taskCardDoubleClickAction ?? 'editModal';
+	const dblEnabled = !virtual && !!config.clickable && doubleClickAction !== 'none';
+	const clickTimerRef = useRef<number | null>(null);
+	useEffect(() => () => {
+		if (clickTimerRef.current !== null) window.clearTimeout(clickTimerRef.current);
+	}, []);
+	const handleSingleClick = () => {
+		if (!dblEnabled) {
+			handleClick();
+			return;
+		}
+		if (clickTimerRef.current !== null) return;
+		clickTimerRef.current = window.setTimeout(() => {
+			clickTimerRef.current = null;
+			handleClick();
+		}, DOUBLE_CLICK_WINDOW_MS);
+	};
+	const handleDoubleClick = () => {
+		if (!dblEnabled) return;
+		if (clickTimerRef.current !== null) {
+			window.clearTimeout(clickTimerRef.current);
+			clickTimerRef.current = null;
+		}
+		tooltip.hide();
+		if (doubleClickAction === 'editModal') openEdit();
+		else openSource();
+		onClick?.(task);
 	};
 
 	const handleCheckboxChange = (checked: boolean) => {
@@ -327,15 +372,17 @@ export const TaskCard = memo(function TaskCard({ task, config, targetDate, onCli
 		if (!tc.showCreated && !tc.showStart && !tc.showScheduled && !tc.showDue && !tc.showCancelled && !tc.showCompletion) {
 			return null;
 		}
-		const dp = task.datePrecision || {};
-		const isOverdue = !!tc.showOverdueIndicator && !!task.dueDate && task.dueDate < new Date() && !task.completed;
+		// 时间徽章显示任务行里的真实字段（计划日期回退代理的映射字段不显示）
+		const src = unwrapTask(task);
+		const dp = src.datePrecision || {};
+		const isOverdue = !!tc.showOverdueIndicator && !!src.dueDate && src.dueDate < new Date() && !src.completed;
 		const badges: Array<{ key: keyof typeof dp; label: string; date?: Date; cls: string; overdue?: boolean; show: boolean }> = [
-			{ key: 'createdDate', label: i18n.t('taskCard.created'), date: task.createdDate, cls: TimeBadgeClasses.created, show: !!tc.showCreated },
-			{ key: 'startDate', label: i18n.t('taskCard.start'), date: task.startDate, cls: TimeBadgeClasses.start, show: !!tc.showStart },
-			{ key: 'scheduledDate', label: i18n.t('taskCard.scheduled'), date: task.scheduledDate, cls: TimeBadgeClasses.scheduled, show: !!tc.showScheduled },
-			{ key: 'dueDate', label: i18n.t('taskCard.due'), date: task.dueDate, cls: TimeBadgeClasses.due, overdue: isOverdue, show: !!tc.showDue },
-			{ key: 'cancelledDate', label: i18n.t('taskCard.cancelled'), date: task.cancelledDate, cls: TimeBadgeClasses.cancelled, show: !!tc.showCancelled },
-			{ key: 'completionDate', label: i18n.t('taskCard.done'), date: task.completionDate, cls: TimeBadgeClasses.completion, show: !!tc.showCompletion },
+			{ key: 'createdDate', label: i18n.t('taskCard.created'), date: src.createdDate, cls: TimeBadgeClasses.created, show: !!tc.showCreated },
+			{ key: 'startDate', label: i18n.t('taskCard.start'), date: src.startDate, cls: TimeBadgeClasses.start, show: !!tc.showStart },
+			{ key: 'scheduledDate', label: i18n.t('taskCard.scheduled'), date: src.scheduledDate, cls: TimeBadgeClasses.scheduled, show: !!tc.showScheduled },
+			{ key: 'dueDate', label: i18n.t('taskCard.due'), date: src.dueDate, cls: TimeBadgeClasses.due, overdue: isOverdue, show: !!tc.showDue },
+			{ key: 'cancelledDate', label: i18n.t('taskCard.cancelled'), date: src.cancelledDate, cls: TimeBadgeClasses.cancelled, show: !!tc.showCancelled },
+			{ key: 'completionDate', label: i18n.t('taskCard.done'), date: src.completionDate, cls: TimeBadgeClasses.completion, show: !!tc.showCompletion },
 		];
 		return (
 			<div className={TaskCardClasses.elements.times}>
@@ -390,7 +437,12 @@ export const TaskCard = memo(function TaskCard({ task, config, targetDate, onCli
 				if ((e.target as HTMLElement).tagName === 'INPUT' && (e.target as HTMLInputElement).type === 'checkbox') {
 					return;
 				}
-				handleClick();
+				handleSingleClick();
+			}}
+			onDoubleClick={(e) => {
+				if ((e.target as HTMLElement).tagName === 'INPUT') return;
+				e.stopPropagation();
+				handleDoubleClick();
 			}}
 			onDragStart={dragProps.onDragStart}
 			onDragEnd={dragProps.onDragEnd}

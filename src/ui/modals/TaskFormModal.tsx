@@ -1,4 +1,5 @@
 import { useCallback,  useEffect, useMemo, useRef, useState, type JSX  } from 'react';
+import { unwrapTask } from '../../tasks/scheduledFallback';
 import { Notice } from 'obsidian';
 import type { App } from 'obsidian';
 import type { GCTask, IPluginContext } from '../../types';
@@ -506,7 +507,7 @@ export function openEditTaskModal(
 		<TaskFormModal
 			mode="edit"
 			app={app}
-			task={task}
+			task={unwrapTask(task)}
 			enabledFormats={enabledFormats}
 			allowEditContent={allowEditContent}
 			onSuccess={onSuccess}

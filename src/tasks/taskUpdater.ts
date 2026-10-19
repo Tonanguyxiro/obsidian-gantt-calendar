@@ -2,6 +2,7 @@ import { App, TFile } from 'obsidian';
 import { GCTask } from '../types';
 import { serializeTask, TaskUpdates } from './taskSerializer';
 import { parseSingleTaskLine } from './taskParser/main';
+import { resolveScheduledProxyUpdates } from './scheduledFallback';
 import { Logger } from '../utils/logger';
 
 // ==================== 文件级写锁 ====================
@@ -222,10 +223,15 @@ export async function updateTaskDateField(
  */
 export async function updateTaskProperties(
 	app: App,
-	task: GCTask,
-	updates: TaskUpdates,
+	proxiedTask: GCTask,
+	proxiedUpdates: TaskUpdates,
 	enabledFormats: string[]
 ): Promise<void> {
+	if (proxiedTask.fileTask) {
+		throw new Error(`File-based task cannot be updated as a task line: ${proxiedTask.filePath}`);
+	}
+	// 计划日期回退代理：视图字段上的修改还原为对 ⏳ 计划日期 + 时间前缀的修改
+	const { task, updates } = resolveScheduledProxyUpdates(proxiedTask, proxiedUpdates);
 	// 同文件更新串行化，消除读-改-写竞态（P0）
 	await withFileLock(task.filePath, async () => {
 		const startTime = performance.now();

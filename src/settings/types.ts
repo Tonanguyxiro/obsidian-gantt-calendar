@@ -44,7 +44,6 @@ export interface GanttCalendarSettings {
 	dailyNotePath: string; // Daily note 文件夹路径
 	dailyNoteNameFormat: string; // Daily note 文件名格式 (如 yyyy-MM-dd)
 	dailyNoteSource: DailyNoteSource; // Daily Note 设置来源：手动 / Obsidian 核心日记(Periodic Notes) / Notebook Navigator
-	monthViewTaskLimit: number; // 月视图每天显示的最大任务数量
 	yearShowTaskCount: boolean; // 年视图是否显示每日任务数量
 	yearHeatmapEnabled: boolean; // 年视图是否启用任务热力图
 	yearHeatmapPalette: 'blue' | 'green' | 'red' | 'purple' | 'orange' | 'cyan' | 'pink' | 'yellow'; // 热力图色卡选择

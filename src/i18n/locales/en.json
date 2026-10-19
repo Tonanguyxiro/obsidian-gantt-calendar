@@ -394,10 +394,6 @@
     },
     "monthView": {
       "groupTitle": "Month View",
-      "taskLimit": {
-        "name": "Tasks Per Day",
-        "description": "Maximum tasks shown per date cell in month view; also caps cross-day span bar rows per week (1-10)"
-      },
       "lunarFontSize": {
         "name": "Month Lunar Font Size",
         "description": "Set the size of lunar calendar text in month view (8-18px)"

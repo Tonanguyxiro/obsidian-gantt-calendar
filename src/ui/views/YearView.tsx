@@ -1,4 +1,4 @@
-import { useMemo, type JSX } from 'react';
+import { useEffect, useMemo, useRef, type JSX } from 'react';
 import type { CSSProperties } from 'react';
 import { generateMonthCalendar } from '../../calendar/calendarGenerator';
 import { getTaskDateField } from '../../types';
@@ -8,6 +8,7 @@ import { useCalendarStore, selectViewFilter } from '../store/calendarStore';
 import { applyTagFilter } from '../utils/taskFilters';
 import { generateVirtualInstances } from '../../tasks/virtualTaskGenerator';
 import { i18n } from '../../i18n/i18n';
+import { useViewTasks } from '../utils/useViewTasks';
 
 /**
  * React 年视图（热力图）
@@ -15,7 +16,6 @@ import { i18n } from '../../i18n/i18n';
 export function YearView(): JSX.Element {
 	const plugin = usePlugin();
 	const currentDate = useCalendarStore((s) => s.currentDate);
-	const tasks = useCalendarStore((s) => s.tasks);
 	const filter = useCalendarStore((s) => selectViewFilter(s, 'year'));
 	const setCurrentDate = useCalendarStore((s) => s.setCurrentDate);
 	const setViewType = useCalendarStore((s) => s.setViewType);
@@ -23,6 +23,7 @@ export function YearView(): JSX.Element {
 	const year = currentDate.getFullYear();
 	const startOnMonday = !!plugin.settings.startOnMonday;
 	const dateField = plugin.settings.dateFilterField || 'dueDate';
+	const tasks = useViewTasks(plugin.settings.ganttStartField || 'startDate', plugin.settings.ganttEndField || 'dueDate', dateField);
 	const showLunar = plugin.settings.showLunar;
 	const showCount = plugin.settings.yearShowTaskCount;
 
@@ -74,12 +75,26 @@ export function YearView(): JSX.Element {
 
 	const modClass = (count: number) => modCountClass(count, months.palette);
 
+	// 打开年视图 / 切换年份时自动滚动到当前月（currentDate 所在月，默认即本月）
+	const viewRef = useRef<HTMLDivElement | null>(null);
+	const focusMonth = currentDate.getMonth() + 1;
+	useEffect(() => {
+		const frame = window.requestAnimationFrame(() => {
+			viewRef.current
+				?.querySelector(`[data-month="${focusMonth}"]`)
+				?.scrollIntoView?.({ block: 'center', inline: 'nearest' });
+		});
+		return () => window.cancelAnimationFrame(frame);
+		// 只在进入视图与切年时定位（focusMonth 不入依赖），任务刷新不打断用户滚动
+	}, [year]);
+
 	return (
-		<div className="gc-view gc-view--year">
+		<div ref={viewRef} className="gc-view gc-view--year">
 			<div className={YearViewClasses.elements.months}>
 				{months.monthCards.map((mc) => (
 					<div
 						key={mc.m}
+						data-month={mc.m}
 						className={`${YearViewClasses.elements.monthCard}${showLunar ? ` ${YearViewClasses.modifiers.monthCardShowLunar}` : ''}`}
 					>
 						<div className={YearViewClasses.elements.monthHeader}>

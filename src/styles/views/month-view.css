@@ -52,8 +52,7 @@
 
 /* 日期格 — 圆角卡片 */
 /* 日格：细线网格风格——无圆角/无卡片边框/无阴影，用 border-right+bottom 拼合。
-   无 min-height：行高由网格严格均分（minmax(0,1fr)），内容超出靠 overflow:hidden 裁切；
-   固定最小高度会让格子溢出行而不是抬高行 */
+   行高自适应（base.css 中 auto 行轨道）：内容多的周行随内容增高，不再裁切 */
 .gc-month-view__day-cell {
 	display: flex;
 	flex-direction: column;
@@ -66,7 +65,9 @@
 	border-bottom: 1px solid var(--gc-border-hairline);
 	cursor: pointer;
 	transition: background-color var(--gc-dur-fast) var(--gc-ease-out);
-	overflow: hidden;
+	/* clip 而非 hidden：hidden 会使格子成为滚动容器、最小高度归零，行无法随内容增高 */
+	overflow-x: clip;
+	overflow-y: visible;
 }
 
 .gc-month-view__day-cell:hover {
@@ -152,44 +153,6 @@
 	font-weight: 500;
 }
 
-/* 任务列表 */
-.gc-month-view__tasks {
-	display: flex;
-	flex-direction: column;
-	gap: 3px;
-	width: 100%;
-	margin-top: 2px;
-	flex: 1;
-	overflow: hidden;
-}
-
-/* 格内任务药丸：timeline 变体在月视图的适配——去边框去色条，灰底精简（与横跨条一致） */
-.gc-month-view__tasks .gc-task-card--timeline {
-	min-height: 18px;
-	font-size: 11px;
-	border: none;
-	border-radius: 0;
-	background-color: var(--background-primary-alt);
-}
-
-/* "更多"提示 chip */
-.gc-month-view__task-more {
-	font-size: var(--gc-font-xxs);
-	color: var(--text-faint);
-	padding: 1px 8px;
-	align-self: flex-start;
-	border-radius: var(--gc-radius-full);
-	transition:
-		color var(--gc-dur-fast) var(--gc-ease-out),
-		background-color var(--gc-dur-fast) var(--gc-ease-out);
-}
-
-.gc-month-view__task-more:hover {
-	color: var(--text-muted);
-	background-color: var(--background-modifier-hover);
-}
-
-
 /* 手机/窄窗口（宽度断点）：行改内容尺寸可滚动，格子保留最小高度触发滚动 */
 @media (max-width: 520px) {
 	.gc-month-view__day-cell {
@@ -197,48 +160,30 @@
 	}
 }
 
-/* 手机（仅设备信号 body.gc-is-phone，桌面窄窗口不降级信息）：格内任务降级为状态色点。
-   修复：格内任务现渲染为 TaskCard（gc-month-view__task-item 已不在 DOM），
-   以 .gc-month-view__tasks 容器作用域，避免波及跨日横跨条（其自身另有 520px 色带降级）；
-   色点颜色取 TaskCard 内联的 --task-bg-color（状态色） */
-body.gc-is-phone .gc-month-view__tasks .gc-task-card {
-	height: 5px;
-	min-height: 5px;
-	padding: 0;
-	margin: 1px 0 2px;
-	border: none;
-	border-radius: 2px;
-	box-shadow: none;
-	background-color: var(--task-bg-color, var(--interactive-accent));
-	overflow: hidden;
-	font-size: 0;
-}
-
-body.gc-is-phone .gc-month-view__tasks .gc-task-card > * {
-	display: none;
-}
-
-body.gc-is-phone .gc-month-view__task-more {
-	font-size: 9px;
+/* 手机：lane 压缩为色带（条目文字隐藏，见下方横跨条 520px 规则） */
+body.gc-is-phone .gc-view--month {
+	--gc-month-lane-h: 7px;
 }
 
 /* ============================================
-   跨日横跨条带（buildMonthTimelineModel 跨日区间任务）
-   每周行一条 overlay 带，格内任务经 padding-top 让位
+   周行 lane 条带（layoutMonthWeekLanes）：横跨条与单日任务混排，
+   单日任务填补横跨条留下的空位；条带高度 = lane 数 × --gc-month-lane-h，参与行高自适应
    ============================================ */
+.gc-view--month {
+	--gc-month-lane-h: 22px;
+}
+
 .gc-month-view__span-strip {
 	position: relative;
 	z-index: 1;
 	pointer-events: none;
 	margin: 0 1px;
-	/* 行数超上限的极端配置下，条带随 max-height 钳制裁切，不溢出到下一周 */
-	overflow: hidden;
 }
 
-/* 横跨条：容器透明无装饰（与周视图统一），视觉完全靠内部 TaskCard */
+/* 横跨条 / 单日任务条目：容器透明无装饰（与周视图统一），视觉完全靠内部卡片 */
 .gc-month-view__span-bar {
 	position: absolute;
-	height: 18px;
+	height: calc(var(--gc-month-lane-h) - 2px);
 	min-width: 0;
 	overflow: hidden;
 	pointer-events: auto;
@@ -261,10 +206,6 @@ body.gc-is-phone .gc-month-view__task-more {
 	border-bottom-right-radius: 0;
 }
 
-.gc-month-view__span-bar--stacked {
-	box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
-}
-
 .gc-month-view__span-bar-time {
 	position: absolute;
 	top: 1px;
@@ -281,10 +222,13 @@ body.gc-is-phone .gc-month-view__task-more {
 	white-space: nowrap;
 }
 
-/* 手机端：横跨条瘦身为色带（无文字），与格内色点风格一致 */
+/* 手机/窄窗口：lane 压缩，条目瘦身为色带（无文字） */
 @media (max-width: 520px) {
+	.gc-view--month {
+		--gc-month-lane-h: 7px;
+	}
+
 	.gc-month-view__span-bar {
-		height: 5px;
 		min-height: 5px;
 		border-left-width: 0;
 		background-color: var(--task-bg-color, var(--interactive-accent));

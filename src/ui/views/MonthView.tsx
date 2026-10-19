@@ -10,21 +10,21 @@ import { MonthViewClasses, setCssProps } from '../../utils/bem';
 import { usePlugin, useApp } from '../pluginContext';
 import { useCalendarStore, selectViewFilter } from '../store/calendarStore';
 import { applyStatusFilter, applyTagFilter, applySort } from '../utils/taskFilters';
-import { TaskCard } from '../components/TaskCard';
 import { updateTaskProperties } from '../../tasks/taskUpdater';
 import { toISOStringLocal } from '../../dateUtils/timezone';
 import { createMonthWheelStep, shiftMonth, getMonthKey, monthTravelDir } from '../utils/monthWheel';
 import { MOTION, easeOutTransition } from '../motion';
 import { generateVirtualInstances } from '../../tasks/virtualTaskGenerator';
-import { buildMonthTimelineModel, getTaskInterval, clampSingleFieldWrite } from './week/timelineModel';
+import { buildMonthTimelineModel, layoutMonthWeekLanes, getTaskInterval, clampSingleFieldWrite } from './week/timelineModel';
 import { sortTasks } from '../../tasks/taskSorter';
 import { i18n } from '../../i18n/i18n';
 import { Logger } from '../../utils/logger';
 import type { DateFieldType } from '../../settings/types';
+import { useViewTasks } from '../utils/useViewTasks';
+import { useFileTaskLayer } from '../utils/useFileTaskLayer';
+import { CalendarItemCard, FileTaskLayerProvider } from '../components/FileTaskCard';
 
-/** 横跨条单行高度（条 18px + 间距 2px） */
-const SPAN_ROW_PX = 20;
-/** 横跨条带与格内内容之间的间隙 */
+/** lane 条带与格底之间的间隙 */
 const SPAN_STRIP_GAP_PX = 4;
 /**
  * 横跨条带顶部让位：日期头部高度（格 padding-top 8px + 日号 22px + gap 2px）。
@@ -41,15 +41,14 @@ function findTaskById(tasks: GCTask[], taskId: string): GCTask | null {
 
 /**
  * React 月视图（时间线语义版）
- * 7 列 × N 周网格；跨日区间任务渲染为每周行顶部的横跨条（周内钳制 + 延续箭头 + 时刻标注，
- * 行数受 taskLimit 上限防撑高格子），单日/定时任务在锚日格内显示卡片（同受 taskLimit）；
- * 拖放语义与周/日/侧栏画布对齐。
+ * 7 列 × N 周网格；每周行内横跨条（周内钳制 + 延续箭头 + 时刻标注）与单日/定时任务
+ * 排进同一套 lane 混排（layoutMonthWeekLanes），单日任务填补横跨条留下的空位，
+ * 全部显示、行高随 lane 数自适应；拖放语义与周/日/侧栏画布对齐。
  */
 export function MonthView(): JSX.Element {
 	const plugin = usePlugin();
 	const app = useApp();
 	const currentDate = useCalendarStore((s) => s.currentDate);
-	const tasks = useCalendarStore((s) => s.tasks);
 	const filter = useCalendarStore((s) => selectViewFilter(s, 'month'));
 	const setCurrentDate = useCalendarStore((s) => s.setCurrentDate);
 	const setViewType = useCalendarStore((s) => s.setViewType);
@@ -88,9 +87,8 @@ export function MonthView(): JSX.Element {
 	const dateField = plugin.settings.dateFilterField || 'dueDate';
 	const startField = plugin.settings.ganttStartField || 'startDate';
 	const endField = plugin.settings.ganttEndField || 'dueDate';
+	const tasks = useViewTasks(startField, endField, dateField);
 	const enabledFormats = plugin.settings.enabledTaskFormats || [];
-	// 任务数量上限：同时约束格内卡片数与每周横跨条行数（月视图无滚动，防撑高格子）
-	const taskLimit = plugin.settings.monthViewTaskLimit || 5;
 
 	// 月视图统一使用 timeline 变体：格内卡片与横跨条同一视觉语言
 	const config = useMemo(() => ({
@@ -128,12 +126,15 @@ export function MonthView(): JSX.Element {
 		);
 	}, [scoped, monthData, dateField, plugin.settings.recurringTaskDisplayLimit]);
 
-	// 月视图时间线模型：跨日横跨条 + 格内任务（锚日语义）；横跨条行数受 taskLimit 上限
+	// file-based task 图层：文件横跨条；归类时文件内任务全部收进悬浮卡片（月视图无时间轴）
+	const fileLayer = useFileTaskLayer('month', scoped, startField, endField, dateField);
+
+	// 月视图时间线模型：跨日横跨条 + 格内任务（锚日语义），渲染时再混排进统一 lane
 	const monthModel = useMemo(() => {
 		if (!monthData) return [];
-		const combined = sortTasks([...scoped, ...virtualInstances], filter.sort).filter((t) => !t.cancelled);
-		return buildMonthTimelineModel(combined, monthData.weeks, startField, endField, dateField, taskLimit);
-	}, [scoped, virtualInstances, monthData, filter.sort, startField, endField, dateField, taskLimit]);
+		const combined = fileLayer.merge(sortTasks([...scoped, ...virtualInstances], filter.sort).filter((t) => !t.cancelled));
+		return buildMonthTimelineModel(combined, monthData.weeks, startField, endField, dateField);
+	}, [scoped, virtualInstances, fileLayer, monthData, filter.sort, startField, endField, dateField]);
 
 	// 任务全集（拖放源查找）
 	const dragLookupTasks = useMemo(() => tasks.filter((t) => !t.cancelled), [tasks]);
@@ -206,6 +207,7 @@ export function MonthView(): JSX.Element {
 	const monthFontSize = plugin.settings.monthLunarFontSize || 10;
 
 	return (
+		<FileTaskLayerProvider value={{ tasksByFile: fileLayer.tasksByFile, onRefresh: handleCardRefresh }}>
 		<div className="gc-month-anim">
 			<AnimatePresence initial={false} custom={slideDir} mode="popLayout">
 				<motion.div
@@ -229,8 +231,15 @@ export function MonthView(): JSX.Element {
 			{monthData.weeks.map((week, weekIndex) => {
 				const weekRow = weekIndex + 2;
 				const weekModel = monthModel[weekIndex];
-				// 横跨条带高度（含空行 0），格内内容以 padding-top 让位
-				const stripH = (weekModel?.spanLaneCount ?? 0) * SPAN_ROW_PX + SPAN_STRIP_GAP_PX;
+				const dayKeys = week.days.map((d) => toISOStringLocal(d.date));
+				// 横跨条与单日任务混排进统一 lane；条带高度按 lane 数（CSS 变量 --gc-month-lane-h 控制行高，手机端压缩为色带）
+				const lanes = weekModel ? layoutMonthWeekLanes(weekModel, dayKeys) : { items: [], laneCount: 0 };
+				const stripHeight = `calc(var(--gc-month-lane-h) * ${lanes.laneCount} + ${SPAN_STRIP_GAP_PX}px)`;
+				/** 条带上的拖放：按落点 x 换算到列，转交日格的拖放语义 */
+				const colAt = (e: ReactDragEvent<HTMLDivElement>): number => {
+					const rect = e.currentTarget.getBoundingClientRect();
+					return Math.min(6, Math.max(0, Math.floor(((e.clientX - rect.left) / rect.width) * 7)));
+				};
 				return (
 					<Fragment key={week.weekNumber}>
 						<div
@@ -239,32 +248,35 @@ export function MonthView(): JSX.Element {
 						>
 							<span>W{week.weekNumber}</span>
 						</div>
-						{/* 横跨条带 overlay：与 7 个日格同行同区域，从日期头部下方开始，pointer-events 穿透到格。
-						    max-height 钳到周行内：行高固定（minmax(0,1fr)）时极端配置下裁切而非溢出到下一周 */}
+						{/* lane 条带 overlay：与 7 个日格同行同区域，从日期头部下方开始；
+						    空白处 pointer-events 穿透到日格，条目自身可交互；条带高度参与行高自适应 */}
 						<div
 							className={MonthViewClasses.elements.spanStrip}
-							style={{ gridRow: `${weekRow}`, gridColumn: '2 / -1', marginTop: `${SPAN_HEADER_OFFSET_PX}px`, height: `${stripH}px`, maxHeight: `calc(100% - ${SPAN_HEADER_OFFSET_PX}px)` }}
+							style={{ gridRow: `${weekRow}`, gridColumn: '2 / -1', marginTop: `${SPAN_HEADER_OFFSET_PX}px`, height: stripHeight }}
+							onDragOver={(e) => {
+								e.preventDefault();
+								e.dataTransfer.dropEffect = 'move';
+							}}
+							onDrop={(e) => void handleDayDrop(e, week.days[colAt(e)].date)}
 						>
-							{(weekModel?.spanBars ?? []).map((bar) => (
+							{lanes.items.map((item) => (
 								<div
-									key={`span-${taskKey(bar.task)}`}
-									className={`${MonthViewClasses.elements.spanBar}${bar.continuesBefore ? ` ${MonthViewClasses.modifiers.spanBarContinuesBefore}` : ''}${bar.continuesAfter ? ` ${MonthViewClasses.modifiers.spanBarContinuesAfter}` : ''}${bar.stackedIndex > 0 ? ` ${MonthViewClasses.modifiers.spanBarStacked}` : ''}`}
-										style={{
-											left: `calc(${(bar.startCol / 7) * 100}% + 1px)`,
-											width: `calc(${((bar.endCol - bar.startCol + 1) / 7) * 100}% - 2px)`,
-											// 超出行数上限叠加到最后一行：+3px 下沉偏移 + 阴影提示（与周视图全天条同视觉）
-											top: `${bar.lane * SPAN_ROW_PX + (bar.stackedIndex > 0 ? 3 : 0)}px`,
-											zIndex: bar.stackedIndex > 0 ? 3 : 1,
-										}}
+									key={`lane-${taskKey(item.task)}`}
+									className={`${MonthViewClasses.elements.spanBar}${item.isSpan ? '' : ` ${MonthViewClasses.modifiers.spanBarDay}`}${item.continuesBefore ? ` ${MonthViewClasses.modifiers.spanBarContinuesBefore}` : ''}${item.continuesAfter ? ` ${MonthViewClasses.modifiers.spanBarContinuesAfter}` : ''}`}
+									style={{
+										left: `calc(${(item.startCol / 7) * 100}% + 1px)`,
+										width: `calc(${((item.endCol - item.startCol + 1) / 7) * 100}% - 2px)`,
+										top: `calc(var(--gc-month-lane-h) * ${item.lane})`,
+									}}
 								>
-									<TaskCard
-										task={bar.task}
+									<CalendarItemCard
+										task={item.task}
 										config={config}
-										targetDate={week.days[bar.startCol]?.date}
+										targetDate={week.days[item.startCol]?.date}
 										onRefresh={handleCardRefresh}
 									/>
-									{bar.timeLabel ? (
-										<span className={MonthViewClasses.elements.spanBarTime}>{bar.timeLabel}</span>
+									{item.timeLabel ? (
+										<span className={MonthViewClasses.elements.spanBarTime}>{item.timeLabel}</span>
 									) : null}
 								</div>
 							))}
@@ -275,10 +287,7 @@ export function MonthView(): JSX.Element {
 								!day.isCurrentMonth ? MonthViewClasses.modifiers.outsideMonth : '',
 								day.isToday ? MonthViewClasses.modifiers.today : '',
 							].filter(Boolean).join(' ');
-							const key = toISOStringLocal(day.date);
-							const dayTasks = weekModel?.cells.get(key) || [];
-							const displayTasks = dayTasks.slice(0, taskLimit);
-							const hasMore = dayTasks.length > taskLimit;
+							const key = dayKeys[dayIndex];
 
 							const lunarEl = day.lunarText && plugin.settings.showLunar
 								? (
@@ -324,22 +333,6 @@ export function MonthView(): JSX.Element {
 										<div className={MonthViewClasses.elements.dayNumber}>{day.day.toString()}</div>
 										{lunarEl}
 									</div>
-									<div className={MonthViewClasses.elements.tasks} style={{ paddingTop: `${stripH}px` }}>
-										{displayTasks.map((t) => (
-											<TaskCard
-												key={taskKey(t)}
-												task={t}
-												config={config}
-												targetDate={day.date}
-												onRefresh={handleCardRefresh}
-											/>
-										))}
-										{hasMore ? (
-											<div className={MonthViewClasses.elements.taskMore}>
-												{i18n.t('common.more', { count: dayTasks.length - taskLimit })}
-											</div>
-										) : null}
-									</div>
 								</div>
 							);
 						})}
@@ -349,6 +342,7 @@ export function MonthView(): JSX.Element {
 				</motion.div>
 			</AnimatePresence>
 		</div>
+		</FileTaskLayerProvider>
 	);
 }
 

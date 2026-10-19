@@ -34,6 +34,7 @@ import {
 } from './timelineModel';
 import { useBlockResize, isBlockResizing, setBlockDragMeta, getBlockDragMeta, clearBlockDragMeta } from './useBlockResize';
 import { useCanvasTouchDrag } from './useCanvasTouchDrag';
+import { CalendarItemCard } from '../../components/FileTaskCard';
 
 /** 全天行单行高度（卡片 24px + 间距 4px，与 CSS 令牌对应） */
 const ALLDAY_ROW_PX = 28;
@@ -467,7 +468,7 @@ export function WeekTimelineGrid({
 								zIndex: bar.stackedIndex > 0 ? 3 : 1,
 							}}
 						>
-							<TaskCard
+							<CalendarItemCard
 								task={bar.task}
 								config={config}
 								targetDate={days[bar.startDayIndex]?.date}

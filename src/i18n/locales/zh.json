@@ -394,10 +394,6 @@
     },
     "monthView": {
       "groupTitle": "月视图",
-      "taskLimit": {
-        "name": "每天显示的任务数量",
-        "description": "设置月视图中每个日期格最多显示多少个任务，同时是跨天任务横跨条每周行数上限（1-10）"
-      },
       "lunarFontSize": {
         "name": "月视图农历字号",
         "description": "设置月视图中农历文字的大小（8-18px）"

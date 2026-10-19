@@ -17,21 +17,6 @@ export class MonthViewSettingsBuilder extends BaseBuilder {
 				group.addSetting(cb);
 			};
 
-			// 月视图每天显示的任务数量
-			addSetting(setting => {
-				setting.setName(i18n.t('settings.monthView.taskLimit.name'))
-					.setDesc(i18n.t('settings.monthView.taskLimit.description'))
-					.addSlider(slider => slider
-						.setLimits(1, 10, 1)
-						.setValue(this.plugin.settings.monthViewTaskLimit)
-						.onChange((value) => {
-							void (async () => {
-								this.plugin.settings.monthViewTaskLimit = value;
-								await this.saveAndRefreshViews();
-							})();
-						}));
-			});
-
 			// 月视图农历字号
 			addSetting(setting => {
 				setting.setName(i18n.t('settings.monthView.lunarFontSize.name'))

@@ -19,6 +19,7 @@ import {
 	buildWeekTimelineModel,
 	buildDayTimelineModel,
 	buildMonthTimelineModel,
+	layoutMonthWeekLanes,
 	HOUR_PX,
 	MINUTES_PER_DAY,
 	type TimeBlockSegment,
@@ -490,5 +491,41 @@ describe('buildMonthTimelineModel maxSpanLanes', () => {
 		// 上限 1：第一条占 lane 0，第二条叠加
 		expect(model[0].spanLaneCount).toBe(1);
 		expect(bars.filter((b) => b.stackedIndex > 0)).toHaveLength(1);
+	});
+});
+
+describe('layoutMonthWeekLanes 横跨条与单日任务混排', () => {
+	// 2026-10-19（周一）起的一周
+	const week = [{ days: Array.from({ length: 7 }, (_, i) => ({ date: DAY(9, 19 + i) })) }];
+	const keys = week[0].days.map((d) => `2026-10-${String(d.date.getDate()).padStart(2, '0')}`);
+	const span = (n: number, from: number, to: number): GCTask => mkTask({
+		lineNumber: n, content: `span${n}`,
+		startDate: DAY(9, 19 + from), dueDate: DAY(9, 19 + to),
+		datePrecision: { startDate: 'day', dueDate: 'day' },
+	});
+	const single = (n: number, day: number): GCTask => mkTask({
+		lineNumber: n, content: `day${n}`, dueDate: DAY(9, 19 + day), datePrecision: { dueDate: 'day' },
+	});
+
+	it('单日任务填补横跨条之上的空位，而不是整周统一排到条带下方', () => {
+		// Design 周一~周五（lane 0），Build 周四~周日（lane 1）；周六的任务应占 lane 0
+		const tasks = [span(1, 0, 4), span(2, 3, 6), single(3, 5), single(4, 0)];
+		const [model] = buildMonthTimelineModel(tasks, week, 'startDate', 'dueDate', 'dueDate');
+		const { items, laneCount } = layoutMonthWeekLanes(model, keys);
+		const laneOf = (n: number) => items.find((i) => i.task.lineNumber === n)!.lane;
+		expect(laneOf(1)).toBe(0);
+		expect(laneOf(2)).toBe(1);
+		expect(laneOf(3)).toBe(0); // 周六：Design 不覆盖，填到 lane 0
+		expect(laneOf(4)).toBe(1); // 周一：lane 0 被 Design 占用
+		expect(laneCount).toBe(2);
+	});
+
+	it('不设上限：同一天的任务全部排出（无 "+N more"）', () => {
+		const tasks = [1, 2, 3, 4, 5, 6, 7].map((n) => single(n, 2));
+		const [model] = buildMonthTimelineModel(tasks, week, 'startDate', 'dueDate', 'dueDate');
+		const { items, laneCount } = layoutMonthWeekLanes(model, keys);
+		expect(items).toHaveLength(7);
+		expect(items.map((i) => i.lane)).toEqual([0, 1, 2, 3, 4, 5, 6]);
+		expect(laneCount).toBe(7);
 	});
 });

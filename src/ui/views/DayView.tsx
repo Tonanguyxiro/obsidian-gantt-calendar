@@ -9,7 +9,8 @@ import { usePlugin, useApp } from '../pluginContext';
 import { useCalendarStore, selectViewFilter } from '../store/calendarStore';
 import { isPhoneNow, useIsNarrow } from '../utils/platform';
 import { applyStatusFilter, applyTagFilter, applySort } from '../utils/taskFilters';
-import { TaskCard } from '../components/TaskCard';
+import { CalendarItemCard, FileTaskLayerProvider } from '../components/FileTaskCard';
+import { useFileTaskLayer } from '../utils/useFileTaskLayer';
 import { Icon } from '../components/Icon';
 import { useDropTarget } from '../utils/useDragAndDrop';
 import { useResizeDivider } from '../utils/useResizeDivider';
@@ -17,12 +18,13 @@ import { updateTaskProperties } from '../../tasks/taskUpdater';
 import { sortTasks } from '../../tasks/taskSorter';
 import { generateVirtualInstances } from '../../tasks/virtualTaskGenerator';
 import { EmbeddedNoteEditor } from '../../views/EmbeddedNoteEditor';
-import { buildDayTimelineModel, getTaskInterval } from './week/timelineModel';
+import { buildDayTimelineModel, getTaskInterval, isOnTimeAxis } from './week/timelineModel';
 import { DayTimelineCanvas } from './week/DayTimelineCanvas';
 import { i18n } from '../../i18n/i18n';
 import { Logger } from '../../utils/logger';
 import { RegularExpressions } from '../../utils/RegularExpressions';
 import type { DateFieldType } from '../../settings/types';
+import { useViewTasks } from '../utils/useViewTasks';
 
 /** dataTransfer.taskId（filePath:lineNumber）→ 任务查找 */
 function findTaskById(tasks: GCTask[], taskId: string): GCTask | null {
@@ -40,7 +42,6 @@ export function DayView(): JSX.Element {
 	const plugin = usePlugin();
 	const app = useApp();
 	const currentDate = useCalendarStore((s) => s.currentDate);
-	const tasks = useCalendarStore((s) => s.tasks);
 	const filter = useCalendarStore((s) => selectViewFilter(s, 'day'));
 	const refreshTasks = useCalendarStore((s) => s.refreshTasks);
 	// 稳定回调：TaskCard 已 memo，内联箭头函数会使 memo 失效
@@ -53,6 +54,7 @@ export function DayView(): JSX.Element {
 	const dateField = plugin.settings.dateFilterField || 'dueDate';
 	const startField = plugin.settings.ganttStartField || 'startDate';
 	const endField = plugin.settings.ganttEndField || 'dueDate';
+	const tasks = useViewTasks(startField, endField, dateField);
 
 	const timelineConfig = useMemo(() => ({
 		...DayViewConfig,
@@ -72,8 +74,12 @@ export function DayView(): JSX.Element {
 	}, [currentDate]);
 
 	// ===== 任务数据：视图筛选 + 虚拟周期实例 → 单日连续画布模型 =====
+	const scoped = useMemo(() => (
+		applySort(applyTagFilter(applyStatusFilter(tasks, filter.status), filter.tag), filter.sort)
+	), [tasks, filter]);
+	// file-based task 图层：覆盖当日的文件进全天区；归类时文件内任务收进悬浮卡片，定时任务仍留在时间轴
+	const fileLayer = useFileTaskLayer('day', scoped, startField, endField, dateField);
 	const model = useMemo(() => {
-		const scoped = applySort(applyTagFilter(applyStatusFilter(tasks, filter.status), filter.tag), filter.sort);
 		const virtualInstances = generateVirtualInstances(
 			scoped,
 			normalized,
@@ -82,8 +88,11 @@ export function DayView(): JSX.Element {
 			plugin.settings.recurringTaskDisplayLimit ?? 5
 		);
 		const combined = sortTasks([...scoped, ...virtualInstances], filter.sort).filter((t) => !t.cancelled);
-		return buildDayTimelineModel(combined, normalized, startField, endField, dateField);
-	}, [tasks, filter, normalized, dateField, startField, endField, plugin.settings.recurringTaskDisplayLimit]);
+		return buildDayTimelineModel(
+			fileLayer.merge(combined, (t) => isOnTimeAxis(t, startField, endField, dateField)),
+			normalized, startField, endField, dateField,
+		);
+	}, [scoped, fileLayer, filter.sort, normalized, dateField, startField, endField, plugin.settings.recurringTaskDisplayLimit]);
 
 	// 任务全集（拖放源查找）
 	const dragLookupTasks = useMemo(() => tasks.filter((t) => !t.cancelled), [tasks]);
@@ -208,7 +217,7 @@ export function DayView(): JSX.Element {
 
 	// ===== 任务区渲染：全天区（始终渲染为拖放目标，与侧栏统一） + 共享连续画布 =====
 	const renderTaskList = (): JSX.Element => (
-		<>
+		<FileTaskLayerProvider value={{ tasksByFile: fileLayer.tasksByFile, onRefresh: handleCardRefresh }}>
 			<div className={DayViewClasses.elements.alldaySection} {...allDayDropProps}>
 				<div className={DayViewClasses.elements.alldayLabel}>
 					{i18n.t('views.weekView.allDay')}
@@ -216,7 +225,7 @@ export function DayView(): JSX.Element {
 				<div className={DayViewClasses.elements.alldayTasks}>
 					{model.allday.map(({ task, timeLabel }) => (
 						<div key={`${task.filePath}:${task.lineNumber}`} className={DayViewClasses.elements.alldayItem}>
-							<TaskCard
+							<CalendarItemCard
 								task={task}
 								config={timelineConfig}
 								targetDate={normalized}
@@ -239,7 +248,7 @@ export function DayView(): JSX.Element {
 				tasks={dragLookupTasks}
 				refresh={handleCardRefresh}
 			/>
-		</>
+		</FileTaskLayerProvider>
 	);
 
 	// ===== 仅任务模式（不显示 Daily Note） =====

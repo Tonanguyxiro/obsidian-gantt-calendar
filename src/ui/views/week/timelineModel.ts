@@ -272,6 +272,19 @@ export function getTaskInterval(
 	return null;
 }
 
+/** 任务是否落在时间网格（时间轴）上：点任务或 <24h 的定时区间；≥24h 长区间与全天任务进全天行 */
+export function isOnTimeAxis(
+	task: GCTask,
+	startField: DateFieldType,
+	endField: DateFieldType,
+	dateField: DateFieldType,
+): boolean {
+	const interval = getTaskInterval(task, startField, endField, dateField);
+	if (!interval) return false;
+	if (interval.kind === 'point') return true;
+	return interval.end.getTime() - interval.start.getTime() < MINUTES_PER_DAY * 60000;
+}
+
 // ===== 周内分段 =====
 
 /**
@@ -841,4 +854,73 @@ function dayToKey(d: Date): string {
 	const m = String(d.getMonth() + 1).padStart(2, '0');
 	const day = String(d.getDate()).padStart(2, '0');
 	return `${y}-${m}-${day}`;
+}
+
+// ===== 月视图统一行（lane）布局：横跨条与单日任务混排 =====
+
+/** 月视图周行内的一个条目（横跨条或单日任务），已分配 lane */
+export interface MonthLaneItem {
+	task: GCTask;
+	startCol: number;
+	endCol: number;
+	lane: number;
+	/** 跨日横跨条（否则为单日任务卡片） */
+	isSpan: boolean;
+	continuesBefore: boolean;
+	continuesAfter: boolean;
+	timeLabel?: string;
+}
+
+/**
+ * 把一周的横跨条与格内任务排进同一套 lane（类 Google Calendar 混排）：
+ * 横跨条先按起始列、跨度长者优先放入最低的空闲 lane；
+ * 再按格内顺序把单日任务填进其所在列最低的空闲 lane——
+ * 横跨条之间/之上留下的空位会被单日任务补上，而不是整周统一让位到条带之下。
+ * 条目数不设上限（行高随 lane 数自适应）。
+ *
+ * @param dayKeys 该周 7 天的日期 key（与 week.cells 的 key 一致）
+ */
+export function layoutMonthWeekLanes(
+	week: MonthWeekModel,
+	dayKeys: string[],
+): { items: MonthLaneItem[]; laneCount: number } {
+	const occupied: Array<Set<number>> = dayKeys.map(() => new Set<number>());
+	const lowestFree = (from: number, to: number): number => {
+		for (let lane = 0; ; lane++) {
+			let free = true;
+			for (let c = from; c <= to; c++) {
+				if (occupied[c].has(lane)) { free = false; break; }
+			}
+			if (free) return lane;
+		}
+	};
+	const items: MonthLaneItem[] = [];
+	const place = (item: Omit<MonthLaneItem, 'lane'>) => {
+		const lane = lowestFree(item.startCol, item.endCol);
+		for (let c = item.startCol; c <= item.endCol; c++) occupied[c].add(lane);
+		items.push({ ...item, lane });
+	};
+
+	const spans = [...week.spanBars].sort((a, b) =>
+		a.startCol - b.startCol || (b.endCol - b.startCol) - (a.endCol - a.startCol) || a.lane - b.lane
+	);
+	for (const bar of spans) {
+		place({
+			task: bar.task,
+			startCol: bar.startCol,
+			endCol: bar.endCol,
+			isSpan: true,
+			continuesBefore: bar.continuesBefore,
+			continuesAfter: bar.continuesAfter,
+			timeLabel: bar.timeLabel,
+		});
+	}
+	dayKeys.forEach((key, col) => {
+		for (const task of week.cells.get(key) ?? []) {
+			place({ task, startCol: col, endCol: col, isSpan: false, continuesBefore: false, continuesAfter: false });
+		}
+	});
+
+	const laneCount = items.reduce((max, it) => Math.max(max, it.lane + 1), 0);
+	return { items, laneCount };
 }

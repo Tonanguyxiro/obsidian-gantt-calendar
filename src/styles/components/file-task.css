@@ -1,0 +1,118 @@
+/* file-based task 主色（日历文件卡片 / 甘特文件条）
+   定义在 body：Obsidian 的 --color-* 主题色挂在 body 上，:root 处引用会解析为空 */
+body {
+	--gc-file-task-color: var(--color-purple);
+}
+
+/* ========== File-based task：日历文件卡片 ========== */
+.gc-file-task {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	height: var(--gc-tl-card-h);
+	min-width: 0;
+	padding: 2px 6px;
+	border-radius: var(--gc-radius-xs);
+	border-left: 2px solid var(--gc-file-task-color);
+	background-color: color-mix(in srgb, var(--gc-file-task-color) 14%, var(--background-primary));
+	color: var(--text-normal);
+	font-size: var(--gc-font-xs);
+	cursor: pointer;
+	user-select: none;
+	overflow: hidden;
+}
+
+.gc-week-view__allday-bar .gc-file-task,
+.gc-month-view__span-bar .gc-file-task {
+	height: 100%;
+}
+
+.gc-file-task:hover,
+.gc-file-task--open {
+	background-color: color-mix(in srgb, var(--gc-file-task-color) 24%, var(--background-primary));
+}
+
+.gc-file-task__icon {
+	display: inline-flex;
+	flex-shrink: 0;
+	color: var(--gc-file-task-color);
+}
+
+.gc-file-task__icon svg {
+	width: 12px;
+	height: 12px;
+}
+
+.gc-file-task__title {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	font-weight: 500;
+}
+
+.gc-file-task__count {
+	flex-shrink: 0;
+	min-width: 16px;
+	padding: 0 4px;
+	border-radius: 8px;
+	background-color: var(--gc-file-task-color);
+	color: var(--text-on-accent);
+	font-size: 10px;
+	line-height: 16px;
+	text-align: center;
+}
+
+/* ========== 悬浮展开卡片 ========== */
+.gc-file-task__popover {
+	z-index: var(--layer-popover);
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	background-color: var(--background-primary);
+	box-shadow: var(--shadow-s);
+}
+
+.gc-file-task__popover-header {
+	padding: 8px 10px;
+	border-bottom: 1px solid var(--background-modifier-border);
+	border-left: 3px solid var(--gc-file-task-color);
+}
+
+.gc-file-task__popover-title {
+	font-weight: 600;
+	color: var(--text-normal);
+	text-decoration: none;
+}
+
+.gc-file-task__popover-title:hover {
+	color: var(--text-accent);
+	text-decoration: underline;
+}
+
+.gc-file-task__popover-meta {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-top: 2px;
+	font-size: var(--gc-font-xs);
+	color: var(--text-muted);
+}
+
+.gc-file-task__popover-list {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	padding: 6px;
+	overflow-y: auto;
+}
+
+.gc-file-task__popover-empty {
+	padding: 8px;
+	font-size: var(--gc-font-xs);
+	color: var(--text-faint);
+	text-align: center;
+}

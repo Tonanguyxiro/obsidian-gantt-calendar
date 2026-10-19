@@ -8,9 +8,12 @@ import { applyStatusFilter, applyTagFilter, applySort } from '../utils/taskFilte
 import { sortTasks } from '../../tasks/taskSorter';
 import { generateVirtualInstances } from '../../tasks/virtualTaskGenerator';
 import { i18n } from '../../i18n/i18n';
-import { buildWeekTimelineModel } from './week/timelineModel';
+import { buildWeekTimelineModel, isOnTimeAxis } from './week/timelineModel';
+import { useFileTaskLayer } from '../utils/useFileTaskLayer';
+import { FileTaskLayerProvider } from '../components/FileTaskCard';
 import { WeekTimelineGrid } from './week/WeekTimelineGrid';
 import { useIsPhone } from '../utils/platform';
+import { useViewTasks } from '../utils/useViewTasks';
 
 /**
  * React 周视图（常驻时间线模式）
@@ -20,7 +23,6 @@ export function WeekView(): JSX.Element {
 	const plugin = usePlugin();
 	const currentDate = useCalendarStore((s) => s.currentDate);
 	const setCurrentDate = useCalendarStore((s) => s.setCurrentDate);
-	const tasks = useCalendarStore((s) => s.tasks);
 	const filter = useCalendarStore((s) => selectViewFilter(s, 'week'));
 	const updateSeq = useCalendarStore((s) => s.updateSeq);
 	const refreshTasks = useCalendarStore((s) => s.refreshTasks);
@@ -29,6 +31,7 @@ export function WeekView(): JSX.Element {
 	const dateField = plugin.settings.dateFilterField || 'dueDate';
 	const ganttStartField = plugin.settings.ganttStartField || 'startDate';
 	const ganttEndField = plugin.settings.ganttEndField || 'dueDate';
+	const tasks = useViewTasks(ganttStartField, ganttEndField, dateField);
 	const showLunar = !!plugin.settings.showLunar;
 	const recurringLimit = plugin.settings.recurringTaskDisplayLimit ?? 5;
 
@@ -74,10 +77,16 @@ export function WeekView(): JSX.Element {
 		sortTasks([...scoped, ...virtualInstances], filter.sort)
 	), [scoped, virtualInstances, filter.sort]);
 
+	// file-based task 图层：文件横跨条进全天行；归类时文件内任务收进悬浮卡片，定时任务仍留在时间轴
+	const fileLayer = useFileTaskLayer('week', scoped, ganttStartField, ganttEndField, dateField);
+
 	// 连续画布模型：时间块分段 + lane 布局 + 全天横跨条
 	const model = useMemo(() => (
-		buildWeekTimelineModel(combined, weekStart, ganttStartField, ganttEndField, dateField)
-	), [combined, weekStart, ganttStartField, ganttEndField, dateField]);
+		buildWeekTimelineModel(
+			fileLayer.merge(combined, (t) => isOnTimeAxis(t, ganttStartField, ganttEndField, dateField)),
+			weekStart, ganttStartField, ganttEndField, dateField,
+		)
+	), [combined, fileLayer, weekStart, ganttStartField, ganttEndField, dateField]);
 
 	const handleRefresh = useCallback(() => refreshTasks(), [refreshTasks]);
 
@@ -121,6 +130,7 @@ export function WeekView(): JSX.Element {
 	}, [windowStart, visibleCount, weekStart, setCurrentDate]);
 
 	return (
+		<FileTaskLayerProvider value={{ tasksByFile: fileLayer.tasksByFile, onRefresh: handleRefresh }}>
 		<div className="gc-view gc-view--week">
 			<div className={WeekViewClasses.elements.grid}>
 				<WeekTimelineGrid
@@ -138,5 +148,6 @@ export function WeekView(): JSX.Element {
 				/>
 			</div>
 		</div>
+		</FileTaskLayerProvider>
 	);
 }

@@ -97,6 +97,8 @@ export const BLOCKS = {
 	MODAL: 'modal',
 	/** React 右键菜单 */
 	CONTEXT_MENU: 'context-menu',
+	/** File-based task 卡片与悬浮展开卡片 */
+	FILE_TASK: 'file-task',
 } as const;
 
 /**
@@ -118,6 +120,27 @@ export function bem(block: BlockType, element?: string, modifier?: string): stri
 	}
 	return className;
 }
+
+/**
+ * File-based task 类名常量（日历卡片 + 悬浮展开卡片）
+ */
+export const FileTaskClasses = {
+	block: bem(BLOCKS.FILE_TASK),
+	elements: {
+		icon: bem(BLOCKS.FILE_TASK, 'icon'),
+		title: bem(BLOCKS.FILE_TASK, 'title'),
+		count: bem(BLOCKS.FILE_TASK, 'count'),
+		popover: bem(BLOCKS.FILE_TASK, 'popover'),
+		popoverHeader: bem(BLOCKS.FILE_TASK, 'popover-header'),
+		popoverTitle: bem(BLOCKS.FILE_TASK, 'popover-title'),
+		popoverMeta: bem(BLOCKS.FILE_TASK, 'popover-meta'),
+		popoverList: bem(BLOCKS.FILE_TASK, 'popover-list'),
+		popoverEmpty: bem(BLOCKS.FILE_TASK, 'popover-empty'),
+	},
+	modifiers: {
+		open: bem(BLOCKS.FILE_TASK, undefined, 'open'),
+	},
+};
 
 /**
  * 任务卡片类名常量
@@ -435,6 +458,14 @@ export const GanttClasses = {
 		handleLeft: bem(BLOCKS.GANTT, 'handle-left'),
 		barTime: bem(BLOCKS.GANTT, 'bar-time'),
 		handleRight: bem(BLOCKS.GANTT, 'handle-right'),
+		// file-based task 分区（分区标题 / 项目标题 / 文件行）
+		sectionLabel: bem(BLOCKS.GANTT, 'section-label'),
+		projectLabel: bem(BLOCKS.GANTT, 'project-label'),
+		fileLabel: bem(BLOCKS.GANTT, 'file-label'),
+		fileBar: bem(BLOCKS.GANTT, 'file-bar'),
+		collapseToggle: bem(BLOCKS.GANTT, 'collapse-toggle'),
+		fileChildCount: bem(BLOCKS.GANTT, 'file-child-count'),
+		headerRowBg: bem(BLOCKS.GANTT, 'header-row-bg'),
 		emptyState: 'gantt-empty-state',
 		emptyIcon: 'gantt-empty-icon',
 		emptyTitle: 'gantt-empty-title',
@@ -447,6 +478,8 @@ export const GanttClasses = {
 	modifiers: {
 		dayView: bem(BLOCKS.GANTT, undefined, 'day-view'),
 		chartDropTarget: bem(BLOCKS.GANTT, 'chart', 'drop-target'),
+		taskNested: bem(BLOCKS.GANTT, 'task-content-cell', 'nested'),
+		collapseToggleEmpty: bem(BLOCKS.GANTT, 'collapse-toggle', 'empty'),
 	},
 };
 
@@ -778,9 +811,7 @@ export const MonthViewClasses = {
 		dayHeaderSeparator: bem(BLOCKS.MONTH_VIEW, 'day-header-separator'),
 		dayNumber: bem(BLOCKS.MONTH_VIEW, 'day-number'),
 		lunarText: bem(BLOCKS.MONTH_VIEW, 'lunar-text'),
-		tasks: bem(BLOCKS.MONTH_VIEW, 'tasks'),
 		taskItem: bem(BLOCKS.MONTH_VIEW, 'task-item'),
-		taskMore: bem(BLOCKS.MONTH_VIEW, 'task-more'),
 		// 跨日横跨条带
 		spanStrip: bem(BLOCKS.MONTH_VIEW, 'span-strip'),
 		spanBar: bem(BLOCKS.MONTH_VIEW, 'span-bar'),
@@ -797,7 +828,8 @@ export const MonthViewClasses = {
 		festivalSolarTerm: bem(BLOCKS.MONTH_VIEW, 'lunar-text', 'festival-solar-term'),
 		spanBarContinuesBefore: bem(BLOCKS.MONTH_VIEW, 'span-bar', 'continues-before'),
 		spanBarContinuesAfter: bem(BLOCKS.MONTH_VIEW, 'span-bar', 'continues-after'),
-		spanBarStacked: bem(BLOCKS.MONTH_VIEW, 'span-bar', 'stacked'),
+		/** 单日任务条目（与横跨条混排在同一 lane 体系） */
+		spanBarDay: bem(BLOCKS.MONTH_VIEW, 'span-bar', 'day'),
 		weekdayEmpty: bem(BLOCKS.MONTH_VIEW, 'weekday', 'empty'),
 	},
 };

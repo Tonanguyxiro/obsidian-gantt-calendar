@@ -44,6 +44,20 @@ export class SettingsManager {
 		// 视图筛选偏好归一化 + 旧 localStorage 键一次性导入
 		await this.migrateViewFilters(settings);
 
+		// Daily Note 来源：旧布尔开关 followObsidianDailyNote → dailyNoteSource
+		await this.migrateDailyNoteSource(settings);
+
+		// file-based task：旧总开关 fileTasksEnabled → 带日期属性来源（行为一致）
+		await this.migrateFileTaskSources(settings);
+
+		// file-based task 视图选项：浅合并会丢掉新增视图键，按视图补全默认值
+		settings.fileTaskViews = {
+			...DEFAULT_SETTINGS.fileTaskViews,
+			...Object.fromEntries(Object.entries(settings.fileTaskViews || {}).map(([k, v]) => [
+				k, { ...DEFAULT_SETTINGS.fileTaskViews[k as keyof typeof DEFAULT_SETTINGS.fileTaskViews], ...v },
+			])),
+		};
+
 		// 更新 CSS 变量
 		this.updateCSSVariables(settings);
 
@@ -67,6 +81,29 @@ export class SettingsManager {
 		activeDocument.documentElement.style.setProperty('--gc-festival-solar', settings.solarFestivalColor);
 		activeDocument.documentElement.style.setProperty('--gc-festival-lunar', settings.lunarFestivalColor);
 		activeDocument.documentElement.style.setProperty('--gc-festival-solar-term', settings.solarTermColor);
+	}
+
+	/**
+	 * 迁移 file-based task 旧总开关：fileTasksEnabled 只识别带日期属性的文件，
+	 * 对应新设置中的「带日期属性的文件」来源
+	 */
+	private async migrateFileTaskSources(settings: GanttCalendarSettings): Promise<void> {
+		const data = await this.plugin.loadData() as Record<string, unknown> || {};
+		if ('fileTaskIncludeDated' in data || !('fileTasksEnabled' in data)) return;
+		settings.fileTaskIncludeDated = data.fileTasksEnabled === true;
+		delete (settings as unknown as Record<string, unknown>).fileTasksEnabled;
+		await this.plugin.saveData(settings);
+	}
+
+	/**
+	 * 迁移旧的 followObsidianDailyNote 布尔开关到 dailyNoteSource 三选一
+	 */
+	private async migrateDailyNoteSource(settings: GanttCalendarSettings): Promise<void> {
+		const data = await this.plugin.loadData() as Record<string, unknown> || {};
+		if ('dailyNoteSource' in data || !('followObsidianDailyNote' in data)) return;
+		settings.dailyNoteSource = data.followObsidianDailyNote === true ? 'obsidian' : 'manual';
+		delete (settings as unknown as Record<string, unknown>).followObsidianDailyNote;
+		await this.plugin.saveData(settings);
 	}
 
 	/**

@@ -2,8 +2,8 @@ import { Setting } from 'obsidian';
 import { SettingsClasses } from '../../utils/bem';
 import { BaseBuilder } from './BaseBuilder';
 import { FolderSuggest, FileSuggest } from '../components';
-import type { BuilderConfig } from '../types';
-import { getObsidianDailyNoteSettings, isObsidianDailyNoteAvailable } from '../../utils/dailyNoteSettingsBridge';
+import type { BuilderConfig, DailyNoteSource } from '../types';
+import { getObsidianDailyNoteSettings, isObsidianDailyNoteAvailable, getNotebookNavigatorDailyNoteSettings } from '../../utils/dailyNoteSettingsBridge';
 import { i18n } from '../../i18n/i18n';
 
 /**
@@ -23,22 +23,30 @@ export class CalendarSettingsBuilder extends BaseBuilder {
 
 			// 用于包裹可切换的设置区域
 			const obsidianSection = this.containerEl.createDiv();
+			const nnSection = this.containerEl.createDiv();
 			const manualSection = this.containerEl.createDiv();
 
 			const updateVisibility = () => {
-				obsidianSection.classList.toggle(SettingsClasses.elements.sectionHidden, !this.plugin.settings.followObsidianDailyNote);
-				manualSection.classList.toggle(SettingsClasses.elements.sectionHidden, this.plugin.settings.followObsidianDailyNote);
+				const source = this.plugin.settings.dailyNoteSource;
+				obsidianSection.classList.toggle(SettingsClasses.elements.sectionHidden, source !== 'obsidian');
+				nnSection.classList.toggle(SettingsClasses.elements.sectionHidden, source !== 'notebook-navigator');
+				manualSection.classList.toggle(SettingsClasses.elements.sectionHidden, source !== 'manual');
 			};
 
-			// 使用 Obsidian 日记设置开关
+			// Daily Note 设置来源
 			addSetting(setting => {
-				setting.setName(i18n.t('settings.calendar.useObsidianDailyNote.name'))
-					.setDesc(i18n.t('settings.calendar.useObsidianDailyNote.description'))
-					.addToggle(toggle => toggle
-						.setValue(this.plugin.settings.followObsidianDailyNote)
+				setting.setName(i18n.t('settings.calendar.dailyNoteSource.name'))
+					.setDesc(i18n.t('settings.calendar.dailyNoteSource.description'))
+					.addDropdown(drop => drop
+						.addOptions({
+							manual: i18n.t('settings.calendar.dailyNoteSource.options.manual'),
+							obsidian: i18n.t('settings.calendar.dailyNoteSource.options.obsidian'),
+							'notebook-navigator': i18n.t('settings.calendar.dailyNoteSource.options.notebookNavigator'),
+						})
+						.setValue(this.plugin.settings.dailyNoteSource)
 						.onChange((value) => {
 							void (async () => {
-								this.plugin.settings.followObsidianDailyNote = value;
+								this.plugin.settings.dailyNoteSource = value as DailyNoteSource;
 								await this.saveAndRefreshViews();
 								updateVisibility();
 							})();
@@ -71,6 +79,31 @@ export class CalendarSettingsBuilder extends BaseBuilder {
 				new Setting(obsidianSection)
 					.setName(i18n.t('settings.calendar.obsidianMode.notDetected.name'))
 					.setDesc(i18n.t('settings.calendar.obsidianMode.notDetected.description'));
+			}
+
+			// === Notebook Navigator 模式设置（只读） ===
+			const nn = getNotebookNavigatorDailyNoteSettings(this.plugin.app);
+			if (!nn) {
+				new Setting(nnSection)
+					.setName(i18n.t('settings.calendar.notebookNavigatorMode.notDetected.name'))
+					.setDesc(i18n.t('settings.calendar.notebookNavigatorMode.notDetected.description'));
+			} else if (nn.integrationMode === 'daily-notes') {
+				new Setting(nnSection)
+					.setName(i18n.t('settings.calendar.notebookNavigatorMode.delegated.name'))
+					.setDesc(i18n.t('settings.calendar.notebookNavigatorMode.delegated.description'));
+			} else {
+				new Setting(nnSection)
+					.setName(i18n.t('settings.calendar.notebookNavigatorMode.folder.name'))
+					.setDesc(i18n.t('settings.calendar.notebookNavigatorMode.folder.description'))
+					.addText(text => text.setValue(nn.rootFolder || '/').setDisabled(true));
+				new Setting(nnSection)
+					.setName(i18n.t('settings.calendar.notebookNavigatorMode.pattern.name'))
+					.setDesc(i18n.t('settings.calendar.notebookNavigatorMode.pattern.description', { example: window.moment().format(nn.pattern) }))
+					.addText(text => text.setValue(nn.pattern).setDisabled(true));
+				new Setting(nnSection)
+					.setName(i18n.t('settings.calendar.obsidianMode.template.name'))
+					.setDesc(nn.template || '-')
+					.addText(text => text.setValue(nn.template).setDisabled(true));
 			}
 
 			// === 手动模式设置 ===

@@ -22,7 +22,7 @@ export const DEFAULT_SETTINGS: GanttCalendarSettings = {
 	dayViewLayout: 'horizontal', // 默认水平（左右分屏）布局
 	dailyNotePath: 'DailyNotes', // 默认 daily note 文件夹路径
 	dailyNoteNameFormat: 'yyyy-MM-dd', // 默认文件名格式
-	followObsidianDailyNote: false, // 默认不跟随 Obsidian 日记设置
+	dailyNoteSource: 'manual', // 默认手动配置（旧版 followObsidianDailyNote=true 迁移为 'obsidian'）
 	monthViewTaskLimit: 3, // 月视图每格任务数上限，兼作每周横跨条行数上限
 	yearShowTaskCount: true,
 	yearHeatmapEnabled: true,
@@ -39,6 +39,7 @@ export const DEFAULT_SETTINGS: GanttCalendarSettings = {
 	enableDebugMode: false, // 默认关闭开发者模式
 	showViewNavButtonText: true, // 默认显示视图导航按钮文本
 	taskCardClickAction: 'openFile', // 默认跳转到 Markdown 源文件（与历史行为一致）
+	taskCardDoubleClickAction: 'editModal', // 默认双击弹出编辑面板
 	timezoneOffset: null, // 默认跟随系统时区
 	timeFormat: '24h', // 默认24小时制
 			recurringTaskDisplayLimit: 5, // 默认显示5个虚拟实例
@@ -106,6 +107,23 @@ export const DEFAULT_SETTINGS: GanttCalendarSettings = {
 
 	ganttStartField: 'startDate',  // 默认使用开始日期
 	ganttEndField: 'dueDate',      // 默认使用截止日期
+
+	// File-based task（默认关闭，属性名与 Timeline for Bases 常用配置一致）
+	fileTaskIncludeDated: false,
+	fileTaskIncludeTaskFiles: false,
+	fileTaskRequiredTags: '',
+	fileTaskExcludeDailyNotes: true,
+	fileTaskStartProperty: 'start',
+	fileTaskEndProperty: 'end',
+	fileTaskProjectProperty: 'project',
+	fileTaskFolder: '',
+	fileTaskViews: {
+		day: { show: true, groupTasks: false },
+		week: { show: true, groupTasks: false },
+		month: { show: true, groupTasks: false },
+		gantt: { show: true, groupTasks: false },
+	},
+	ganttCollapsedFileTasks: [],
 };
 
 /**

@@ -196,14 +196,19 @@
           "24h": "24 小时制 (14:30)",
           "12h": "12 小时制 (2:30 PM)"
         }
+      },
+      "taskCardDoubleClickAction": {
+        "name": "双击任务",
+        "description": "双击任务卡片或甘特图任务条时的行为；设置后单击会稍作延迟以区分双击",
+        "options": {
+          "editModal": "弹出编辑面板",
+          "openFile": "跳转到 Markdown 源文件",
+          "none": "无动作"
+        }
       }
     },
     "calendar": {
       "groupTitle": "Daily Notes",
-      "useObsidianDailyNote": {
-        "name": "使用 Obsidian 日记设置",
-        "description": "读取核心「日记」插件或「Periodic Notes」插件的文件夹和格式设置，无需手动配置"
-      },
       "obsidianMode": {
         "folder": {
           "name": "日记文件夹",
@@ -233,6 +238,33 @@
         "template": {
           "name": "Daily Note 模板文件路径",
           "description": "创建 Daily Note 时使用的模板文件路径（留空则创建空文件）"
+        }
+      },
+      "dailyNoteSource": {
+        "name": "Daily Note 设置来源",
+        "description": "日视图嵌入的日记与「添加到今日日记」使用哪套日记路径设置",
+        "options": {
+          "manual": "手动配置",
+          "obsidian": "Obsidian 日记 / Periodic Notes",
+          "notebookNavigator": "Notebook Navigator 日历"
+        }
+      },
+      "notebookNavigatorMode": {
+        "notDetected": {
+          "name": "未检测到 Notebook Navigator",
+          "description": "请安装并启用 Notebook Navigator 插件；未启用时回退为手动配置"
+        },
+        "delegated": {
+          "name": "Notebook Navigator 使用核心日记设置",
+          "description": "Notebook Navigator 的日历集成模式为「Daily Notes」，将按 Obsidian 核心日记设置查找日记"
+        },
+        "folder": {
+          "name": "周期笔记根文件夹",
+          "description": "来自 Notebook Navigator 当前库配置（只读）"
+        },
+        "pattern": {
+          "name": "日记路径模式",
+          "description": "来自 Notebook Navigator 日历设置（只读），今天对应：{{example}}"
         }
       }
     },
@@ -800,6 +832,51 @@
         "resultFailed": "删除失败: {{count}}/{{total}}",
         "result": "已删除 {{count}} 个任务",
         "failed": "清除任务出错: {{error}}"
+      }
+    },
+    "fileTasks": {
+      "groupTitle": "File-based 任务",
+      "includeDated": {
+        "name": "引入带日期属性的笔记",
+        "description": "frontmatter 有开始或结束属性的笔记作为时间轴条目（与 Timeline for Bases 相同），不要求笔记里有任务"
+      },
+      "requiredTags": {
+        "name": "标签过滤",
+        "description": "只引入带有任一标签的笔记（frontmatter tags 或正文标签，逗号/空格分隔，#project 也匹配 #project/子标签）；留空不限"
+      },
+      "includeTaskFiles": {
+        "name": "引入含任务的笔记",
+        "description": "笔记里有任务即作为条目；没有日期属性时，用其中未取消任务的开始/计划/截止日期的最早到最晚作为时间范围（任务都没有日期则不引入）"
+      },
+      "excludeDailyNotes": {
+        "name": "排除每日笔记",
+        "description": "按 Daily Note 设置识别日记，不把带任务的日记作为条目（日记本身有日期属性且开启了上一来源时仍会引入）"
+      },
+      "startProperty": {
+        "name": "开始属性",
+        "description": "frontmatter 中的开始日期属性名"
+      },
+      "endProperty": {
+        "name": "结束属性",
+        "description": "frontmatter 中的结束日期属性名；只有一端时按单日显示"
+      },
+      "projectProperty": {
+        "name": "项目属性",
+        "description": "用于甘特图分组的属性名，通常是 folder note 的双链；留空则不分组，没有该属性的笔记排在文件分区底部"
+      },
+      "folder": {
+        "name": "识别范围",
+        "description": "只识别该文件夹内的笔记；留空为整个库"
+      },
+      "views": {
+        "day": "日视图",
+        "week": "周视图",
+        "month": "月视图",
+        "gantt": "甘特图",
+        "calendarDescription": "开关 1：显示文件任务；开关 2：把文件内的任务收进文件的悬浮展开卡片（日/周视图中带时间的任务仍留在时间轴上）",
+        "ganttDescription": "开关 1：上方显示文件时间轴；开关 2：把任务移到所属文件行下，下方只保留不属于任何文件任务的任务",
+        "show": "显示 file-based 任务",
+        "groupTasks": "按文件归类任务"
       }
     }
   },
@@ -1482,5 +1559,13 @@
       "index": "序号",
       "task": "任务"
     }
+  },
+  "fileTasks": {
+    "noTasks": "该文件中暂无任务",
+    "ganttFilesSection": "文件时间轴",
+    "ganttTasksSection": "任务时间轴",
+    "noProject": "无项目",
+    "dateFromTasks": "日期来自任务",
+    "datesPinned": "已将时间范围写入笔记属性：{{start}} → {{end}}"
   }
 }

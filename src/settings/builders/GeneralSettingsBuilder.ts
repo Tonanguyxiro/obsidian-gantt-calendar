@@ -55,6 +55,21 @@ export class GeneralSettingsBuilder extends BaseBuilder {
 						}));
 			});
 
+			// 双击任务行为（默认弹出编辑面板）
+			addSetting(setting => {
+				setting.setName(i18n.t('settings.general.taskCardDoubleClickAction.name'))
+					.setDesc(i18n.t('settings.general.taskCardDoubleClickAction.description'))
+					.addDropdown(drop => drop
+						.addOption('editModal', i18n.t('settings.general.taskCardDoubleClickAction.options.editModal'))
+						.addOption('openFile', i18n.t('settings.general.taskCardDoubleClickAction.options.openFile'))
+						.addOption('none', i18n.t('settings.general.taskCardDoubleClickAction.options.none'))
+						.setValue(this.plugin.settings.taskCardDoubleClickAction || 'editModal')
+						.onChange((value) => {
+							this.plugin.settings.taskCardDoubleClickAction = value as 'editModal' | 'openFile' | 'none';
+							void this.saveAndRefreshViews();
+						}));
+			});
+
 			// 开发者模式
 			addSetting(setting => {
 				setting.setName(i18n.t('settings.general.debugMode.name'))

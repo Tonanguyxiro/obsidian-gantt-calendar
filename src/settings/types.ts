@@ -9,6 +9,20 @@ import type { ViewFilterState, ViewScope } from '../ui/store/calendarStore';
  */
 export type DateFieldType = 'createdDate' | 'startDate' | 'scheduledDate' | 'dueDate' | 'completionDate' | 'cancelledDate';
 
+/** Daily Note 设置来源 */
+export type DailyNoteSource = 'manual' | 'obsidian' | 'notebook-navigator';
+
+/** 支持 file-based task 的视图 */
+export type FileTaskViewKey = 'day' | 'week' | 'month' | 'gantt';
+
+/** 单个视图的 file-based task 选项 */
+export interface FileTaskViewOptions {
+	/** 是否显示 file-based task */
+	show: boolean;
+	/** 是否把文件内的任务归入该文件（日历视图收进文件的悬浮展开卡片，甘特图移到文件行下） */
+	groupTasks: boolean;
+}
+
 /**
  * Gantt Calendar Plugin Settings Interface
  */
@@ -29,7 +43,7 @@ export interface GanttCalendarSettings {
 	dayViewLayout: 'horizontal' | 'vertical'; // 日视图布局：水平（左右分屏）或垂直（上下分屏）
 	dailyNotePath: string; // Daily note 文件夹路径
 	dailyNoteNameFormat: string; // Daily note 文件名格式 (如 yyyy-MM-dd)
-	followObsidianDailyNote: boolean; // 是否跟随 Obsidian 核心/Periodic Notes 插件的日记设置
+	dailyNoteSource: DailyNoteSource; // Daily Note 设置来源：手动 / Obsidian 核心日记(Periodic Notes) / Notebook Navigator
 	monthViewTaskLimit: number; // 月视图每天显示的最大任务数量
 	yearShowTaskCount: boolean; // 年视图是否显示每日任务数量
 	yearHeatmapEnabled: boolean; // 年视图是否启用任务热力图
@@ -46,6 +60,7 @@ export interface GanttCalendarSettings {
 	enableDebugMode: boolean; // 是否启用开发者模式（详细日志）
 	showViewNavButtonText: boolean; // 是否显示视图导航按钮文本
 	taskCardClickAction: 'openFile' | 'editModal'; // 点击任务卡片行为：跳转 Markdown 源文件 / 弹出编辑面板
+	taskCardDoubleClickAction: 'editModal' | 'openFile' | 'none'; // 双击任务行为（默认弹出编辑面板）
 	timezoneOffset: number | null; // 时区偏移量（分钟），null 表示跟随系统
 	timeFormat: '24h' | '12h'; // 时间显示格式
 	recurringTaskDisplayLimit: number; // 周期任务虚拟实例显示数量上限
@@ -114,6 +129,18 @@ export interface GanttCalendarSettings {
 
 	ganttStartField: DateFieldType;  // 甘特图开始时间字段
 	ganttEndField: DateFieldType;    // 甘特图结束时间字段
+
+	// ========== File-based task ==========
+	fileTaskIncludeDated: boolean;      // 引入带日期属性的文件（Timeline for Bases 式，不要求有任务）
+	fileTaskIncludeTaskFiles: boolean;  // 引入含任务的文件（无日期属性时用任务日期）
+	fileTaskRequiredTags: string;       // 带日期属性来源的标签过滤（逗号/空格分隔，留空不限）
+	fileTaskExcludeDailyNotes: boolean; // 含任务来源下排除每日笔记
+	fileTaskStartProperty: string;      // 开始属性名
+	fileTaskEndProperty: string;        // 结束属性名
+	fileTaskProjectProperty: string;    // 项目属性名（通常是 folder note 的双链），留空不分组
+	fileTaskFolder: string;             // 只在该文件夹内识别，留空为整个库
+	fileTaskViews: Record<FileTaskViewKey, FileTaskViewOptions>; // 各视图的显示选项
+	ganttCollapsedFileTasks: string[];  // 甘特图中已折叠（收起归类任务）的文件路径
 
 	// ========== 同步设置 ==========
 	syncConfiguration?: SyncConfiguration;

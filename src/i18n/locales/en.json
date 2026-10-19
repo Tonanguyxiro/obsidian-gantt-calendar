@@ -196,14 +196,19 @@
           "24h": "24-hour (14:30)",
           "12h": "12-hour (2:30 PM)"
         }
+      },
+      "taskCardDoubleClickAction": {
+        "name": "Task double-click",
+        "description": "What happens when a task card or Gantt bar is double-clicked; single clicks wait briefly to tell them apart",
+        "options": {
+          "editModal": "Open edit panel",
+          "openFile": "Jump to Markdown source file",
+          "none": "Do nothing"
+        }
       }
     },
     "calendar": {
       "groupTitle": "Daily Notes",
-      "useObsidianDailyNote": {
-        "name": "Use Obsidian Daily Note Settings",
-        "description": "Read folder and format settings from the core 'Daily Notes' plugin or 'Periodic Notes' plugin"
-      },
       "obsidianMode": {
         "folder": {
           "name": "Daily Note Folder",
@@ -233,6 +238,33 @@
         "template": {
           "name": "Daily Note Template Path",
           "description": "Template file path used when creating Daily Notes (leave empty to create blank files)"
+        }
+      },
+      "dailyNoteSource": {
+        "name": "Daily note settings source",
+        "description": "Which daily note path settings the day view and \"add to today's note\" use",
+        "options": {
+          "manual": "Manual",
+          "obsidian": "Obsidian Daily Notes / Periodic Notes",
+          "notebookNavigator": "Notebook Navigator calendar"
+        }
+      },
+      "notebookNavigatorMode": {
+        "notDetected": {
+          "name": "Notebook Navigator not detected",
+          "description": "Install and enable the Notebook Navigator plugin; falls back to the manual settings while it is unavailable"
+        },
+        "delegated": {
+          "name": "Notebook Navigator uses core daily notes",
+          "description": "Notebook Navigator's calendar integration is set to \"Daily Notes\", so the core daily note settings are used"
+        },
+        "folder": {
+          "name": "Periodic notes root folder",
+          "description": "From the current Notebook Navigator vault profile (read-only)"
+        },
+        "pattern": {
+          "name": "Daily note path pattern",
+          "description": "From Notebook Navigator calendar settings (read-only). Today: {{example}}"
         }
       }
     },
@@ -800,6 +832,51 @@
         "resultFailed": "Delete failed: {{count}}/{{total}}",
         "result": "Tasks deleted: {{count}}",
         "failed": "Clear tasks error: {{error}}"
+      }
+    },
+    "fileTasks": {
+      "groupTitle": "File-based tasks",
+      "includeDated": {
+        "name": "Include notes with date properties",
+        "description": "Notes whose frontmatter has a start or end property become timeline items (same as Timeline for Bases); they do not need to contain tasks"
+      },
+      "requiredTags": {
+        "name": "Tag filter",
+        "description": "Only include notes with any of these tags (frontmatter or inline; comma/space separated; #project also matches #project/child). Leave empty for no filter"
+      },
+      "includeTaskFiles": {
+        "name": "Include notes that contain tasks",
+        "description": "A note with tasks becomes an item. Without date properties, its range runs from the earliest to the latest start/scheduled/due date of its non-cancelled tasks (skipped if none of them has a date)"
+      },
+      "excludeDailyNotes": {
+        "name": "Exclude daily notes",
+        "description": "Daily notes (detected from the Daily Note settings) are not turned into items just because they contain tasks; a daily note with its own date properties is still included by the other source"
+      },
+      "startProperty": {
+        "name": "Start property",
+        "description": "Frontmatter property holding the start date"
+      },
+      "endProperty": {
+        "name": "End property",
+        "description": "Frontmatter property holding the end date; a single date shows as one day"
+      },
+      "projectProperty": {
+        "name": "Project property",
+        "description": "Property used to group the Gantt file timeline, usually a link to a folder note. Leave empty to disable grouping; files without it go to the bottom of the file section"
+      },
+      "folder": {
+        "name": "Folder",
+        "description": "Only recognize notes inside this folder; leave empty for the whole vault"
+      },
+      "views": {
+        "day": "Day view",
+        "week": "Week view",
+        "month": "Month view",
+        "gantt": "Gantt chart",
+        "calendarDescription": "Toggle 1: show file tasks. Toggle 2: move the tasks inside each file into its floating expandable card (timed tasks stay on the day/week time axis)",
+        "ganttDescription": "Toggle 1: show the file timeline on top. Toggle 2: move tasks under their file rows; the task timeline keeps only tasks outside file-based tasks",
+        "show": "Show file-based tasks",
+        "groupTasks": "Group tasks by file"
       }
     }
   },
@@ -1480,5 +1557,13 @@
       "index": "#",
       "task": "Task"
     }
+  },
+  "fileTasks": {
+    "noTasks": "No tasks in this file",
+    "ganttFilesSection": "File timeline",
+    "ganttTasksSection": "Task timeline",
+    "noProject": "No project",
+    "dateFromTasks": "Dates from tasks",
+    "datesPinned": "Saved the range to the note properties: {{start}} → {{end}}"
   }
 }

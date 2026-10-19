@@ -10,6 +10,11 @@ import { i18n } from '../i18n/i18n';
 import { formatDate } from '../dateUtils/dateUtilsIndex';
 import { Logger } from './logger';
 import type { DailyNoteIndex } from './dailyNoteSettingsBridge';
+import {
+	getEffectiveDailyNoteSource,
+	getNotebookNavigatorDailyNoteSettings,
+	getNotebookNavigatorDailyNotePath,
+} from './dailyNoteSettingsBridge';
 import { getDailyNote as getDailyNoteFromIndex, createDailyNote } from 'obsidian-daily-notes-interface';
 import { showConfirmDialog } from '../ui/modals/ConfirmDialog';
 
@@ -93,7 +98,7 @@ export interface CreateTaskData {
 
 /**
  * 在 Daily Note 中创建任务
- * 支持 Obsidian 核心日记插件、Periodic Notes 插件和手动配置
+ * 支持 Obsidian 核心日记插件、Periodic Notes 插件、Notebook Navigator 和手动配置
  *
  * @param app Obsidian App 实例
  * @param taskData 任务数据
@@ -107,7 +112,21 @@ export async function createTaskInDailyNote(
 	settings: GanttCalendarSettings,
 	dailyNoteIndex?: DailyNoteIndex
 ): Promise<string | null> {
-	if (settings.followObsidianDailyNote && dailyNoteIndex) {
+	const source = getEffectiveDailyNoteSource(app, settings);
+	if (source === 'notebook-navigator') {
+		// Notebook Navigator 模式：根文件夹 + Moment 路径模式定位，缺失时按其模板创建
+		const nn = getNotebookNavigatorDailyNoteSettings(app)!;
+		const filePath = getNotebookNavigatorDailyNotePath(nn, new Date());
+		const existing = app.vault.getFileByPath(filePath);
+		if (existing) {
+			await insertTaskToFile(app, existing, taskData, settings.newTaskHeading);
+			new Notice(i18n.t('dailyNote.taskAdded'));
+			return existing.path;
+		}
+		return await handleMissingDailyNote(app, filePath, taskData, settings, nn.template);
+	}
+
+	if (source === 'obsidian' && dailyNoteIndex) {
 		// Obsidian 模式：使用 obsidian-daily-notes-interface
 		const momentDate = window.moment();
 		const dailyNotes = dailyNoteIndex.getIndex();
@@ -150,7 +169,7 @@ export async function createTaskInDailyNote(
 	} else {
 		// 创建新文件时使用完整格式路径（支持嵌套文件夹）
 		const filePath = `${dailyNotePath}/${fullFormatResult}.md`;
-		return await handleMissingDailyNote(app, filePath, taskData, settings);
+		return await handleMissingDailyNote(app, filePath, taskData, settings, settings.dailyNoteTemplatePath);
 	}
 }
 
@@ -162,7 +181,8 @@ async function handleMissingDailyNote(
 	app: App,
 	filePath: string,
 	taskData: CreateTaskData,
-	settings: GanttCalendarSettings
+	settings: GanttCalendarSettings,
+	templatePath: string
 ): Promise<string | null> {
 	// 弹出确认对话框
 	const confirmed = await showConfirmDialog(
@@ -176,7 +196,7 @@ async function handleMissingDailyNote(
 	}
 
 	try {
-		await createDailyNoteFromTemplate(app, filePath, settings.dailyNoteTemplatePath);
+		await createDailyNoteFromTemplate(app, filePath, templatePath);
 
 		// 创建后插入任务
 		const abstractFile = app.vault.getAbstractFileByPath(filePath);

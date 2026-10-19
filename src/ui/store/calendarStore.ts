@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type {
 	CalendarViewType,
+	FileTask,
 	GCTask,
 	SortState,
 	TagFilterState,
@@ -26,6 +27,8 @@ interface CalendarStoreState {
 	viewType: CalendarViewType;
 	currentDate: Date;
 	tasks: GCTask[];
+	/** File-based task 全集（FileTaskIndex 推送；功能关闭时为空） */
+	fileTasks: FileTask[];
 	/** 首扫是否已推入任务（whenReady 或事件回流任一路径）；false 时视图渲染骨架 */
 	tasksReady: boolean;
 	changedFilePath?: string;
@@ -44,6 +47,7 @@ interface CalendarStoreState {
 	/** 数据层 TaskStore 通知时调用（防抖已由 TaskStore 处理） */
 	notifyTasksUpdated: (tasks: GCTask[], filePath?: string) => void;
 	setTasks: (tasks: GCTask[]) => void;
+	setFileTasks: (fileTasks: FileTask[]) => void;
 	/** 设置/视图全量刷新：自增 settingsVersion，触发整体重挂载 */
 	bumpSettings: () => void;
 	/** 请求甘特图滚动（每次调用自增 seq，GanttView 订阅执行） */
@@ -129,6 +133,7 @@ export const useCalendarStore = create<CalendarStoreState>((set) => ({
 	viewType: 'year',
 	currentDate: new Date(),
 	tasks: [],
+	fileTasks: [],
 	tasksReady: false,
 	changedFilePath: undefined,
 	updateSeq: 0,
@@ -159,6 +164,7 @@ export const useCalendarStore = create<CalendarStoreState>((set) => ({
 			tasksReady: true,
 			viewFilters: pruneTagFilters(s.viewFilters, tasks),
 		})),
+	setFileTasks: (fileTasks) => set({ fileTasks }),
 	bumpSettings: () => set((s) => ({ settingsVersion: s.settingsVersion + 1 })),
 	requestGanttScroll: (action) =>
 		set((s) => ({ ganttScroll: { seq: (s.ganttScroll?.seq ?? 0) + 1, action } })),

@@ -8,6 +8,7 @@ import { DayViewSettingsBuilder } from './builders/DayViewSettingsBuilder';
 import { MonthViewSettingsBuilder } from './builders/MonthViewSettingsBuilder';
 import { YearViewSettingsBuilder } from './builders/YearViewSettingsBuilder';
 import { GanttViewSettingsBuilder } from './builders/GanttViewSettingsBuilder';
+import { FileTaskSettingsBuilder } from './builders/FileTaskSettingsBuilder';
 import { TaskSettingsBuilder } from './builders/TaskSettingsBuilder';
 import { TaskStatusSettingsBuilder } from './builders/TaskStatusSettingsBuilder';
 import { FestivalColorBuilder } from './builders/FestivalColorBuilder';
@@ -110,6 +111,7 @@ export class GanttCalendarSettingTab extends PluginSettingTab {
 	private renderTasksTab(el: HTMLElement, refresh: () => void): void {
 		new TaskSettingsBuilder(this.cfg(el, refresh)).render();
 		new TaskStatusSettingsBuilder(this.cfg(el, refresh)).render();
+		new FileTaskSettingsBuilder(this.cfg(el, refresh)).render();
 	}
 
 	// 子页 4: 同步

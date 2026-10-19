@@ -11,3 +11,4 @@ export * from './TaskSettingsBuilder';
 export * from './TaskStatusSettingsBuilder';
 export * from './FestivalColorBuilder';
 export * from './SyncSettingsBuilder';
+export * from './FileTaskSettingsBuilder';

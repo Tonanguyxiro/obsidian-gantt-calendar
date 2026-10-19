@@ -16,6 +16,7 @@ import { ThemeManager } from './src/managers/ThemeManager';
 import { ViewManager, activateSidebarView } from './src/managers/ViewManager';
 import { SyncManagerBridge } from './src/managers/SyncManagerBridge';
 import { DailyNoteIndex } from './src/utils/dailyNoteSettingsBridge';
+import { FileTaskIndex } from './src/fileTasks/FileTaskIndex';
 import { initModalHost, destroyModalHost } from './src/ui/modals/modalHost';
 import { useCalendarStore } from './src/ui/store/calendarStore';
 import { StatusBarPresenter } from './src/statusBar/statusBarPresenter';
@@ -33,6 +34,8 @@ export default class GanttCalendarPlugin extends Plugin {
 	/** 视图筛选写回防抖句柄，onunload 时冲刷 */
 	private viewFiltersSaveTimer: number | null = null;
 	dailyNoteIndex: DailyNoteIndex;
+	/** file-based task 索引（frontmatter 起止属性定义的笔记） */
+	fileTaskIndex: FileTaskIndex;
 
 	private settingsManager: SettingsManager;
 	private themeManager: ThemeManager;
@@ -81,6 +84,9 @@ export default class GanttCalendarPlugin extends Plugin {
 		this.dailyNoteIndex = new DailyNoteIndex(this.app);
 		this.dailyNoteIndex.initialize();
 
+		this.fileTaskIndex = new FileTaskIndex(this.app, () => this.settings);
+		this.app.workspace.onLayoutReady(() => this.fileTaskIndex.initialize());
+
 		this.viewManager = new ViewManager(this.app);
 
 		this.themeManager = new ThemeManager();
@@ -126,6 +132,7 @@ export default class GanttCalendarPlugin extends Plugin {
 		this.statusBarPresenter?.cancelScheduledUpdate();
 		this.syncManagerBridge?.destroy();
 		this.dailyNoteIndex?.destroy();
+		this.fileTaskIndex?.destroy();
 		this.themeManager?.destroy();
 		this.taskCache?.clear();
 		TooltipManager.reset();
@@ -138,6 +145,7 @@ export default class GanttCalendarPlugin extends Plugin {
 
 	async saveSettings(): Promise<void> {
 		await this.settingsManager.saveSettings(this.settings);
+		this.fileTaskIndex?.rebuild();
 		if (this.taskCache) {
 			await this.taskCache.updateSettings(
 				this.settings.globalTaskFilter,

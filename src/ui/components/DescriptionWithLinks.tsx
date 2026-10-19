@@ -5,6 +5,7 @@ import { RegularExpressions } from '../../utils/RegularExpressions';
 import { LinkClasses } from '../../utils/bem';
 import { i18n } from '../../i18n/i18n';
 import { openFileInExistingLeaf } from '../../utils/fileOpener';
+import { resolveLinkTarget, wikilinkDisplayText } from '../../utils/linkText';
 
 export interface LinkSegment {
 	type: 'obsidian' | 'markdown' | 'url';
@@ -58,7 +59,7 @@ export function parseDescriptionSegments(text: string): DescriptionSegment[] {
 
 		if (m.type === 'obsidian') {
 			const notePath = m.groups[1];
-			const displayText = m.groups[2] || notePath;
+			const displayText = wikilinkDisplayText(notePath, m.groups[2]);
 			segments.push({
 				type: 'obsidian',
 				text: displayText,
@@ -97,7 +98,7 @@ export function parseDescriptionSegments(text: string): DescriptionSegment[] {
 /**
  * React 富文本描述组件：渲染任务描述中的可点击链接
  */
-export function DescriptionWithLinks({ text, app }: { text: string; app: App }): JSX.Element {
+export function DescriptionWithLinks({ text, app, sourcePath = '' }: { text: string; app: App; sourcePath?: string }): JSX.Element {
 	const segments = useMemo(() => parseDescriptionSegments(text), [text]);
 
 	return (
@@ -118,7 +119,7 @@ export function DescriptionWithLinks({ text, app }: { text: string; app: App }):
 								e.preventDefault();
 								e.stopPropagation();
 								void (async () => {
-									const file = app.metadataCache.getFirstLinkpathDest(link.href, '');
+									const file = resolveLinkTarget(app, link.href, sourcePath);
 									if (file) {
 										await openFileInExistingLeaf(app, file.path, 0);
 									} else {

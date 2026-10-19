@@ -29,7 +29,7 @@ import { parseTaskLine } from './step1';
 import { passesGlobalFilter, removeGlobalFilter } from './step2';
 import { detectFormat } from './step3';
 import { parseCheckboxStatus, parseTaskAttributes } from './step4';
-import { extractTaskDescription, extractTags, extractTicktick, findMetadataValue } from './utils';
+import { extractTaskDescription, extractTags, extractTicktick, findMetadataValue, parsePlannerTime } from './utils';
 
 // ==================== 主解析函数 ====================
 
@@ -118,6 +118,12 @@ export function parseTasksFromListItems(
         const tags = extractTags(contentWithoutFilter);
         if (tags.length > 0) {
             task.tags = tags;
+        }
+
+        // Day Planner 时间前缀（仅在按计划日期定位时由视图层使用）
+        const plannerTime = parsePlannerTime(task.description);
+        if (plannerTime) {
+            task.plannerTime = plannerTime;
         }
 
         // 如果检测到有效格式，解析任务属性
@@ -316,6 +322,11 @@ export function parseSingleTaskLine(
     const tags = extractTags(contentWithoutFilter);
     if (tags.length > 0) {
         task.tags = tags;
+    }
+
+    const plannerTime = parsePlannerTime(task.description);
+    if (plannerTime) {
+        task.plannerTime = plannerTime;
     }
 
     if (format && enabledFormats.includes(format)) {

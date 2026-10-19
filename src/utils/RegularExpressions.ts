@@ -488,12 +488,16 @@ export class RegularExpressions {
          * 注意：正则中包含 \s* 以匹配标签后的空格
          * 这与现有的 removePriorityEmoji、removeTasksDate 保持一致
          *
+         * 与 Obsidian 标签语法对齐：# 前须为行首或空白（避免误删 [[Note#Heading]]、
+         * URL 片段 /#x 等），标签体允许任意字母/数字/emoji 与 _ - /，且至少含一个非数字字符
+         *
          * @example
          * "任务 #work #urgent" -> "任务  "
          * "#前端 开发任务" -> " 开发任务"
-         * "完成任务#tag" -> "完成任务"
+         * "跟进 #project-x 进度" -> "跟进  进度"
+         * "[[Note#Heading]]" -> 不匹配（双链标题锚点保留）
          */
-        removeTags: /#([a-zA-Z\u4e00-\u9fa5][a-zA-Z0-9_/\u4e00-\u9fa5]*)\s*/g,
+        removeTags: /(?<![^\s])#((?:[\p{L}\p{N}\p{M}\p{Extended_Pictographic}_/-])*[\p{L}\p{M}\p{Extended_Pictographic}_/-][\p{L}\p{N}\p{M}\p{Extended_Pictographic}_/-]*)\s*/gu,
 
         /**
          * 匹配标签（用于提取标签内容）
@@ -502,7 +506,7 @@ export class RegularExpressions {
          * @example
          * "任务 #work #urgent" -> 可以提取出 ["work", "urgent"]
          */
-        matchTags: /#([a-zA-Z\u4e00-\u9fa5][a-zA-Z0-9_/\u4e00-\u9fa5]*)/g,
+        matchTags: /(?<![^\s])#((?:[\p{L}\p{N}\p{M}\p{Extended_Pictographic}_/-])*[\p{L}\p{M}\p{Extended_Pictographic}_/-][\p{L}\p{N}\p{M}\p{Extended_Pictographic}_/-]*)/gu,
 
         /**
          * 提取 %%content%% ticktick 内容（非贪婪，支持多个块）
@@ -606,6 +610,44 @@ export class RegularExpressions {
      * "note.md" -> 匹配，替换后 "note"
      */
     public static readonly markdownFileExtensionRegex = /\.md$/;
+
+    // ==================== Day Planner 时间前缀 ====================
+
+    /**
+     * Day Planner 风格的任务时间前缀（位于任务文本最前）
+     * 捕获组 1/2 为开始时分，捕获组 3/4 为可选的结束时分
+     *
+     * @example
+     * "09:00 - 10:00 开会" -> 匹配，捕获 "09","00","10","00"
+     * "9:30 写周报" -> 匹配，捕获 "9","30"
+     * "会议 09:00" -> 不匹配（不在开头）
+     */
+    public static readonly DayPlanner = {
+        timePrefix: /^(\d{1,2}):(\d{2})(?:\s*[-–~]\s*(\d{1,2}):(\d{2}))?(?:\s+|$)/,
+    } as const;
+
+    // ==================== File-based task 属性 ====================
+
+    /**
+     * 文件属性（frontmatter）中的日期值
+     * 捕获组 1-3 为年月日，捕获组 4/5 为可选的时分
+     *
+     * @example
+     * "2026-06-18" -> 匹配
+     * "2026-06-18T09:30" / "2026-06-18 09:30" -> 匹配（带时刻）
+     */
+    public static readonly FileTask = {
+        dateValue: /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{1,2}):(\d{2}))?/,
+
+        /**
+         * 标签设置文本的分隔符（空白、英文/中文逗号）
+         * @example "project, #work，area/x" -> ["project", "#work", "area/x"]
+         */
+        tagListSeparator: /[\s,，]+/,
+
+        /** 标签开头的 # */
+        leadingHash: /^#/,
+    } as const;
 
     // ==================== 链接解析正则 ====================
 

@@ -2,6 +2,7 @@ import { Notice, type App } from 'obsidian';
 import { RegularExpressions } from './RegularExpressions';
 import { i18n } from '../i18n/i18n';
 import { openFileInExistingLeaf } from './fileOpener';
+import { resolveLinkTarget, wikilinkDisplayText } from './linkText';
 
 /**
  * 链接渲染工具类
@@ -19,7 +20,7 @@ export class LinkRenderer {
 	 * @param text - 要渲染的文本
 	 * @param app - Obsidian App 实例，用于打开文件链接
 	 */
-	static renderTaskDescriptionWithLinks(container: HTMLElement, text: string, app: App): void {
+	static renderTaskDescriptionWithLinks(container: HTMLElement, text: string, app: App, sourcePath = ''): void {
 		// 从统一正则入口获取链接正则表达式
 		const obsidianLinkRegex = RegularExpressions.Links.obsidianLinkRegex;
 		const markdownLinkRegex = RegularExpressions.Links.markdownLinkRegex;
@@ -70,7 +71,7 @@ export class LinkRenderer {
 			// 添加链接
 			if (m.type === 'obsidian') {
 				const notePath = m.groups[1]; // [[note]] 中的 note
-				const displayText = m.groups[2] || notePath; // 优先使用别名
+				const displayText = wikilinkDisplayText(notePath, m.groups[2]); // 别名优先，#标题显示为 "Note > 标题"
 				const link = container.createEl('a', { text: displayText, cls: 'gc-link gc-link--obsidian' });
 				link.setAttr('data-href', notePath);
 				link.setAttr('title', `打开：${notePath}`);
@@ -79,7 +80,7 @@ export class LinkRenderer {
 					e.preventDefault();
 					e.stopPropagation();
 					void (async () => {
-						const file = app.metadataCache.getFirstLinkpathDest(notePath, '');
+						const file = resolveLinkTarget(app, notePath, sourcePath);
 						if (file) {
 							await openFileInExistingLeaf(app, file.path, 0);
 						} else {

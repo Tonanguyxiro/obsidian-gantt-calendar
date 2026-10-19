@@ -3,6 +3,7 @@ import type { GCTask } from '../../../types';
 import type { TimeBlock } from './timelineModel';
 import { pxToMinutes, snapMinutes } from './timelineModel';
 import { setCssProps } from '../../../utils/bem';
+import { linksToPlainText, taskDisplayText } from '../../../utils/linkText';
 
 /**
  * 时间画布的触屏整块拖动（HTML5 DnD 在触屏不可用的替代）：
@@ -131,7 +132,7 @@ export function useCanvasTouchDrag(deps: CanvasTouchDragDeps) {
 			setCssProps(blockEl, { opacity: '0.35' });
 			// 悬浮标签：跟随指针的任务名条
 			const chip = createDiv();
-			chip.textContent = block.task.description || '';
+			chip.textContent = linksToPlainText(taskDisplayText(block.task.description || ''));
 			chip.className = 'gc-canvas-drag-chip';
 			chip.style.left = `${press.x}px`;
 			chip.style.top = `${press.y - 28}px`;

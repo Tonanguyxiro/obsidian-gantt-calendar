@@ -25,6 +25,7 @@ import {
 	registerTooltipHolder,
 	claimExclusiveTooltip,
 } from '../../components/tooltip/tooltipCoordinator';
+import { linksToPlainText } from '../../utils/linkText';
 
 interface TooltipState {
 	task: GCTask;
@@ -149,7 +150,7 @@ function TooltipContent({ state, onClose }: { state: TooltipState; onClose: () =
 			transition={easeOutTransition(MOTION.dur.fast)}
 		>
 			<div className={TooltipClasses.elements.description}>
-				<strong>{task.description || ''}</strong>
+				<strong>{linksToPlainText(task.description || '')}</strong>
 			</div>
 			<div className={TooltipClasses.elements.properties}>
 				{sections.map((section: TooltipSection, idx: number) => (

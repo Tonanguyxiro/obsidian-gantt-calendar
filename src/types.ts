@@ -136,6 +136,49 @@ export interface GCTask {
 	// 飞书同步字段
 	feishuGuid?: string;           // 飞书任务 GUID（存储在 %%[guid:: xxx]%% 中）
 	feishuDesc?: string;           // 飞书任务描述（存储在 %%[desc:: xxx]%% 中）
+	/** Day Planner 风格的文本前缀时间（"09:00 - 10:00 任务"），分钟偏移；仅在按计划日期定位时生效 */
+	plannerTime?: PlannerTime;
+	/** 视图层代理：仅有计划日期的任务被映射到视图起止字段（写回时由 updateTaskProperties 还原） */
+	scheduledProxy?: ScheduledProxyInfo;
+	/** 视图层占位：该"任务"实为一个 file-based task（文件属性定义起止），不可按任务行写回 */
+	fileTask?: FileTask;
+}
+
+/** Day Planner 时间前缀（相对当日 00:00 的分钟偏移） */
+export interface PlannerTime {
+	startMin: number;
+	endMin?: number;
+}
+
+/** 计划日期回退代理信息 */
+export interface ScheduledProxyInfo {
+	/** 被代理的原始任务（写回、编辑、右键命令都基于它） */
+	source: GCTask;
+	startField: DateFieldType;
+	endField: DateFieldType;
+	dateField: DateFieldType;
+}
+
+/** File-based task 的项目（通常是 folder note 的双链） */
+export interface FileTaskProject {
+	/** 分组键：双链解析后的目标路径，或原始文本 */
+	key: string;
+	/** 显示文本：别名 > 目标文件名 > 原始文本 */
+	label: string;
+	/** 双链指向的文件路径（可点击打开），纯文本项目无 */
+	linkPath?: string;
+}
+
+/** File-based task：一个以 frontmatter 起止属性定义时间范围的笔记 */
+export interface FileTask {
+	filePath: string;
+	/** 显示标题（文件名） */
+	title: string;
+	start: Date;
+	end: Date;
+	project?: FileTaskProject;
+	/** 日期来源：frontmatter 属性 / 文件内任务推导 / 两者混合（一端来自属性、另一端来自任务） */
+	dateSource: 'frontmatter' | 'tasks' | 'mixed';
 }
 
 /**

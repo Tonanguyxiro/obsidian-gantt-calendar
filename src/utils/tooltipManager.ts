@@ -10,6 +10,7 @@ import {
 	registerTooltipHolder,
 	claimExclusiveTooltip,
 } from '../components/tooltip/tooltipCoordinator';
+import { linksToPlainText } from './linkText';
 
 interface TooltipConfig {
 	showDelay?: number;
@@ -140,7 +141,7 @@ export class TooltipManager {
 		// === 描述 ===
 		this.cachedElements.description.empty();
 		const strongEl = this.cachedElements.description.createEl('strong');
-		strongEl.setText(task.description || '');
+		strongEl.setText(linksToPlainText(task.description || ''));
 
 		const sections = buildTooltipSections(task);
 

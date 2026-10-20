@@ -11,6 +11,7 @@ import { isPhoneNow, useIsNarrow } from '../utils/platform';
 import { applyStatusFilter, applyTagFilter, applySort } from '../utils/taskFilters';
 import { CalendarItemCard, FileTaskLayerProvider } from '../components/FileTaskCard';
 import { useFileTaskLayer } from '../utils/useFileTaskLayer';
+import { useIcsLayer } from '../utils/useIcsLayer';
 import { useAdvancedFilters } from '../utils/useAdvancedFilters';
 import { Icon } from '../components/Icon';
 import { useDropTarget } from '../utils/useDragAndDrop';
@@ -80,6 +81,7 @@ export function DayView(): JSX.Element {
 		applySort(advanced.filterTasks(applyTagFilter(applyStatusFilter(tasks, filter.status), filter.tag)), filter.sort)
 	), [tasks, filter, advanced]);
 	// file-based task 图层：覆盖当日的文件进全天区；归类时文件内任务收进悬浮卡片，定时任务仍留在时间轴
+	const mergeIcs = useIcsLayer(startField, endField, dateField);
 	const fileLayer = useFileTaskLayer('day', scoped, startField, endField, dateField);
 	const model = useMemo(() => {
 		const virtualInstances = generateVirtualInstances(
@@ -91,10 +93,10 @@ export function DayView(): JSX.Element {
 		);
 		const combined = sortTasks([...scoped, ...virtualInstances], filter.sort).filter((t) => !t.cancelled);
 		return buildDayTimelineModel(
-			fileLayer.merge(combined, (t) => isOnTimeAxis(t, startField, endField, dateField)),
+			mergeIcs(fileLayer.merge(combined, (t) => isOnTimeAxis(t, startField, endField, dateField))),
 			normalized, startField, endField, dateField,
 		);
-	}, [scoped, fileLayer, filter.sort, normalized, dateField, startField, endField, plugin.settings.recurringTaskDisplayLimit]);
+	}, [scoped, fileLayer, mergeIcs, filter.sort, normalized, dateField, startField, endField, plugin.settings.recurringTaskDisplayLimit]);
 
 	// 任务全集（拖放源查找）
 	const dragLookupTasks = useMemo(() => tasks.filter((t) => !t.cancelled), [tasks]);

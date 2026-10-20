@@ -13,6 +13,7 @@ import { TaskSettingsBuilder } from './builders/TaskSettingsBuilder';
 import { TaskStatusSettingsBuilder } from './builders/TaskStatusSettingsBuilder';
 import { FestivalColorBuilder } from './builders/FestivalColorBuilder';
 import { SyncSettingsBuilder } from './builders/SyncSettingsBuilder';
+import { IcsSettingsBuilder } from './builders/IcsSettingsBuilder';
 import type { BuilderConfig } from './types';
 import { i18n } from '../i18n/i18n';
 
@@ -41,8 +42,8 @@ class BuilderTabSettingPage extends SettingPage {
 /**
  * Gantt Calendar 插件设置页
  *
- * Obsidian 1.13+ 声明式设置：五个 Tab（通用 | 日历 | 视图 | 任务 | 同步）
- * 建模为五个可导航子页，使设置页可被 Obsidian 全局设置搜索索引。
+ * Obsidian 1.13+ 声明式设置：六个 Tab（通用 | 日历 | 视图 | 任务 | 同步 | ICS）
+ * 建模为六个可导航子页，使设置页可被 Obsidian 全局设置搜索索引。
  * 每个 Tab 内使用构建器模式组织设置区域。
  */
 export class GanttCalendarSettingTab extends PluginSettingTab {
@@ -57,7 +58,7 @@ export class GanttCalendarSettingTab extends PluginSettingTab {
 
 	/**
 	 * 声明式设置入口：返回非空定义后框架使用声明式渲染，
-	 * 生成五个可导航子页（设置搜索索引的数据来源）。
+	 * 生成六个可导航子页（设置搜索索引的数据来源）。
 	 */
 	override getSettingDefinitions(): SettingDefinitionItem[] {
 		const page = (
@@ -79,6 +80,7 @@ export class GanttCalendarSettingTab extends PluginSettingTab {
 			page('settings.tabs.views', 'settings.tabs.viewsDesc', (el, refresh) => this.renderViewsTab(el, refresh)),
 			page('settings.tabs.tasks', 'settings.tabs.tasksDesc', (el, refresh) => this.renderTasksTab(el, refresh)),
 			page('settings.tabs.sync', 'settings.tabs.syncDesc', (el, refresh) => this.renderSyncTab(el, refresh)),
+			page('settings.tabs.ics', 'settings.tabs.icsDesc', (el, refresh) => this.renderIcsTab(el, refresh)),
 		];
 	}
 
@@ -114,8 +116,13 @@ export class GanttCalendarSettingTab extends PluginSettingTab {
 		new FileTaskSettingsBuilder(this.cfg(el, refresh)).render();
 	}
 
-	// 子页 4: 同步
+	// 子页 4: 同步（飞书）
 	private renderSyncTab(el: HTMLElement, refresh: () => void): void {
 		new SyncSettingsBuilder(this.cfg(el, refresh)).render();
+	}
+
+	// 子页 5: ICS 日历订阅
+	private renderIcsTab(el: HTMLElement, refresh: () => void): void {
+		new IcsSettingsBuilder(this.cfg(el, refresh)).render();
 	}
 }

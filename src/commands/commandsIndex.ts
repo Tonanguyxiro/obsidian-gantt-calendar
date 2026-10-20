@@ -7,6 +7,7 @@ import type GanttCalendarPlugin from '../../main';
 import { registerCommonCommands } from './common';
 import { registerConditionalCommands } from './conditional';
 import { registerFeishuCommands } from './feishuCommands';
+import { registerIcsCommands } from './icsCommands';
 
 /**
  * 注册所有命令
@@ -16,4 +17,5 @@ export function registerAllCommands(plugin: GanttCalendarPlugin): void {
 	registerCommonCommands(plugin);
 	registerConditionalCommands(plugin);
 	registerFeishuCommands(plugin);
+	registerIcsCommands(plugin);
 }

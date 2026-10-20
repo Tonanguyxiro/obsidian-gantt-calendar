@@ -142,6 +142,17 @@ export interface GCTask {
 	scheduledProxy?: ScheduledProxyInfo;
 	/** 视图层占位：该"任务"实为一个 file-based task（文件属性定义起止），不可按任务行写回 */
 	fileTask?: FileTask;
+	/** 视图层占位：ICS 订阅事件（只读，内存态，不对应任何任务行） */
+	icsEvent?: IcsEventInfo;
+}
+
+/** ICS 事件占位任务的附加信息 */
+export interface IcsEventInfo {
+	calendarId: string;
+	calendarName: string;
+	color: string;
+	location: string;
+	allDay: boolean;
 }
 
 /** Day Planner 时间前缀（相对当日 00:00 的分钟偏移） */

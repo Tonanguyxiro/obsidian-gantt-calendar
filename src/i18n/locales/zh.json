@@ -137,12 +137,14 @@
       "calendar": "日历",
       "views": "视图",
       "tasks": "任务",
-      "sync": "同步",
+      "sync": "飞书同步",
       "generalDesc": "语言、默认视图、时间格式、任务卡片点击行为与开发者模式",
       "calendarDesc": "Daily Notes、日历视图、农历节日显示与节日颜色",
       "viewsDesc": "日/周/月/年视图、甘特图与任务卡片显示",
       "tasksDesc": "任务解析与全局过滤、创建默认值、任务状态",
-      "syncDesc": "飞书任务同步与推送过滤"
+      "syncDesc": "飞书任务同步与推送过滤",
+      "ics": "ICS 订阅",
+      "icsDesc": "订阅只读的 ICS 日历"
     },
     "general": {
       "groupTitle": "通用",
@@ -875,6 +877,35 @@
         "show": "显示 file-based 任务",
         "groupTasks": "按文件归类任务"
       }
+    },
+    "ics": {
+      "groupTitle": "ICS 日历订阅",
+      "description": "订阅只读的 ICS 日历（Google、Apple、Outlook、飞书等）。事件只保存在内存中，以各订阅的颜色显示在日、周、月视图里，不会写入任何笔记。",
+      "subscription": "订阅 {{index}}",
+      "namePlaceholder": "名称",
+      "enabled": "启用",
+      "remove": "删除",
+      "add": {
+        "name": "添加订阅",
+        "button": "添加"
+      },
+      "interval": {
+        "name": "自动同步",
+        "description": "后台刷新订阅的间隔。",
+        "off": "关闭",
+        "minutes": "每 {{minutes}} 分钟"
+      },
+      "syncNow": {
+        "name": "立即同步",
+        "description": "拉取所有已启用的订阅（过去 30 天至未来 365 天）。",
+        "button": "立即同步"
+      },
+      "noSubscriptions": "没有已启用且填写了地址的 ICS 订阅。",
+      "syncDone": "ICS 同步完成：{{count}} 个事件",
+      "notIcs": "返回内容不是 ICS 日历",
+      "untitled": "（无标题事件）",
+      "usingCache": "显示上次成功拉取的内容",
+      "syncFailed": "ICS 同步失败："
     }
   },
   "modals": {
@@ -1357,7 +1388,8 @@
       "syncComplete": "同步完成: {{summary}}",
       "syncError": "同步出错: {{error}}",
       "feishuSyncComplete": "飞书同步完成: {{summary}}"
-    }
+    },
+    "icsSync": "ICS 日历订阅同步"
   },
   "views": {
     "yearView": {

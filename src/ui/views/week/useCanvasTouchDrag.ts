@@ -110,6 +110,7 @@ export function useCanvasTouchDrag(deps: CanvasTouchDragDeps) {
 	 */
 	const beginBlockTouchPress = useCallback((e: ReactPointerEvent, block: TimeBlock, blockEl: HTMLElement): void => {
 		if (e.pointerType === 'mouse') return; // 桌面走 HTML5 拖拽/右键
+		if (block.task.icsEvent) return; // ICS 订阅事件只读，不可拖动
 		cleanup(); // 防御：上一按压未收尾
 		const rect = blockEl.getBoundingClientRect();
 		const press: PressState = {

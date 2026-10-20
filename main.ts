@@ -14,6 +14,7 @@ import { refreshPresetStatusNames } from './src/tasks/taskStatus';
 import { SettingsManager } from './src/managers/SettingsManager';
 import { ThemeManager } from './src/managers/ThemeManager';
 import { ViewManager, activateSidebarView } from './src/managers/ViewManager';
+import { IcsService } from './src/data-layer/ics/IcsService';
 import { SyncManagerBridge } from './src/managers/SyncManagerBridge';
 import { DailyNoteIndex } from './src/utils/dailyNoteSettingsBridge';
 import { FileTaskIndex } from './src/fileTasks/FileTaskIndex';
@@ -41,6 +42,7 @@ export default class GanttCalendarPlugin extends Plugin {
 	private themeManager: ThemeManager;
 	private viewManager: ViewManager;
 	private syncManagerBridge: SyncManagerBridge;
+	icsService: IcsService;
 
 	// 状态栏：独立的图标和文字元素，互不覆盖
 	private statusBarItemEl: HTMLElement;
@@ -104,6 +106,9 @@ export default class GanttCalendarPlugin extends Plugin {
 		this.syncManagerBridge = new SyncManagerBridge(this);
 		this.syncManagerBridge.initialize(this.settings.syncConfiguration);
 
+		this.icsService = new IcsService(this);
+		this.app.workspace.onLayoutReady(() => this.icsService.applyConfig());
+
 		// 全局 React Modal 宿主（设置面板等非 React 环境也需打开 React 模态框）
 		initModalHost();
 
@@ -131,6 +136,7 @@ export default class GanttCalendarPlugin extends Plugin {
 		}
 		this.statusBarPresenter?.cancelScheduledUpdate();
 		this.syncManagerBridge?.destroy();
+		this.icsService?.destroy();
 		this.dailyNoteIndex?.destroy();
 		this.fileTaskIndex?.destroy();
 		this.themeManager?.destroy();
@@ -155,6 +161,7 @@ export default class GanttCalendarPlugin extends Plugin {
 		if (this.syncManagerBridge) {
 			await this.syncManagerBridge.updateConfiguration(this.settings.syncConfiguration);
 		}
+		this.icsService?.applyConfig();
 	}
 
 	async activateView(): Promise<void> {

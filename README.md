@@ -32,6 +32,8 @@ A powerful visual task management plugin for Obsidian.
 
 **Feishu Sync** — Bidirectional task sync with Feishu (Lark) via OAuth 2.0
 
+**ICS Calendar Subscriptions** — Subscribe to read-only Outlook / Google / Apple calendars; events show in the Day / Week / Month views and the sidebar in each subscription's color
+
 </div>
 
 ---
@@ -139,6 +141,7 @@ Use the **view switcher** on the left of the toolbar to move between the six vie
 | `Gantt Calendar: Open Task View` | Opens the main view, switched to **Task** |
 | `Gantt Calendar: Open Sidebar` | Opens the right-sidebar view |
 | `Gantt Calendar: Feishu Task Bidirectional Sync` | Runs one Feishu sync immediately |
+| `Gantt Calendar: ICS Calendar Subscription Sync` | Re-fetches all ICS subscriptions immediately |
 
 All commands are available in the command palette and can be bound to hotkeys.
 
@@ -424,6 +427,16 @@ Use **Test sync** to push/pull only the 5 tasks with the nearest due dates — a
 
 ---
 
+### ICS Calendar Subscriptions
+
+- **Read-only, in-memory** — events are never written to your notes; timed events go on the timeline, all-day / multi-day events become bars, and each subscription has its own color
+- **Supported** — `https://` or `webcal://` URLs, recurring events (daily / weekly / monthly / yearly with `COUNT` / `UNTIL` / `EXDATE` / rescheduled instances), and time zones (including Outlook's Windows zone names)
+- **Failure fallback** — if a subscription fails to fetch, its last successful data keeps showing and a notice is displayed
+- **Where** — Settings → **ICS**: add subscriptions, auto-sync interval (off / 15 min to 24 h), sync now
+- **Scope & limits** — imports the past 30 days to the next 365 days; not shown in the Gantt chart or task list; "nth weekday of the month" rules are not supported
+
+> 🔒 A private subscription link is effectively read access to your calendar — don't share it or commit it to a repository.
+
 ## Settings Reference
 
 Settings live under **Settings → Gantt Calendar**, organised into five tabs.
@@ -475,6 +488,8 @@ Settings live under **Settings → Gantt Calendar**, organised into five tabs.
 ### Sync
 
 See [Setting up Feishu sync](#feishu-lark-sync) above. Key items: task list selection, target file for pulled tasks (default `gantt-calendar-feishu-sync.md`), sync direction, conflict resolution, auto-sync interval, and push filters (paths / completion status / date).
+
+ICS subscriptions live on the **ICS** settings page; see [ICS Calendar Subscriptions](#ics-calendar-subscriptions) above.
 
 ---
 

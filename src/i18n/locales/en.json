@@ -137,12 +137,14 @@
       "calendar": "Calendar",
       "views": "Views",
       "tasks": "Tasks",
-      "sync": "Sync",
+      "sync": "Feishu Sync",
       "generalDesc": "Language, default view, time format, task card click action, developer mode",
       "calendarDesc": "Daily Notes, calendar view, lunar & festivals, festival colors",
       "viewsDesc": "Day/week/month/year views, Gantt chart, task card display",
       "tasksDesc": "Task parsing & global filter, creation defaults, task statuses",
-      "syncDesc": "Feishu task sync and push filters"
+      "syncDesc": "Feishu task sync and push filters",
+      "ics": "ICS",
+      "icsDesc": "Subscribe to read-only ICS calendars"
     },
     "general": {
       "groupTitle": "General",
@@ -875,6 +877,35 @@
         "show": "Show file-based tasks",
         "groupTasks": "Group tasks by file"
       }
+    },
+    "ics": {
+      "groupTitle": "ICS Calendar Subscription",
+      "description": "Subscribe to read-only ICS calendars (Google, Apple, Outlook, Feishu, …). Events are kept in memory only and shown in the Day, Week and Month views in each subscription's color; nothing is written to your notes.",
+      "subscription": "Subscription {{index}}",
+      "namePlaceholder": "Name",
+      "enabled": "Enabled",
+      "remove": "Remove",
+      "add": {
+        "name": "Add subscription",
+        "button": "Add"
+      },
+      "interval": {
+        "name": "Auto sync",
+        "description": "How often to refresh subscriptions in the background.",
+        "off": "Off",
+        "minutes": "Every {{minutes}} min"
+      },
+      "syncNow": {
+        "name": "Sync now",
+        "description": "Fetch all enabled subscriptions now (past 30 days to next 365 days).",
+        "button": "Sync now"
+      },
+      "noSubscriptions": "No enabled ICS subscriptions with a URL.",
+      "syncDone": "ICS sync complete: {{count}} events",
+      "notIcs": "Response is not an ICS calendar",
+      "untitled": "(Untitled event)",
+      "usingCache": "showing last successful data",
+      "syncFailed": "ICS sync failed:"
     }
   },
   "modals": {
@@ -1357,7 +1388,8 @@
       "syncComplete": "Sync complete: {{summary}}",
       "syncError": "Sync error: {{error}}",
       "feishuSyncComplete": "Feishu sync complete: {{summary}}"
-    }
+    },
+    "icsSync": "ICS Calendar Subscription Sync"
   },
   "views": {
     "yearView": {

@@ -1,0 +1,44 @@
+/* ICS 订阅事件卡片（只读）：颜色由订阅设置经 --gc-ics-color 传入 */
+.gc-ics-event {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	height: var(--gc-tl-card-h);
+	min-width: 0;
+	padding: 2px 6px;
+	border-radius: var(--gc-radius-xs);
+	border-left: 2px solid var(--gc-ics-color);
+	background-color: color-mix(in srgb, var(--gc-ics-color) 16%, var(--background-primary));
+	color: var(--text-normal);
+	font-size: var(--gc-font-xs);
+	user-select: none;
+	overflow: hidden;
+}
+
+/* 时间块 / 横跨条里撑满容器 */
+.gc-week-view__time-block .gc-ics-event,
+.gc-day-canvas__block .gc-ics-event,
+.gc-week-view__allday-bar .gc-ics-event,
+.gc-month-view__span-bar .gc-ics-event {
+	height: 100%;
+}
+
+.gc-week-view__time-block .gc-ics-event,
+.gc-day-canvas__block .gc-ics-event {
+	align-items: flex-start;
+}
+
+.gc-ics-event__title {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.gc-ics-event__location {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--text-muted);
+}

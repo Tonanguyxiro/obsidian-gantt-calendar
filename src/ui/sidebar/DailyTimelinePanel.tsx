@@ -16,7 +16,8 @@ import { usePlugin, useApp } from '../pluginContext';
 import { useCalendarStore } from '../store/calendarStore';
 import { useDropTarget } from '../utils/useDragAndDrop';
 import { Icon } from '../components/Icon';
-import { TaskCard } from '../components/TaskCard';
+import { CalendarItemCard } from '../components/FileTaskCard';
+import { useIcsLayer } from '../utils/useIcsLayer';
 import { useViewTasks } from '../utils/useViewTasks';
 
 /** dataTransfer.taskId（filePath:lineNumber）→ 任务查找 */
@@ -84,10 +85,12 @@ export function DailyTimelinePanel(): JSX.Element {
 	const tasks = useViewTasks(startField, endField, dateField);
 	const enabledFormats = plugin.settings.enabledTaskFormats || [];
 
+	const mergeIcs = useIcsLayer(startField, endField, dateField);
 	const candidates = useMemo(() => tasks.filter((t) => !t.cancelled), [tasks]);
+	// ICS 事件只读，不进入 candidates（全天区拖放按 candidates 查找并写回任务）
 	const model = useMemo(() => (
-		buildDayTimelineModel(candidates, day, startField, endField, dateField)
-	), [candidates, day, startField, endField, dateField]);
+		buildDayTimelineModel(mergeIcs(candidates), day, startField, endField, dateField)
+	), [candidates, mergeIcs, day, startField, endField, dateField]);
 
 	// ===== 日期导航 =====
 	const goPrevDay = useCallback(() => setPickedDate(shiftDay(day, -1)), [day]);
@@ -184,7 +187,7 @@ export function DailyTimelinePanel(): JSX.Element {
 				<div className={SidebarClasses.elements.timelineAllDayTasks}>
 					{model.allday.map(({ task, timeLabel }) => (
 						<div key={`${task.filePath}:${task.lineNumber}`} className={SidebarClasses.elements.timelineAllDayItem}>
-							<TaskCard task={task} config={timelineConfig} />
+							<CalendarItemCard task={task} config={timelineConfig} />
 							{timeLabel ? (
 								<span className={SidebarClasses.elements.timelineAllDayTime}>{timeLabel}</span>
 							) : null}

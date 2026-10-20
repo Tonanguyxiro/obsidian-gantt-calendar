@@ -10,6 +10,7 @@ import { generateVirtualInstances } from '../../tasks/virtualTaskGenerator';
 import { i18n } from '../../i18n/i18n';
 import { buildWeekTimelineModel, isOnTimeAxis } from './week/timelineModel';
 import { useFileTaskLayer } from '../utils/useFileTaskLayer';
+import { useIcsLayer } from '../utils/useIcsLayer';
 import { useAdvancedFilters } from '../utils/useAdvancedFilters';
 import { FileTaskLayerProvider } from '../components/FileTaskCard';
 import { WeekTimelineGrid } from './week/WeekTimelineGrid';
@@ -80,15 +81,16 @@ export function WeekView(): JSX.Element {
 	), [scoped, virtualInstances, filter.sort]);
 
 	// file-based task 图层：文件横跨条进全天行；归类时文件内任务收进悬浮卡片，定时任务仍留在时间轴
+	const mergeIcs = useIcsLayer(ganttStartField, ganttEndField, dateField);
 	const fileLayer = useFileTaskLayer('week', scoped, ganttStartField, ganttEndField, dateField);
 
 	// 连续画布模型：时间块分段 + lane 布局 + 全天横跨条
 	const model = useMemo(() => (
 		buildWeekTimelineModel(
-			fileLayer.merge(combined, (t) => isOnTimeAxis(t, ganttStartField, ganttEndField, dateField)),
+			mergeIcs(fileLayer.merge(combined, (t) => isOnTimeAxis(t, ganttStartField, ganttEndField, dateField))),
 			weekStart, ganttStartField, ganttEndField, dateField,
 		)
-	), [combined, fileLayer, weekStart, ganttStartField, ganttEndField, dateField]);
+	), [combined, fileLayer, mergeIcs, weekStart, ganttStartField, ganttEndField, dateField]);
 
 	const handleRefresh = useCallback(() => refreshTasks(), [refreshTasks]);
 

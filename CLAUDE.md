@@ -49,7 +49,8 @@ TaskStore（门面，供视图使用）
 - `src/data-layer/sources/api/providers/feishu/` — 完整飞书 API 客户端（OAuth、Task、User API）
 - `src/data-layer/sync/SyncManager.ts` — 多源同步编排（拉取→匹配→冲突检测→解决→本地应用→推送 共 6 阶段）
 - `src/data-layer/sources/caldav/` — Google/Apple/Outlook CalDAV 提供者基础设施
-- 同步配置位于 `plugin.syncConfiguration`，飞书状态持久化于 `.feishu-sync-state.json`
+- `src/data-layer/ics/` — ICS 订阅（参考 Day Planner）：`IcsService` 拉取并解析（`icsParser`），事件只存内存（`calendarStore.icsEvents`），经 `useIcsLayer` 转为只读占位任务（`GCTask.icsEvent`，`IcsEventCard` 渲染）合入日/周/月视图；不写 markdown，拉取失败沿用上次成功内容
+- 同步配置位于 `plugin.syncConfiguration`，飞书状态持久化于 `.feishu-sync-state.json`；ICS 配置在 `syncConfiguration.ics`
 
 ### 甘特图
 

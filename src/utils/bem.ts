@@ -101,6 +101,7 @@ export const BLOCKS = {
 	CONTEXT_MENU: 'context-menu',
 	/** File-based task 卡片与悬浮展开卡片 */
 	FILE_TASK: 'file-task',
+	ICS_EVENT: 'ics-event',
 } as const;
 
 /**
@@ -141,6 +142,17 @@ export const FileTaskClasses = {
 	},
 	modifiers: {
 		open: bem(BLOCKS.FILE_TASK, undefined, 'open'),
+	},
+};
+
+/**
+ * ICS 订阅事件卡片类名常量（只读）
+ */
+export const IcsEventClasses = {
+	block: bem(BLOCKS.ICS_EVENT),
+	elements: {
+		title: bem(BLOCKS.ICS_EVENT, 'title'),
+		location: bem(BLOCKS.ICS_EVENT, 'location'),
 	},
 };
 

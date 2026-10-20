@@ -1,3 +1,4 @@
+import type { IcsCalendarEvent } from '../../data-layer/ics/icsTask';
 import { create } from 'zustand';
 import type {
 	CalendarViewType,
@@ -38,6 +39,8 @@ interface CalendarStoreState {
 	tasks: GCTask[];
 	/** File-based task 全集（FileTaskIndex 推送；功能关闭时为空） */
 	fileTasks: FileTask[];
+	/** ICS 订阅事件（IcsService 推入；只读，仅内存） */
+	icsEvents: IcsCalendarEvent[];
 	/** 首扫是否已推入任务（whenReady 或事件回流任一路径）；false 时视图渲染骨架 */
 	tasksReady: boolean;
 	changedFilePath?: string;
@@ -57,6 +60,7 @@ interface CalendarStoreState {
 	notifyTasksUpdated: (tasks: GCTask[], filePath?: string) => void;
 	setTasks: (tasks: GCTask[]) => void;
 	setFileTasks: (fileTasks: FileTask[]) => void;
+	setIcsEvents: (events: IcsCalendarEvent[]) => void;
 	/** 设置/视图全量刷新：自增 settingsVersion，触发整体重挂载 */
 	bumpSettings: () => void;
 	/** 请求甘特图滚动（每次调用自增 seq，GanttView 订阅执行） */
@@ -147,6 +151,7 @@ export const useCalendarStore = create<CalendarStoreState>((set) => ({
 	currentDate: new Date(),
 	tasks: [],
 	fileTasks: [],
+	icsEvents: [],
 	tasksReady: false,
 	changedFilePath: undefined,
 	updateSeq: 0,
@@ -178,6 +183,7 @@ export const useCalendarStore = create<CalendarStoreState>((set) => ({
 			viewFilters: pruneTagFilters(s.viewFilters, tasks),
 		})),
 	setFileTasks: (fileTasks) => set({ fileTasks }),
+	setIcsEvents: (icsEvents) => set({ icsEvents }),
 	bumpSettings: () => set((s) => ({ settingsVersion: s.settingsVersion + 1 })),
 	requestGanttScroll: (action) =>
 		set((s) => ({ ganttScroll: { seq: (s.ganttScroll?.seq ?? 0) + 1, action } })),

@@ -6,7 +6,7 @@ import type { DateFieldType } from '../../../settings/types';
 import type { TaskCardConfig } from '../../../components/TaskCard/TaskCardConfig';
 import { DayCanvasClasses, ContextMenuClasses, setCssProps } from '../../../utils/bem';
 import { usePlugin, useApp } from '../../pluginContext';
-import { TaskCard } from '../../components/TaskCard';
+import { CalendarItemCard } from '../../components/FileTaskCard';
 import { Icon } from '../../components/Icon';
 import { updateTaskProperties } from '../../../tasks/taskUpdater';
 import type { TaskUpdates } from '../../../tasks/taskSerializer';
@@ -458,7 +458,7 @@ export function DayTimelineCanvas({ day, model, config, tasks, refresh }: DayTim
 			>
 				{model.blocks.map(({ block, seg }) => {
 					const durationMin = seg.endMin - seg.startMin;
-					const resizable = !isVirtualTask(block.task);
+					const resizable = !isVirtualTask(block.task) && !block.task.icsEvent;
 					const cls = [
 						DayCanvasClasses.elements.block,
 						seg.continuesBefore ? DayCanvasClasses.modifiers.blockContinuesBefore : '',
@@ -495,7 +495,7 @@ export function DayTimelineCanvas({ day, model, config, tasks, refresh }: DayTim
 									{`${formatMinutes(seg.startMin)} – ${formatMinutes(seg.endMin)}`}
 								</span>
 							) : null}
-							<TaskCard task={block.task} config={config} disableLongPressMenu />
+							<CalendarItemCard task={block.task} config={config} disableLongPressMenu />
 							{!seg.continuesBefore && resizable ? (
 								<div
 									className={`${DayCanvasClasses.elements.handle} ${DayCanvasClasses.modifiers.handleTop}`}

@@ -22,6 +22,7 @@ import { Logger } from '../../utils/logger';
 import type { DateFieldType } from '../../settings/types';
 import { useViewTasks } from '../utils/useViewTasks';
 import { useFileTaskLayer } from '../utils/useFileTaskLayer';
+import { useIcsLayer } from '../utils/useIcsLayer';
 import { useAdvancedFilters } from '../utils/useAdvancedFilters';
 import { CalendarItemCard, FileTaskLayerProvider } from '../components/FileTaskCard';
 
@@ -129,14 +130,15 @@ export function MonthView(): JSX.Element {
 	}, [scoped, monthData, dateField, plugin.settings.recurringTaskDisplayLimit]);
 
 	// file-based task 图层：文件横跨条；归类时文件内任务全部收进悬浮卡片（月视图无时间轴）
+	const mergeIcs = useIcsLayer(startField, endField, dateField);
 	const fileLayer = useFileTaskLayer('month', scoped, startField, endField, dateField);
 
 	// 月视图时间线模型：跨日横跨条 + 格内任务（锚日语义），渲染时再混排进统一 lane
 	const monthModel = useMemo(() => {
 		if (!monthData) return [];
-		const combined = fileLayer.merge(sortTasks([...scoped, ...virtualInstances], filter.sort).filter((t) => !t.cancelled));
+		const combined = mergeIcs(fileLayer.merge(sortTasks([...scoped, ...virtualInstances], filter.sort).filter((t) => !t.cancelled)));
 		return buildMonthTimelineModel(combined, monthData.weeks, startField, endField, dateField);
-	}, [scoped, virtualInstances, fileLayer, monthData, filter.sort, startField, endField, dateField]);
+	}, [scoped, virtualInstances, fileLayer, mergeIcs, monthData, filter.sort, startField, endField, dateField]);
 
 	// 任务全集（拖放源查找）
 	const dragLookupTasks = useMemo(() => tasks.filter((t) => !t.cancelled), [tasks]);

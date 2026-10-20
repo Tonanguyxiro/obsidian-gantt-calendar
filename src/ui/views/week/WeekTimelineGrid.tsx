@@ -7,7 +7,6 @@ import type { TaskCardConfig } from '../../../components/TaskCard/TaskCardConfig
 import { WeekViewClasses, ContextMenuClasses, setCssProps } from '../../../utils/bem';
 import { usePlugin, useApp } from '../../pluginContext';
 import { useTaskTooltip } from '../../components/TooltipProvider';
-import { TaskCard } from '../../components/TaskCard';
 import { Icon } from '../../components/Icon';
 import { taskKey } from '../../utils/taskKey';
 import { updateTaskProperties } from '../../../tasks/taskUpdater';
@@ -816,7 +815,7 @@ function DayColumn({
 		>
 			{daySegs.map(({ block, seg }) => {
 				const durationMin = seg.endMin - seg.startMin;
-				const resizable = !isVirtualTask(block.task);
+				const resizable = !isVirtualTask(block.task) && !block.task.icsEvent;
 				const cls = [
 					WeekViewClasses.elements.timeBlock,
 					seg.continuesBefore ? WeekViewClasses.modifiers.timeBlockContinuesBefore : '',
@@ -855,7 +854,7 @@ function DayColumn({
 								{`${formatMinutes(seg.startMin)} – ${formatMinutes(seg.endMin)}`}
 							</span>
 						) : null}
-					<TaskCard
+					<CalendarItemCard
 						task={block.task}
 						config={config}
 						targetDate={day.date}

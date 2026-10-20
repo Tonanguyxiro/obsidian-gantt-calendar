@@ -150,6 +150,21 @@ export interface GanttCalendarSettings {
 	viewFilters?: Record<ViewScope, ViewFilterState>;
 }
 
+/** ICS 订阅源 */
+export interface IcsSubscription {
+	id: string;
+	name: string;
+	url: string;
+	color: string;
+	enabled: boolean;
+}
+
+/** ICS 日历订阅配置（只读、仅内存，与飞书同步相互独立） */
+export interface IcsConfiguration {
+	subscriptions: IcsSubscription[];
+	syncInterval: number;     // 自动同步间隔（分钟），0 为关闭
+}
+
 /**
  * 同步配置
  */
@@ -162,6 +177,7 @@ export interface SyncConfiguration {
 	syncInterval: number;
 	conflictResolution: 'local-win' | 'remote-win' | 'newest-win' | 'manual';
 	feishuSyncTargetFile: string;
+	ics?: IcsConfiguration;
 	api?: {
 		provider: 'feishu' | 'microsoft-todo' | 'custom';
 		apiKey?: string;

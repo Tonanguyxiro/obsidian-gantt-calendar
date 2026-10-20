@@ -11,6 +11,7 @@ import { useApp } from '../pluginContext';
 import { taskKey } from '../utils/taskKey';
 import { Icon } from './Icon';
 import { TaskCard, type ReactTaskCardProps } from './TaskCard';
+import { IcsEventCard } from './IcsEventCard';
 
 /** 视图提供给文件卡片的上下文：各文件内的任务（已按视图筛选） */
 export interface FileTaskLayerContextValue {
@@ -173,8 +174,9 @@ export const FileTaskCard = memo(function FileTaskCard({ task }: { task: GCTask 
 	);
 });
 
-/** 日历视图条目：file-based task 占位任务渲染为文件卡片，其余为普通任务卡片 */
+/** 日历视图条目：file-based task 占位任务渲染为文件卡片，ICS 事件为只读事件卡片，其余为普通任务卡片 */
 export function CalendarItemCard(props: ReactTaskCardProps): JSX.Element {
 	if (props.task.fileTask) return <FileTaskCard task={props.task} />;
+	if (props.task.icsEvent) return <IcsEventCard task={props.task} />;
 	return <TaskCard {...props} />;
 }

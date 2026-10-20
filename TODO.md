@@ -16,6 +16,13 @@
 
 ## ✅ 已完成（按日期倒序）
 
+### 2026-10-20（1.8.0）
+- [x] 新增 ICS 日历订阅（设置 → 新增「ICS」页，与「飞书同步」页分开）：只读、仅内存（参考 Day Planner），不写任何笔记。`src/data-layer/ics/`：`icsParser`（解析 + 重复事件展开，含 COUNT/UNTIL/EXDATE/RECURRENCE-ID、TZID 与 Outlook Windows 时区名）、`IcsService`（拉取/缓存回退/自动同步）、`icsTask`（事件 → 只读占位任务 `GCTask.icsEvent`）
+- [x] 日/周/月视图与侧边栏每日时间线显示 ICS 事件（`IcsEventCard`，按订阅配色；无勾选/拖动/缩放/右键）；`useIcsLayer` 合入时间线模型，`CalendarItemCard` 分派渲染
+- [x] 设置页：每个订阅可设名称/地址/颜色/启用，自动同步间隔（关闭~24 小时），立即同步；新增命令「ICS 日历订阅同步」
+- [x] 新增 `tests/icsParser.test.ts`、`tests/icsTask.test.ts`（486 用例全通过）
+- [ ] 已知限制：导入窗口固定为过去 30 天~未来 365 天（拉取时计算）；上次成功内容只存内存，重启后断网则为空；不支持「每月第几个周几」规则；不进甘特图/任务列表
+
 ### 2026-10-20（1.7.2）
 - [x] 日/周视图时间块：标签另起一行排在文字下方（横向换行，只留一行，放不下的整枚隐藏；块高 <76px 不显示）；顶部让出时刻标签位置，不再遮挡文字。周视图 `.gc-week-view__time-block` 与日视图 `.gc-day-canvas__block` 共用这套规则
 - [x] 任务文字渲染行内 Markdown（粗体/斜体/删除线/高亮/行内代码，`src/utils/inlineMarkdown.ts`），卡片/悬浮窗/甘特列表通用

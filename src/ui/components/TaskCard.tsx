@@ -25,6 +25,8 @@ import { cancelTask } from '../../contextMenu/commands/cancelTask';
 import { restoreTask } from '../../contextMenu/commands/restoreTask';
 import { deleteTask } from '../../contextMenu/commands/deleteTask';
 import { setTaskStatus } from '../../contextMenu/commands/setTaskStatus';
+import { getConfiguredStatuses, getPickerStatuses, isMenuStatus } from '../../tasks/statusTransition';
+import { StatusChipClasses } from '../../utils/bem';
 import { setTaskPriority } from '../../contextMenu/commands/setPriority';
 import { i18n } from '../../i18n/i18n';
 import { Logger } from '../../utils/logger';
@@ -135,6 +137,7 @@ export const TaskCard = memo(function TaskCard({ task, config, targetDate, onCli
 		const taskNotePath = plugin.settings.taskNotePath || 'Tasks';
 		const refresh = onRefresh || (() => {});
 		const isCancelled = task.cancelled === true;
+		const currentStatusKey = task.status ?? (task.completed ? 'done' : 'todo');
 
 		const priorities: Array<{ value: 'highest' | 'high' | 'medium' | 'low' | 'lowest' | 'normal'; label: string; icon: string }> = [
 			{ value: 'highest', label: i18n.t('common.priority.highest'), icon: '🔺' },
@@ -196,22 +199,26 @@ export const TaskCard = memo(function TaskCard({ task, config, targetDate, onCli
 				})),
 			},
 			{
-				items: [
-					{
-						key: 'statusImportant',
-						title: i18n.t('contextMenu.statusImportant'),
+				// 状态：设置里勾选「显示在状态选择中」的状态（当前状态始终显示），色块取自设置里的状态配色
+				items: getPickerStatuses(app, currentStatusKey).filter((st) => isMenuStatus(st.key)).map((st) => {
+					const colors = getStatusColor(st.key, getConfiguredStatuses(app), getCurrentThemeMode());
+					return {
+						key: `status-${st.key}`,
+						title: (
+							<span
+								className={StatusChipClasses.block}
+								style={colors ? ({ '--status-bg': colors.bg, '--status-fg': colors.text } as CSSProperties) : undefined}
+							>
+								{`[${st.symbol}] ${st.name}`}
+							</span>
+						),
+						// 单选列表外观：当前状态实心勾，其余空心圆，各行文字对齐
+						icon: currentStatusKey === st.key ? 'circle-check' : 'circle',
 						onClick: () => {
-							void setTaskStatus(app, task, 'important', enabledFormats, refresh);
+							void setTaskStatus(app, task, st.key, enabledFormats, refresh);
 						},
-					},
-					{
-						key: 'statusQuestion',
-						title: i18n.t('contextMenu.statusQuestion'),
-						onClick: () => {
-							void setTaskStatus(app, task, 'question', enabledFormats, refresh);
-						},
-					},
-				],
+					};
+				}),
 			},
 			{
 				items: [
@@ -258,7 +265,7 @@ export const TaskCard = memo(function TaskCard({ task, config, targetDate, onCli
 				],
 			},
 		];
-	}, [viewTask, app, plugin.settings.enabledTaskFormats, plugin.settings.taskNotePath, virtual, onRefresh]);
+	}, [viewTask, app, plugin.settings.enabledTaskFormats, plugin.settings.taskNotePath, plugin.settings.taskStatuses, virtual, onRefresh]);
 
 	// ===== 拖拽（useDragSource 封装） =====
 	const dragProps = useDragSource({

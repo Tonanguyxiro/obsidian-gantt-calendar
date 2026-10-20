@@ -4,6 +4,8 @@
  * 处理 Daily Note 的检测、创建和任务插入逻辑
  */
 
+import { DEFAULT_TASK_STATUSES } from '../tasks/taskStatus';
+import { mergeGlobalFilterAndTags } from '../tasks/globalFilterTags';
 import { App, Notice, TFile, TFolder } from 'obsidian';
 import type { GanttCalendarSettings } from '../settings';
 import { i18n } from '../i18n/i18n';
@@ -85,6 +87,8 @@ function searchFolderRecursive(
 export interface CreateTaskData {
 	description: string;
 	priority?: 'highest' | 'high' | 'medium' | 'low' | 'lowest';
+	/** 任务状态 key（取复选框符号）；缺省为 todo */
+	status?: string;
 	repeat?: string;
 	createdDate: Date;
 	startDate?: Date | null;
@@ -328,17 +332,18 @@ function serializeNewTask(taskData: CreateTaskData, app: App): string {
 
 	const parts: string[] = [];
 
-	// 复选框
-	parts.push('[ ]');
+	// 复选框：符号取自状态配置（设置里可自定义），缺省为未完成
+	const statuses = (settings?.taskStatuses as Array<{ key: string; symbol: string }> | undefined) ?? DEFAULT_TASK_STATUSES;
+	const symbol = (taskData.status && statuses.find(st => st.key === taskData.status)?.symbol) || ' ';
+	parts.push(`[${symbol}]`);
 
-	// 全局过滤器
-	if (globalFilter) {
-		parts.push(globalFilter.trim());
+	// 全局过滤器与标签合并（避免 "#task #task"）
+	const filterAndTags = mergeGlobalFilterAndTags(globalFilter, taskData.tags);
+	if (filterAndTags.filter) {
+		parts.push(filterAndTags.filter);
 	}
-
-	// 标签
-	if (taskData.tags && taskData.tags.length > 0) {
-		parts.push(taskData.tags.map(t => `#${t}`).join(' '));
+	if (filterAndTags.tags.length > 0) {
+		parts.push(filterAndTags.tags.map(t => `#${t}`).join(' '));
 	}
 
 	// 描述

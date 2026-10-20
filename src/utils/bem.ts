@@ -59,6 +59,7 @@ export const BLOCKS = {
 	/** 编辑任务弹窗 */
 	EDIT_TASK_MODAL: 'edit-task-modal',
 	DESC_EDITOR: 'desc-editor',
+	STATUS_CHIP: 'status-chip',
 	/** 日期时间选择器（Linear 风格） */
 	DATE_TIME_PICKER: 'date-time-picker',
 	/** 确认弹窗 */
@@ -721,6 +722,13 @@ export const CreateTaskButtonClasses = {
  * 编辑任务弹窗类名常量
  */
 /**
+ * 状态色块（右键菜单等处，颜色取自设置里的状态配色）类名常量
+ */
+export const StatusChipClasses = {
+	block: bem(BLOCKS.STATUS_CHIP),
+};
+
+/**
  * 任务描述编辑器（原生 Live Preview）类名常量
  */
 export const DescEditorClasses = {
@@ -747,6 +755,10 @@ export const EditTaskModalClasses = {
 		priorityGrid: bem(BLOCKS.EDIT_TASK_MODAL, 'priority-grid'),
 		priorityBtn: bem(BLOCKS.EDIT_TASK_MODAL, 'priority-btn'),
 		priorityBtnSelected: bem(BLOCKS.EDIT_TASK_MODAL, 'priority-btn', 'selected'),
+
+		// 状态板块（按钮外观复用优先级按钮，颜色取自设置里的状态配色）
+		statusGrid: bem(BLOCKS.EDIT_TASK_MODAL, 'status-grid'),
+		statusBtn: bem(BLOCKS.EDIT_TASK_MODAL, 'status-btn'),
 
 		// 日期设置板块
 		datesContainer: bem(BLOCKS.EDIT_TASK_MODAL, 'dates-container'),
@@ -1078,6 +1090,7 @@ export const SettingsStatusCardClasses = {
 		swatch: bem(BLOCKS.SETTINGS_STATUS_CARD, 'swatch'),
 		macaron: bem(BLOCKS.SETTINGS_STATUS_CARD, 'macaron-grid'),
 		macaronSwatch: bem(BLOCKS.SETTINGS_STATUS_CARD, 'macaron-swatch'),
+		pickerRow: bem(BLOCKS.SETTINGS_STATUS_CARD, 'picker-row'),
 	},
 };
 

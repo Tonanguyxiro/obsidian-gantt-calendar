@@ -73,6 +73,9 @@ export interface TaskStatus {
 
     /** 是否为默认状态 */
     isDefault: boolean;
+
+    /** 是否显示在状态选择中（任务弹窗、右键菜单）；缺省为 true。当前任务正在使用的状态始终显示 */
+    showInPicker?: boolean;
 }
 
 // ==================== 遗留字段辅助 ====================

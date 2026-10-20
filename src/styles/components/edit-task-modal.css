@@ -66,6 +66,31 @@
 		gap: 6px;
 		margin-top: 8px;
 	}
+	/* 状态按钮：用设置里的状态配色（--status-bg / --status-fg），一眼对应任务卡片上的颜色；
+	   选中态：实心 + 强调色描边 + 前置 ✓，未选中的略淡 */
+	.gc-edit-task-modal__priority-btn.gc-edit-task-modal__status-btn {
+		background: var(--status-bg);
+		color: var(--status-fg);
+		font-weight: 600;
+		opacity: 0.72;
+	}
+	.gc-edit-task-modal__priority-btn.gc-edit-task-modal__status-btn:hover {
+		background: var(--status-bg);
+		opacity: 1;
+	}
+	.gc-edit-task-modal__priority-btn.gc-edit-task-modal__status-btn.gc-edit-task-modal__priority-btn--selected {
+		background: var(--status-bg);
+		color: var(--status-fg);
+		opacity: 1;
+		border: 1px solid var(--interactive-accent);
+		box-shadow: 0 0 0 2px var(--interactive-accent);
+	}
+	.gc-edit-task-modal__status-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+		gap: 6px;
+		margin-top: 8px;
+	}
 	.gc-edit-task-modal__priority-btn {
 		padding: 4px 2px;
 		border: 1px solid var(--background-modifier-border);
@@ -83,7 +108,7 @@
 	}
 	/* 双类选择器（0-2-0）压过 .priority-btn:hover（同为 0-2-0 且本规则在后），
 	   替代原先的 4 个 !important */
-	.gc-edit-task-modal__priority-btn.gc-edit-task-modal__priority-btn-selected {
+	.gc-edit-task-modal__priority-btn.gc-edit-task-modal__priority-btn--selected {
 		background: var(--background-modifier-hover);
 		color: var(--text-normal);
 		border-color: transparent;

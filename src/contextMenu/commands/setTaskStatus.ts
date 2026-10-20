@@ -1,3 +1,4 @@
+import { statusTransitionUpdates, getConfiguredStatuses } from '../../tasks/statusTransition';
 import { App, Notice } from 'obsidian';
 import type { GCTask } from '../../types';
 import type { TaskStatusType } from '../../tasks/taskStatus';
@@ -23,15 +24,16 @@ export async function setTaskStatus(
 	onRefresh: () => void
 ): Promise<void> {
 	try {
-		await updateTaskProperties(app, task, { status }, enabledFormats);
+		const updates = statusTransitionUpdates(task, status);
+		await updateTaskProperties(app, task, updates, enabledFormats);
 		await refreshTaskView(app, task.filePath);
 
-		const statusInfo = getStatusByKey(status);
+		const statusInfo = getStatusByKey(status, getConfiguredStatuses(app));
 		const label = statusInfo ? statusInfo.name : status;
 		taskUndo.registerProperty({
 			app,
 			oldTask: task,
-			updates: { status },
+			updates,
 			enabledFormats,
 			onRefresh,
 		}, i18n.t('contextMenu.commands.statusUpdated', { label }));

@@ -54,6 +54,22 @@ export class TaskStatusCard {
 			}
 		}
 
+		// ── 是否显示在状态选择中（任务弹窗、右键菜单） ──
+		const pickerRow = card.createEl('label', { cls: cls.pickerRow });
+		const pickerBox = pickerRow.createEl('input', { type: 'checkbox' });
+		pickerBox.checked = status.showInPicker !== false;
+		pickerRow.createSpan({ text: i18n.t('settings.taskStatus.showInPicker.name') });
+		pickerRow.setAttr('title', i18n.t('settings.taskStatus.showInPicker.description'));
+		pickerBox.addEventListener('change', () => {
+			void (async () => {
+				const target = plugin.settings.taskStatuses.find((s: TaskStatus) => s.key === status.key);
+				if (!target) return;
+				target.showInPicker = pickerBox.checked;
+				if (this.config.onColorChange) await this.config.onColorChange();
+				else await plugin.saveSettings();
+			})();
+		});
+
 		// ── Body: light/dark theme sections ──
 		const body = card.createDiv(cls.body);
 

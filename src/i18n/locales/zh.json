@@ -368,6 +368,10 @@
         "darkTheme": "暗色",
         "background": "背景",
         "text": "文字"
+      },
+      "showInPicker": {
+        "name": "显示在状态选择中",
+        "description": "控制该状态是否出现在任务弹窗与右键菜单的状态选择里；任务当前使用的状态始终显示。"
       }
     },
     "heatmapPalettes": {
@@ -1088,7 +1092,8 @@
         "inputPlaceholder": "输入新标签名称...",
         "searchOrCreate": "搜索或创建标签，回车创建",
         "addButton": "添加"
-      }
+      },
+      "statusLabel": "状态"
     },
     "confirm": {
       "cancel": "取消",
@@ -1302,8 +1307,6 @@
       "low": "低",
       "lowest": "最低"
     },
-    "statusImportant": "🔴 重要",
-    "statusQuestion": "🟠 有疑问",
     "postpone": {
       "days1": "延期 1 天",
       "days3": "延期 3 天",

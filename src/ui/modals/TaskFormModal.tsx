@@ -1,4 +1,4 @@
-import { useCallback,  useEffect, useMemo, useRef, useState, type JSX  } from 'react';
+import { useCallback,  useEffect, useMemo, useRef, useState, type CSSProperties, type JSX  } from 'react';
 import { unwrapTask } from '../../tasks/scheduledFallback';
 import { Notice } from 'obsidian';
 import type { App } from 'obsidian';
@@ -15,6 +15,8 @@ import { TagSelector } from './TagSelector';
 import { RepeatSection } from './RepeatSection';
 import { DateTimePicker } from '../components/DateTimePicker';
 import { DescriptionEditor } from '../components/DescriptionEditor';
+import { statusTransitionUpdates, getConfiguredStatuses, getPickerStatuses } from '../../tasks/statusTransition';
+import { getStatusColor, getCurrentThemeMode } from '../../tasks/taskStatus';
 import { openReactModal } from './modalHost';
 
 /**
@@ -172,6 +174,14 @@ export function TaskFormModal({
 	const [selectedTags, setSelectedTags] = useState<string[]>(mode === 'edit' ? (task?.tags || []) : []);
 	const [description, setDescription] = useState(mode === 'edit' ? (task?.description || '') : '');
 	const descriptionRef = useRef<{ focus: () => void } | null>(null);
+	// 状态：设置里配置的全部状态（含自定义）；编辑模式默认取任务当前状态
+	const initialStatus = mode === 'edit' ? (task?.status ?? (task?.completed ? 'done' : task?.cancelled ? 'canceled' : 'todo')) : 'todo';
+	const [status, setStatus] = useState<string>(initialStatus);
+	// 只列出设置里勾选「显示在状态选择中」的状态（任务当前状态除外，始终显示）；颜色取自设置里的状态配色
+	const allStatuses = useMemo(() => getConfiguredStatuses(app), [app]);
+	const statuses = useMemo(() => getPickerStatuses(app, initialStatus), [app, initialStatus]);
+	const themeMode = getCurrentThemeMode();
+	const [statusChanged, setStatusChanged] = useState(false);
 
 	// 编辑模式：变更跟踪
 	const [priorityChanged, setPriorityChanged] = useState(false);
@@ -200,6 +210,26 @@ export function TaskFormModal({
 	const title = isEdit ? i18n.t('modals.editTask.title') : i18n.t('modals.createTask.title');
 	const saveText = isEdit ? i18n.t('common.save') : i18n.t('common.add');
 
+	/** 选择状态：同步完成 / 取消日期（与右键菜单、复选框命令同一套规则），用户仍可在日期区手动改 */
+	const pickStatus = (key: string) => {
+		setStatus(key);
+		if (isEdit) setStatusChanged(true);
+		const t = statusTransitionUpdates({
+			completed: status === 'done',
+			cancelled: status === 'canceled',
+			completionDate: dates.completionDate ?? undefined,
+			cancelledDate: dates.cancelledDate ?? undefined,
+		}, key);
+		const next = { ...dates };
+		let touched = false;
+		if (t.completionDate !== undefined) { next.completionDate = t.completionDate; touched = true; }
+		if (t.cancelledDate !== undefined) { next.cancelledDate = t.cancelledDate; touched = true; }
+		if (touched) {
+			setDates(next);
+			if (isEdit) setDatesChanged(true);
+		}
+	};
+
 	// ========== 保存逻辑 ==========
 	const saveTask = async () => {
 		if (mode === 'create') {
@@ -222,6 +252,7 @@ export function TaskFormModal({
 				const taskData: CreateTaskData = {
 					description: desc,
 					priority: priority === 'normal' ? undefined : priority,
+					status: status !== 'todo' ? status : undefined,
 					repeat: repeat || undefined,
 					createdDate: dates.createdDate!,
 					startDate: dates.startDate,
@@ -260,6 +291,12 @@ export function TaskFormModal({
 		try {
 			const updates: TaskUpdates = {};
 			if (priorityChanged) updates.priority = priority;
+			if (statusChanged) {
+				const t = statusTransitionUpdates(task, status);
+				updates.status = t.status;
+				updates.completed = t.completed;
+				updates.cancelled = t.cancelled;
+			}
 			if (repeatChanged) updates.repeat = repeat;
 			if (datesChanged) {
 				updates.createdDate = dates.createdDate;
@@ -361,6 +398,36 @@ export function TaskFormModal({
 										{`${option.icon} ${option.label}`}
 									</button>
 								))}
+							</div>
+						</div>
+					</div>
+
+					{/* 状态板块：设置里配置的全部状态 */}
+					<div className={EditTaskModalClasses.elements.section}>
+						<div className={EditTaskModalClasses.elements.priorityContainer}>
+							<label className={EditTaskModalClasses.elements.sectionLabel}>
+								{i18n.t('modals.editTask.statusLabel')}
+							</label>
+							<div className={EditTaskModalClasses.elements.statusGrid}>
+								{statuses.map(st => {
+									const colors = getStatusColor(st.key, allStatuses, themeMode);
+									return (
+										<button
+											key={st.key}
+											className={[
+												EditTaskModalClasses.elements.priorityBtn,
+												EditTaskModalClasses.elements.statusBtn,
+												...(st.key === status ? [EditTaskModalClasses.elements.priorityBtnSelected] : []),
+											].join(' ')}
+											style={colors ? ({ '--status-bg': colors.bg, '--status-fg': colors.text } as CSSProperties) : undefined}
+											data-value={st.key}
+											title={st.description}
+											onClick={() => pickStatus(st.key)}
+										>
+											{`${st.key === status ? '✓ ' : ''}[${st.symbol}] ${st.name}`}
+										</button>
+									);
+								})}
 							</div>
 						</div>
 					</div>

@@ -368,6 +368,10 @@
         "darkTheme": "Dark",
         "background": "Background",
         "text": "Text"
+      },
+      "showInPicker": {
+        "name": "Show in status picker",
+        "description": "Controls whether this status is listed in the task dialog and the right-click menu. A task’s current status is always shown."
       }
     },
     "heatmapPalettes": {
@@ -1088,7 +1092,8 @@
         "inputPlaceholder": "Enter new tag name...",
         "searchOrCreate": "Search or create tag, press Enter to create",
         "addButton": "Add"
-      }
+      },
+      "statusLabel": "Status"
     },
     "confirm": {
       "cancel": "Cancel",
@@ -1302,8 +1307,6 @@
       "low": "Low",
       "lowest": "Lowest"
     },
-    "statusImportant": "🔴 Important",
-    "statusQuestion": "🟠 Question",
     "postpone": {
       "days1": "Postpone 1 Day",
       "days3": "Postpone 3 Days",

@@ -38,3 +38,8 @@
 	font-size: var(--font-ui-smaller);
 	color: var(--text-faint);
 }
+
+/* 用户在 Obsidian 里开启「显示行号」时，嵌入的单行编辑器不应出现行号槽 */
+.gc-desc-editor__native .cm-gutters {
+	display: none;
+}

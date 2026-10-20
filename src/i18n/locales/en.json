@@ -1044,7 +1044,7 @@
       "recurrenceLabel": "Recurrence",
       "datesLabel": "Date Settings",
       "submitHint": "Press Enter to submit",
-      "datePlaceholder": "Select date and time",
+      "datePlaceholder": "Select date",
       "success": "Task updated",
       "error": "Failed to update task",
       "errorStartDueOrder": "Due date cannot be earlier than start date",
@@ -1398,7 +1398,8 @@
       "syncError": "Sync error: {{error}}",
       "feishuSyncComplete": "Feishu sync complete: {{summary}}"
     },
-    "icsSync": "ICS Calendar Subscription Sync"
+    "icsSync": "ICS Calendar Subscription Sync",
+    "editTask": "Edit task"
   },
   "views": {
     "yearView": {

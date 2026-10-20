@@ -168,6 +168,10 @@ export interface ScheduledProxyInfo {
 	startField: DateFieldType;
 	endField: DateFieldType;
 	dateField: DateFieldType;
+	/** 时间片代理：任务另有起止日期区间，这个代理只表示 ⏳ + 行首时间前缀的当日时段（与区间条并存、互不干扰） */
+	slot?: boolean;
+	/** 旧写法代理：起止字段上带时刻的同日任务，其时刻按「时间片」处理（写回时迁移为 ⏳ + 前缀） */
+	legacy?: boolean;
 }
 
 /** File-based task 的项目（通常是 folder note 的双链） */

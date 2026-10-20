@@ -3,6 +3,7 @@ import { GCTask } from '../types';
 import { serializeTask, TaskUpdates } from './taskSerializer';
 import { parseSingleTaskLine } from './taskParser/main';
 import { resolveScheduledProxyUpdates } from './scheduledFallback';
+import { migrateLegacyTimes } from './legacyTimes';
 import { Logger } from '../utils/logger';
 
 // ==================== 文件级写锁 ====================
@@ -231,7 +232,9 @@ export async function updateTaskProperties(
 		throw new Error(`File-based task cannot be updated as a task line: ${proxiedTask.filePath}`);
 	}
 	// 计划日期回退代理：视图字段上的修改还原为对 ⏳ 计划日期 + 时间前缀的修改
-	const { task, updates } = resolveScheduledProxyUpdates(proxiedTask, proxiedUpdates);
+	const { task, updates: resolvedUpdates } = resolveScheduledProxyUpdates(proxiedTask, proxiedUpdates);
+	// 起止只管日期：旧写法里起止 / ⏳ 上的时刻迁移为 ⏳ + 时间前缀，并只留日期
+	const updates = migrateLegacyTimes(task, resolvedUpdates);
 	// 同文件更新串行化，消除读-改-写竞态（P0）
 	await withFileLock(task.filePath, async () => {
 		const startTime = performance.now();

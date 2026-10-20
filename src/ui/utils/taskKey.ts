@@ -1,5 +1,6 @@
 import type { GCTask } from '../../types';
 import { getVirtualMetadata } from '../../tasks/virtualTaskGenerator';
+import { isSlotItem } from '../../tasks/scheduledFallback';
 
 /**
  * 任务在列表渲染中的唯一 key。
@@ -15,5 +16,6 @@ export function taskKey(t: GCTask): string {
 		const d = String(occ.getDate()).padStart(2, '0');
 		return `${t.filePath}:${t.lineNumber}@${y}-${m}-${d}`;
 	}
-	return `${t.filePath}:${t.lineNumber}`;
+	// 时间片代理与同任务的日期区间条并存，key 要区分
+	return `${t.filePath}:${t.lineNumber}${isSlotItem(t) ? '#slot' : ''}`;
 }

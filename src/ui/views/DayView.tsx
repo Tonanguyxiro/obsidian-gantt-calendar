@@ -27,14 +27,9 @@ import { Logger } from '../../utils/logger';
 import { RegularExpressions } from '../../utils/RegularExpressions';
 import type { DateFieldType } from '../../settings/types';
 import { useViewTasks } from '../utils/useViewTasks';
+import { findTaskById } from '../utils/taskId';
 
 /** dataTransfer.taskId（filePath:lineNumber）→ 任务查找 */
-function findTaskById(tasks: GCTask[], taskId: string): GCTask | null {
-	const [filePath, lineNum] = taskId.split(':');
-	const lineNumber = parseInt(lineNum, 10);
-	return tasks.find((t) => t.filePath === filePath && t.lineNumber === lineNumber) || null;
-}
-
 /**
  * React 日视图
  * 任务区 = 全天区 + 共享单日连续画布（与周视图/侧栏每日时间线同语义）；
@@ -56,7 +51,7 @@ export function DayView(): JSX.Element {
 	const dateField = plugin.settings.dateFilterField || 'dueDate';
 	const startField = plugin.settings.ganttStartField || 'startDate';
 	const endField = plugin.settings.ganttEndField || 'dueDate';
-	const tasks = useViewTasks(startField, endField, dateField);
+	const tasks = useViewTasks(startField, endField, dateField, true);
 
 	const timelineConfig = useMemo(() => ({
 		...DayViewConfig,

@@ -27,6 +27,7 @@ import { deleteTask } from '../../contextMenu/commands/deleteTask';
 import { setTaskStatus } from '../../contextMenu/commands/setTaskStatus';
 import { getConfiguredStatuses, getPickerStatuses, isMenuStatus } from '../../tasks/statusTransition';
 import { StatusChipClasses } from '../../utils/bem';
+import { dragTaskId } from '../utils/taskId';
 import { setTaskPriority } from '../../contextMenu/commands/setPriority';
 import { i18n } from '../../i18n/i18n';
 import { Logger } from '../../utils/logger';
@@ -269,7 +270,7 @@ export const TaskCard = memo(function TaskCard({ task, config, targetDate, onCli
 
 	// ===== 拖拽（useDragSource 封装） =====
 	const dragProps = useDragSource({
-		taskId: `${task.filePath}:${task.lineNumber}`,
+		taskId: dragTaskId(task),
 		enabled: !!config.enableDrag && !virtual,
 		onDragStart: () => tooltip.cancel(),
 	});

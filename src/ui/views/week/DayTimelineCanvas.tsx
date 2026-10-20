@@ -31,6 +31,9 @@ import {
 } from './timelineModel';
 import { useBlockResize, isBlockResizing, setBlockDragMeta, getBlockDragMeta, clearBlockDragMeta } from './useBlockResize';
 import { useCanvasTouchDrag } from './useCanvasTouchDrag';
+import { findTaskById } from '../../utils/taskId';
+import { asSlotTarget, SLOT_DEFAULT_MIN } from '../../../tasks/scheduledFallback';
+import { taskKey } from '../../utils/taskKey';
 
 /**
  * 创建手势的像素位移阈值（与周视图一致）：超过才视为拖拽选区
@@ -48,12 +51,6 @@ function isContextMenuOpen(): boolean {
 }
 
 /** dataTransfer.taskId（filePath:lineNumber）→ 任务查找 */
-function findTaskById(tasks: GCTask[], taskId: string): GCTask | null {
-	const [filePath, lineNum] = taskId.split(':');
-	const lineNumber = parseInt(lineNum, 10);
-	return tasks.find((t) => t.filePath === filePath && t.lineNumber === lineNumber) || null;
-}
-
 /** 快速创建载荷 */
 type QuickCreate =
 	| { type: 'point'; min: number }
@@ -170,6 +167,21 @@ export function DayTimelineCanvas({ day, model, config, tasks, refresh }: DayTim
 		const interval = getTaskInterval(task, startField, endField, dateField);
 		const updates: Partial<Record<DateFieldType, Date>> = {};
 		let precision: Partial<Record<DateFieldType, 'day' | 'time'>> = {};
+
+		if (!task.scheduledProxy) {
+			// 日期区间条 / 全天任务 / 列表任务拖进时间轴：安排一个时间片（⏳ 当日 + 行首时间前缀，默认 1 小时），
+			// 起止日期区间不动——起止只管日期，具体时刻由时间片决定
+			const anchorMin = Math.max(0, Math.min(minutes, MINUTES_PER_DAY - SLOT_DEFAULT_MIN));
+			updates[startField] = atMinutes(anchorMin);
+			updates[endField] = atMinutes(anchorMin + SLOT_DEFAULT_MIN);
+			void persistTaskUpdate(
+				asSlotTarget(task, startField, endField, dateField),
+				updates,
+				{ [startField]: 'time', [endField]: 'time' },
+				'views.dayView.updateTimeFailed',
+			);
+			return;
+		}
 
 		if (interval && interval.kind === 'point') {
 			// 拖动点任务 = 双写起止并自动升级为区间任务（与周视图同语义）
@@ -474,7 +486,7 @@ export function DayTimelineCanvas({ day, model, config, tasks, refresh }: DayTim
 					};
 					return (
 						<div
-							key={`${block.task.filePath}:${block.task.lineNumber}`}
+							key={taskKey(block.task)}
 							className={cls}
 							style={style}
 							onPointerDown={(e) => beginBlockTouchPress(e, block, e.currentTarget)}

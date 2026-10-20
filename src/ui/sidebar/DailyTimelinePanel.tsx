@@ -19,14 +19,9 @@ import { Icon } from '../components/Icon';
 import { CalendarItemCard } from '../components/FileTaskCard';
 import { useIcsLayer } from '../utils/useIcsLayer';
 import { useViewTasks } from '../utils/useViewTasks';
+import { findTaskById } from '../utils/taskId';
 
 /** dataTransfer.taskId（filePath:lineNumber）→ 任务查找 */
-function findTaskById(tasks: GCTask[], taskId: string): GCTask | null {
-	const [filePath, lineNum] = taskId.split(':');
-	const lineNumber = parseInt(lineNum, 10);
-	return tasks.find((t) => t.filePath === filePath && t.lineNumber === lineNumber) || null;
-}
-
 /** 归零到本地午夜（Date 比较以 getTime 为准，需先抹平时分秒） */
 function atMidnight(date: Date): Date {
 	const d = new Date(date);
@@ -82,7 +77,7 @@ export function DailyTimelinePanel(): JSX.Element {
 	const dateField: DateFieldType = 'dueDate';
 	const startField = plugin.settings.ganttStartField || 'startDate';
 	const endField = plugin.settings.ganttEndField || 'dueDate';
-	const tasks = useViewTasks(startField, endField, dateField);
+	const tasks = useViewTasks(startField, endField, dateField, true);
 	const enabledFormats = plugin.settings.enabledTaskFormats || [];
 
 	const mergeIcs = useIcsLayer(startField, endField, dateField);

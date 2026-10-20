@@ -16,6 +16,8 @@ import { RepeatSection } from './RepeatSection';
 import { DateTimePicker } from '../components/DateTimePicker';
 import { DescriptionEditor } from '../components/DescriptionEditor';
 import { statusTransitionUpdates, getConfiguredStatuses, getPickerStatuses } from '../../tasks/statusTransition';
+import { legacyDaySlot, rewritePlannerPrefix } from '../../tasks/scheduledFallback';
+import { stripPlannerTime } from '../../tasks/taskParser/utils';
 import { getStatusColor, getCurrentThemeMode } from '../../tasks/taskStatus';
 import { openReactModal } from './modalHost';
 
@@ -101,6 +103,28 @@ function isDueBeforeStart(
 
 /** 弹窗内联样式（原 BaseTaskModal.addStyles 的内容） */
 
+/** 时间片的时刻输入值（HH:mm） */
+function minutesToHm(min: number): string {
+	const m = Math.min(min, 24 * 60);
+	return `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+}
+
+function dateToHm(d: Date): string {
+	return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+function dayStartOf(d: Date): Date {
+	const r = new Date(d);
+	r.setHours(0, 0, 0, 0);
+	return r;
+}
+
+/** 时间片前缀文本："09:00 - 10:30" / "09:00" / 无时刻 → null */
+function slotPrefixOf(start: string, end: string): string | null {
+	if (!start) return null;
+	return end && end > start ? `${start} - ${end}` : start;
+}
+
 /**
  * 任务创建/编辑弹窗（React，合并原 BaseTaskModal/CreateTaskModal/EditTaskModal）
  */
@@ -133,46 +157,62 @@ export function TaskFormModal({
 	);
 	const [repeat, setRepeat] = useState<string | null>(mode === 'edit' ? (task?.repeat || null) : null);
 
-	// 日期状态：{ key: Date | null }
+	// 时间片初值：⏳ + 行首时间前缀（Day Planner 写法）；旧写法里起止带时刻的同日任务按时间片读出
+	const initialSlot = useMemo(() => {
+		if (mode === 'edit' && task) {
+			if (task.plannerTime) {
+				return { start: minutesToHm(task.plannerTime.startMin), end: task.plannerTime.endMin !== undefined ? minutesToHm(task.plannerTime.endMin) : '', day: null as Date | null, legacy: false };
+			}
+			const legacy = legacyDaySlot(task, 'startDate', 'dueDate');
+			if (legacy) {
+				return { start: minutesToHm(legacy.startMin), end: legacy.endMin !== undefined ? minutesToHm(legacy.endMin) : '', day: legacy.day, legacy: true };
+			}
+			if (task.scheduledDate && task.datePrecision?.scheduledDate === 'time') {
+				return { start: dateToHm(task.scheduledDate), end: '', day: dayStartOf(task.scheduledDate), legacy: true };
+			}
+			return { start: '', end: '', day: null as Date | null, legacy: false };
+		}
+		if (targetRange) return { start: dateToHm(targetRange.start), end: dateToHm(targetRange.end), day: dayStartOf(targetRange.start), legacy: false };
+		if (targetHour !== undefined) return { start: minutesToHm(targetHour * 60 + (targetMinute ?? 0)), end: '', day: dayStartOf(targetDate || new Date()), legacy: false };
+		return { start: '', end: '', day: null as Date | null, legacy: false };
+	}, [mode, task, targetDate, targetHour, targetMinute, targetRange]);
+
+	// 日期状态：{ key: Date | null }。起止 / 计划 / 完成等一律只管日期（时刻由下方「时间片」决定）
 	const initialDates = useMemo(() => {
 		const d: Record<string, Date | null> = {};
+		const dayOnly = (v?: Date | null) => (v ? dayStartOf(v) : null);
 		if (mode === 'edit' && task) {
-			d.createdDate = task.createdDate || null;
-			d.startDate = task.startDate || null;
-			d.scheduledDate = task.scheduledDate || null;
-			d.dueDate = task.dueDate || null;
-			d.completionDate = task.completionDate || null;
-			d.cancelledDate = task.cancelledDate || null;
+			d.createdDate = dayOnly(task.createdDate);
+			d.startDate = dayOnly(task.startDate);
+			d.scheduledDate = dayOnly(task.scheduledDate) ?? initialSlot.day;
+			d.dueDate = dayOnly(task.dueDate);
+			d.completionDate = dayOnly(task.completionDate);
+			d.cancelledDate = dayOnly(task.cancelledDate);
 		} else {
 			const base = targetDate || new Date();
-			const dayStart = new Date(base);
-			dayStart.setHours(0, 0, 0, 0);
+			const dayStart = dayStartOf(base);
 			d.createdDate = new Date(dayStart);
 			d.dueDate = new Date(dayStart);
 			d.startDate = null;
-			d.scheduledDate = null;
+			// 从时间轴点选 / 框选新建：直接是一个时间片（⏳ 当日 + 时间前缀）
+			d.scheduledDate = initialSlot.day ? new Date(initialSlot.day) : null;
 			d.cancelledDate = null;
 			d.completionDate = null;
-			if (targetRange) {
-				// 时间线拖拽选区：直接建成区间任务
-				d.startDate = new Date(targetRange.start);
-				d.dueDate = new Date(targetRange.end);
-			} else if (targetHour !== undefined) {
-				d.dueDate = new Date(dayStart);
-				d.dueDate.setHours(targetHour, targetMinute ?? 0, 0, 0);
-			}
 		}
 		return d;
-	}, [mode, task, targetDate, targetHour, targetMinute, targetRange]);
+	}, [mode, task, targetDate, initialSlot]);
 
 	const [dates, setDates] = useState<Record<string, Date | null>>(initialDates);
-	const [datePrecision, setDatePrecision] = useState<Record<string, 'day' | 'time'>>(
-		mode === 'edit'
-			? (task?.datePrecision ? { ...task.datePrecision } : {})
-			: (targetRange ? { startDate: 'time', dueDate: 'time' } : (targetHour !== undefined ? { dueDate: 'time' } : {}))
-	);
+	// 日期精度一律为 day（起止 / 计划日期只管日期）
+	const datePrecision = useMemo<Record<string, 'day' | 'time'>>(() => ({
+		createdDate: 'day', startDate: 'day', scheduledDate: 'day', dueDate: 'day', completionDate: 'day', cancelledDate: 'day',
+	}), []);
 	const [selectedTags, setSelectedTags] = useState<string[]>(mode === 'edit' ? (task?.tags || []) : []);
-	const [description, setDescription] = useState(mode === 'edit' ? (task?.description || '') : '');
+	// 描述不含行首时间前缀：时刻由下方「时间片」管理，保存时再写回前缀
+	const [description, setDescription] = useState(mode === 'edit' ? stripPlannerTime(task?.description || '').trim() : '');
+	// 一天中的具体时间只在时间线里拖动安排；弹窗不提供时刻选项，保存时原样保留已有的时间片（⏳ + 行首时间前缀）
+	const slotStart = initialSlot.start;
+	const slotEnd = initialSlot.end;
 	const descriptionRef = useRef<{ focus: () => void } | null>(null);
 	// 状态：设置里配置的全部状态（含自定义）；编辑模式默认取任务当前状态
 	const initialStatus = mode === 'edit' ? (task?.status ?? (task?.completed ? 'done' : task?.cancelled ? 'canceled' : 'todo')) : 'todo';
@@ -249,14 +289,17 @@ export function TaskFormModal({
 				return;
 			}
 			try {
+				// 时间片：⏳ 当日 + 行首时间前缀；只填了时刻没填计划日期时，落到截止 / 开始日（都没有则今天）
+				const slotPrefix = slotPrefixOf(slotStart, slotEnd);
+				const scheduled = dates.scheduledDate ?? (slotPrefix ? (dates.dueDate ?? dates.startDate ?? dayStartOf(new Date())) : null);
 				const taskData: CreateTaskData = {
-					description: desc,
+					description: rewritePlannerPrefix(desc, slotPrefix),
 					priority: priority === 'normal' ? undefined : priority,
 					status: status !== 'todo' ? status : undefined,
 					repeat: repeat || undefined,
 					createdDate: dates.createdDate!,
 					startDate: dates.startDate,
-					scheduledDate: dates.scheduledDate,
+					scheduledDate: scheduled,
 					dueDate: dates.dueDate!,
 					completionDate: dates.completionDate,
 					cancelledDate: dates.cancelledDate,
@@ -298,15 +341,20 @@ export function TaskFormModal({
 				updates.cancelled = t.cancelled;
 			}
 			if (repeatChanged) updates.repeat = repeat;
-			if (datesChanged) {
+			// 时间片：⏳ 当日 + 行首时间前缀。旧写法（起止 / ⏳ 上带时刻）打开时已读成时间片，保存即迁移
+			const slotPrefix = slotPrefixOf(slotStart, slotEnd);
+			const hasTimedDates = (['startDate', 'dueDate', 'scheduledDate'] as const).some((f) => task.datePrecision?.[f] === 'time');
+			const slotChanged = hasTimedDates || initialSlot.legacy;
+			const writeDates = datesChanged || slotChanged;
+			if (writeDates) {
 				updates.createdDate = dates.createdDate;
 				updates.startDate = dates.startDate;
-				updates.scheduledDate = dates.scheduledDate;
+				updates.scheduledDate = dates.scheduledDate ?? (slotPrefix ? (dates.dueDate ?? dates.startDate ?? dayStartOf(new Date())) : null);
 				updates.dueDate = dates.dueDate;
 				updates.completionDate = dates.completionDate;
 				updates.cancelledDate = dates.cancelledDate;
 			}
-			if (contentChanged) updates.content = description;
+			if (contentChanged || slotChanged) updates.content = rewritePlannerPrefix(description, slotPrefix);
 			if (tagsChanged) updates.tags = selectedTags;
 
 			if (Object.keys(updates).length === 0) {
@@ -314,7 +362,7 @@ export function TaskFormModal({
 				return;
 			}
 			// 日期精度变化时传入浅拷贝，不变异 store 中的共享任务对象
-			const taskToUpdate = datesChanged
+			const taskToUpdate = writeDates
 				? { ...task, datePrecision: { ...datePrecision } }
 				: task;
 			await updateTaskProperties(app, taskToUpdate, updates, enabledFormats || []);
@@ -448,9 +496,6 @@ export function TaskFormModal({
 											setDates((prev) => ({ ...prev, [field.key]: d }));
 											if (isEdit) setDatesChanged(true);
 										}}
-										onPrecisionChange={(precision) => {
-											setDatePrecision((prev) => ({ ...prev, [field.key]: precision }));
-										}}
 									/>
 								))}
 							</div>
@@ -502,10 +547,9 @@ interface DateFieldProps {
 	label: string;
 	current: Date | null;
 	onChange: (d: Date | null) => void;
-	onPrecisionChange: (precision: 'day' | 'time') => void;
 }
 
-function DateField({ label, current, onChange, onPrecisionChange }: DateFieldProps): JSX.Element {
+function DateField({ label, current, onChange }: DateFieldProps): JSX.Element {
 	return (
 		<div className={EditTaskModalClasses.elements.dateItem}>
 			<label className={EditTaskModalClasses.elements.dateLabel}>{label}</label>
@@ -513,14 +557,8 @@ function DateField({ label, current, onChange, onPrecisionChange }: DateFieldPro
 				<DateTimePicker
 					value={current}
 					placeholder={i18n.t('modals.editTask.datePlaceholder')}
-					onChange={(d) => {
-						onChange(d);
-						if (!d) {
-							onPrecisionChange('day');
-						} else {
-							onPrecisionChange(d.getHours() !== 0 || d.getMinutes() !== 0 ? 'time' : 'day');
-						}
-					}}
+					dateOnly
+					onChange={onChange}
 				/>
 			</div>
 		</div>

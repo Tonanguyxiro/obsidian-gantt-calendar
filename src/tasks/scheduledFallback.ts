@@ -11,7 +11,7 @@
  * 对 ⏳ 计划日期 + 时间前缀的修改，原任务的起止字段保持不写入。
  */
 
-import type { GCTask } from '../types';
+import type { GCTask, PlannerTime } from '../types';
 import { getTaskDateField, setTaskDateField } from '../types';
 import type { DateFieldType } from '../settings/types';
 import type { TaskUpdates } from './taskSerializer';
@@ -19,6 +19,9 @@ import { RegularExpressions } from '../utils/RegularExpressions';
 
 /** 只有开始时刻的 Day Planner 前缀，按此默认时长成块（与时间画布点任务一致） */
 const PLANNER_DEFAULT_DURATION_MIN = 60;
+
+/** 把任务拖进时间轴时新建时间片的默认时长（分钟） */
+export const SLOT_DEFAULT_MIN = PLANNER_DEFAULT_DURATION_MIN;
 
 function atMinutes(day: Date, minutes: number): Date {
 	const d = new Date(day);
@@ -70,15 +73,26 @@ export function applyScheduledFallback(
 		return proxy;
 	}
 
-	// Day Planner 前缀：当日时段 [start, end)（仅开始时刻时用默认时长）
-	const day = dayOf(scheduled);
+	return buildPlannerProxy(task, startField, endField, dateField, {});
+}
+
+/** ⏳ + 行首时间前缀 → 当日时段代理（起止字段改写为该时段，时间精度） */
+function buildPlannerProxy(
+	task: GCTask,
+	startField: DateFieldType,
+	endField: DateFieldType,
+	dateField: DateFieldType,
+	flags: { slot?: boolean },
+): GCTask {
+	const planner = task.plannerTime as PlannerTime;
+	const day = dayOf(task.scheduledDate as Date);
 	const endMin = planner.endMin ?? Math.min(planner.startMin + PLANNER_DEFAULT_DURATION_MIN, 24 * 60);
 	const proxy: GCTask = { ...task, datePrecision: { ...task.datePrecision } };
 	setTaskDateField(proxy, startField, atMinutes(day, planner.startMin));
 	setTaskDateField(proxy, endField, atMinutes(day, endMin));
 	proxy.datePrecision![startField] = 'time';
 	proxy.datePrecision![endField] = 'time';
-	proxy.scheduledProxy = { source: task, startField, endField, dateField };
+	proxy.scheduledProxy = { source: task, startField, endField, dateField, ...flags };
 	return proxy;
 }
 
@@ -90,6 +104,121 @@ export function applyScheduledFallbackAll(
 	dateField: DateFieldType,
 ): GCTask[] {
 	return tasks.map((t) => applyScheduledFallback(t, startField, endField, dateField));
+}
+
+// ===== 时间片：起止只管日期区间，具体时刻由 ⏳ + 行首时间前缀决定，二者互不干扰 =====
+
+function minutesOfDay(d: Date): number {
+	return d.getHours() * 60 + d.getMinutes();
+}
+
+/** 终点恰为次日 00:00 视为当日 24:00 */
+function lastDayOf(d: Date): Date {
+	return dayOf(new Date(d.getTime() - 1));
+}
+
+function hasPlannerSlot(task: GCTask): boolean {
+	return isValid(task.scheduledDate) && !!task.plannerTime && task.datePrecision?.scheduledDate !== 'time';
+}
+
+/** 任务在视图字段上有日期区间 / 单日定位（即会出现在全天条或日历格里） */
+function hasViewDateRange(task: GCTask, startField: DateFieldType, endField: DateFieldType, dateField: DateFieldType): boolean {
+	if (isValid(getTaskDateField(task, startField)) || isValid(getTaskDateField(task, endField))) return true;
+	return dateField !== 'scheduledDate' && isValid(getTaskDateField(task, dateField));
+}
+
+/**
+ * 旧写法：起止字段上带时刻，且同在一天（或只有一个时刻）。时刻属于「时间片」，不属于日期区间。
+ * 跨日且带时刻的旧数据不处理（保持原有显示，写回时只去掉时刻）。
+ */
+export function legacyDaySlot(task: GCTask, startField: DateFieldType, endField: DateFieldType): { day: Date; startMin: number; endMin?: number } | null {
+	const s = getTaskDateField(task, startField);
+	const e = getTaskDateField(task, endField);
+	const sTimed = isValid(s) && task.datePrecision?.[startField] === 'time';
+	const eTimed = isValid(e) && task.datePrecision?.[endField] === 'time';
+	if (!sTimed && !eTimed) return null;
+	if (isValid(s) && isValid(e) && dayOf(s).getTime() !== lastDayOf(e).getTime() && e > s) return null;
+	const anchor = (sTimed ? s : e) as Date;
+	const startMin = minutesOfDay(anchor);
+	if (sTimed && eTimed && e > s) {
+		return { day: dayOf(s), startMin, endMin: e.getHours() === 0 && e.getMinutes() === 0 ? 24 * 60 : minutesOfDay(e) };
+	}
+	return { day: dayOf(anchor), startMin };
+}
+
+function buildLegacyProxy(task: GCTask, startField: DateFieldType, endField: DateFieldType, dateField: DateFieldType, slot: { day: Date; startMin: number; endMin?: number }): GCTask {
+	const endMin = slot.endMin ?? Math.min(slot.startMin + PLANNER_DEFAULT_DURATION_MIN, 24 * 60);
+	const proxy: GCTask = { ...task, datePrecision: { ...task.datePrecision } };
+	setTaskDateField(proxy, startField, atMinutes(slot.day, slot.startMin));
+	setTaskDateField(proxy, endField, atMinutes(slot.day, endMin));
+	proxy.datePrecision![startField] = 'time';
+	proxy.datePrecision![endField] = 'time';
+	proxy.scheduledProxy = { source: task, startField, endField, dateField, legacy: true };
+	return proxy;
+}
+
+/** 日期区间条：把起止字段降为日期精度（时刻已由时间片承担） */
+function toDateLevel(task: GCTask, startField: DateFieldType, endField: DateFieldType): GCTask {
+	const copy: GCTask = { ...task, datePrecision: { ...task.datePrecision } };
+	for (const f of [startField, endField]) {
+		const v = getTaskDateField(copy, f);
+		if (isValid(v) && copy.datePrecision![f] === 'time') {
+			setTaskDateField(copy, f, dayOf(v));
+			copy.datePrecision![f] = 'day';
+		}
+	}
+	return copy;
+}
+
+/**
+ * 时间轴视图（周 / 日 / 侧栏每日时间线）使用的任务集：
+ * - 起止（🛫/📅）只表示日期区间 → 全天横条
+ * - ⏳ + 行首 Day Planner 前缀表示当日时间片 → 时间轴块；任务同时有区间时，区间条与时间块并存（时间块为 slot 代理）
+ * - 旧写法（起止上带时刻的同日任务）按时间片显示，首次写回时迁移
+ */
+export function expandTimeSlots(
+	tasks: GCTask[],
+	startField: DateFieldType,
+	endField: DateFieldType,
+	dateField: DateFieldType,
+): GCTask[] {
+	const out: GCTask[] = [];
+	for (const task of tasks) {
+		const base = applyScheduledFallback(task, startField, endField, dateField);
+		if (base.scheduledProxy || task.fileTask) {
+			out.push(base);
+			continue;
+		}
+		const planner = hasPlannerSlot(task);
+		const range = hasViewDateRange(task, startField, endField, dateField);
+		if (planner && range) {
+			// 区间条（日期精度）+ 时间片
+			out.push(toDateLevel(task, startField, endField));
+			out.push(buildPlannerProxy(task, startField, endField, dateField, { slot: true }));
+			continue;
+		}
+		const legacy = !planner ? legacyDaySlot(task, startField, endField) : null;
+		if (legacy) {
+			out.push(buildLegacyProxy(task, startField, endField, dateField, legacy));
+			continue;
+		}
+		out.push(planner || !range ? base : toDateLevel(task, startField, endField));
+	}
+	return out;
+}
+
+/** 视图项的拖拽 / 列表 id：时间片代理与同任务的区间条区分开 */
+export function isSlotItem(task: GCTask): boolean {
+	return !!task.scheduledProxy?.slot;
+}
+
+/**
+ * 把任务当作「时间片目标」写回：对视图字段写入的时间，会被还原成 ⏳ + 行首时间前缀（起止区间不动）。
+ * 用于把区间条 / 全天任务 / 列表任务拖进时间轴。
+ */
+export function asSlotTarget(task: GCTask, startField: DateFieldType, endField: DateFieldType, dateField: DateFieldType): GCTask {
+	if (task.scheduledProxy) return task;
+	return { ...task, scheduledProxy: { source: task, startField, endField, dateField, slot: true } };
 }
 
 /** 取回原任务（编辑面板、右键命令等以真实字段为准的入口使用） */
@@ -145,7 +274,11 @@ export function resolveScheduledProxyUpdates(task: GCTask, updates: TaskUpdates)
 	const isTime = (f: DateFieldType) => precision[f] === 'time';
 
 	const start = valueOf(proxy.startField);
-	const end = valueOf(proxy.endField);
+	let end = valueOf(proxy.endField);
+	// 时间片限制在一天内：越过午夜的终点钳到当日 24:00（区间条才可以跨日，由起止日期承担）
+	if (proxy.slot && isValid(start) && isValid(end) && end > start && dayOf(start).getTime() !== lastDayOf(end).getTime()) {
+		end = atMinutes(dayOf(start), 24 * 60);
+	}
 	const single = proxy.dateField !== proxy.startField && proxy.dateField !== proxy.endField
 		? valueOf(proxy.dateField)
 		: undefined;
@@ -158,14 +291,14 @@ export function resolveScheduledProxyUpdates(task: GCTask, updates: TaskUpdates)
 		return { task: source, updates: out };
 	}
 
-	// 跨日区间：写入真实起止字段（计划日期 + 前缀只能表达单日时段）
+	// 跨日区间（非时间片，如甘特拉长）：写入真实起止字段（计划日期 + 前缀只能表达单日时段）
 	// 终点恰为次日 00:00 视为当日 24:00（时段延续到午夜仍属同一天）
-	const lastDayOf = (d: Date) => dayOf(new Date(d.getTime() - 1));
 	if (isValid(start) && isValid(end) && dayOf(start).getTime() !== lastDayOf(end).getTime() && end > start) {
-		out[proxy.startField] = start;
-		out[proxy.endField] = end;
-		sourcePrecision[proxy.startField] = isTime(proxy.startField) ? 'time' : 'day';
-		sourcePrecision[proxy.endField] = isTime(proxy.endField) ? 'time' : 'day';
+		// 起止只管日期：跨日区间写日期精度，时刻不再写进起止
+		out[proxy.startField] = dayOf(start);
+		out[proxy.endField] = dayOf(end);
+		sourcePrecision[proxy.startField] = 'day';
+		sourcePrecision[proxy.endField] = 'day';
 		out.datePrecision = sourcePrecision;
 		return { task: { ...source, datePrecision: sourcePrecision }, updates: out };
 	}

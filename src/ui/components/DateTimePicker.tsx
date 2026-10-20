@@ -13,6 +13,8 @@ export interface DateTimePickerProps {
 	onChange: (d: Date | null) => void;
 	/** 未设置时的占位文本 */
 	placeholder?: string;
+	/** 仅日期：隐藏时/分列，值一律抹平为当天 00:00（起止、计划日期只管日期；具体时刻由「时间片」决定） */
+	dateOnly?: boolean;
 }
 
 const WEEKDAY_OFFSET = 6; // 周一为每周第一天：getDay() 周日(0) → 列 6
@@ -81,7 +83,9 @@ function toLocalInputValue(d: Date): string {
  * + 底部「此刻」与「确定」。面板内选择写入草稿值，确定才提交并关闭；
  * 「此刻」立即写入当前时间并关闭。触发器输入框可直接键入日期（多分隔符容错）。
  */
-export function DateTimePicker({ value, onChange, placeholder }: DateTimePickerProps): JSX.Element {
+export function DateTimePicker({ value, onChange: onChangeRaw, placeholder, dateOnly = false }: DateTimePickerProps): JSX.Element {
+	// 仅日期模式下所有提交都抹平时刻
+	const onChange = useCallback((d: Date | null) => onChangeRaw(dateOnly && d ? startOfDay(d) : d), [onChangeRaw, dateOnly]);
 	const rootRef = useRef<HTMLDivElement | null>(null);
 	const popoverRef = useRef<HTMLDivElement | null>(null);
 	// portal 挂载容器：带 block 类，使 `.gc-date-time-picker .gc-date-time-picker__xxx`
@@ -242,10 +246,11 @@ export function DateTimePicker({ value, onChange, placeholder }: DateTimePickerP
 		if (inputText !== null) return inputText;
 		if (!value) return placeholder ?? '';
 		const rel = relativeLabel(value, now);
+		if (dateOnly) return rel || formatDate(value, 'yyyy-MM-dd');
 		const time = formatDate(value, 'HH:mm');
 		if (rel && time === '00:00') return rel;
 		return rel ? `${rel} ${time}` : formatDate(value, 'yyyy-MM-dd HH:mm');
-	}, [inputText, value, placeholder, now]);
+	}, [inputText, value, placeholder, now, dateOnly]);
 
 	const renderTimeColumn = (unit: 'h' | 'm', values: number[], current: number | null) => (
 		<div className={DateTimePickerClasses.elements.timeColumn}>
@@ -393,15 +398,17 @@ export function DateTimePicker({ value, onChange, placeholder }: DateTimePickerP
 						</div>
 
 						{/* 右侧：时/分滚动列 */}
-						<div className={DateTimePickerClasses.elements.timePanel}>
-							{renderTimeColumn('h', hours, draft?.getHours() ?? null)}
-							{renderTimeColumn('m', minutes, draft?.getMinutes() ?? null)}
-						</div>
+						{dateOnly ? null : (
+							<div className={DateTimePickerClasses.elements.timePanel}>
+								{renderTimeColumn('h', hours, draft?.getHours() ?? null)}
+								{renderTimeColumn('m', minutes, draft?.getMinutes() ?? null)}
+							</div>
+						)}
 					</div>
 
 					<div className={DateTimePickerClasses.elements.footer}>
 						<button className={DateTimePickerClasses.elements.nowButton} onClick={setNow}>
-							{i18n.t('modals.dateTimePicker.now')}
+							{dateOnly ? i18n.t('modals.dateTimePicker.relToday') : i18n.t('modals.dateTimePicker.now')}
 						</button>
 						<button className={DateTimePickerClasses.elements.okButton} onClick={confirm}>
 							{i18n.t('modals.dateTimePicker.ok')}

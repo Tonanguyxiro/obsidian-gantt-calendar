@@ -25,6 +25,7 @@ import { useFileTaskLayer } from '../utils/useFileTaskLayer';
 import { useIcsLayer } from '../utils/useIcsLayer';
 import { useAdvancedFilters } from '../utils/useAdvancedFilters';
 import { CalendarItemCard, FileTaskLayerProvider } from '../components/FileTaskCard';
+import { findTaskById } from '../utils/taskId';
 
 /** lane 条带与格底之间的间隙 */
 const SPAN_STRIP_GAP_PX = 4;
@@ -35,12 +36,6 @@ const SPAN_STRIP_GAP_PX = 4;
 const SPAN_HEADER_OFFSET_PX = 32;
 
 /** dataTransfer.taskId（filePath:lineNumber）→ 任务查找 */
-function findTaskById(tasks: GCTask[], taskId: string): GCTask | null {
-	const [filePath, lineNum] = taskId.split(':');
-	const lineNumber = parseInt(lineNum, 10);
-	return tasks.find((t) => t.filePath === filePath && t.lineNumber === lineNumber) || null;
-}
-
 /**
  * React 月视图（时间线语义版）
  * 7 列 × N 周网格；每周行内横跨条（周内钳制 + 延续箭头 + 时刻标注）与单日/定时任务

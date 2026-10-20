@@ -8,6 +8,7 @@ import { registerCommonCommands } from './common';
 import { registerConditionalCommands } from './conditional';
 import { registerFeishuCommands } from './feishuCommands';
 import { registerIcsCommands } from './icsCommands';
+import { registerEditTaskCommand } from './editTaskCommand';
 
 /**
  * 注册所有命令
@@ -18,4 +19,5 @@ export function registerAllCommands(plugin: GanttCalendarPlugin): void {
 	registerConditionalCommands(plugin);
 	registerFeishuCommands(plugin);
 	registerIcsCommands(plugin);
+	registerEditTaskCommand(plugin);
 }

@@ -1044,7 +1044,7 @@
       "recurrenceLabel": "重复设置",
       "datesLabel": "日期设置",
       "submitHint": "按 Enter 键可快捷提交",
-      "datePlaceholder": "选择日期和时间",
+      "datePlaceholder": "选择日期",
       "success": "任务已更新",
       "error": "更新任务失败",
       "errorStartDueOrder": "截止时间不得早于开始时间",
@@ -1398,7 +1398,8 @@
       "syncError": "同步出错: {{error}}",
       "feishuSyncComplete": "飞书同步完成: {{summary}}"
     },
-    "icsSync": "ICS 日历订阅同步"
+    "icsSync": "ICS 日历订阅同步",
+    "editTask": "编辑任务"
   },
   "views": {
     "yearView": {

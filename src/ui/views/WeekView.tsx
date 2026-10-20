@@ -33,7 +33,7 @@ export function WeekView(): JSX.Element {
 	const dateField = plugin.settings.dateFilterField || 'dueDate';
 	const ganttStartField = plugin.settings.ganttStartField || 'startDate';
 	const ganttEndField = plugin.settings.ganttEndField || 'dueDate';
-	const tasks = useViewTasks(ganttStartField, ganttEndField, dateField);
+	const tasks = useViewTasks(ganttStartField, ganttEndField, dateField, true);
 	const showLunar = !!plugin.settings.showLunar;
 	const recurringLimit = plugin.settings.recurringTaskDisplayLimit ?? 5;
 

@@ -4,7 +4,7 @@ import { Notice } from 'obsidian';
 import type { App } from 'obsidian';
 import type { GCTask, IPluginContext } from '../../types';
 import type { CreateTaskData } from '../../utils/dailyNoteHelper';
-import { createTaskInDailyNote } from '../../utils/dailyNoteHelper';
+import { createTaskInDailyNote, createTaskInFile } from '../../utils/dailyNoteHelper';
 import type { TaskUpdates } from '../../tasks/taskSerializer';
 import { updateTaskProperties } from '../../tasks/taskUpdater';
 import { Logger } from '../../utils/logger';
@@ -20,6 +20,7 @@ import { legacyDaySlot, rewritePlannerPrefix } from '../../tasks/scheduledFallba
 import { stripPlannerTime } from '../../tasks/taskParser/utils';
 import { getStatusColor, getCurrentThemeMode } from '../../tasks/taskStatus';
 import { openReactModal } from './modalHost';
+import { useCalendarStore } from '../store/calendarStore';
 
 /**
  * 优先级选项
@@ -207,6 +208,26 @@ export function TaskFormModal({
 	const datePrecision = useMemo<Record<string, 'day' | 'time'>>(() => ({
 		createdDate: 'day', startDate: 'day', scheduledDate: 'day', dueDate: 'day', completionDate: 'day', cancelledDate: 'day',
 	}), []);
+	// 创建位置（仅创建模式）：'daily' = 当日日记；其余为文件路径（当日 file task 或手选的笔记）；'other' = 手选笔记
+	const [createTarget, setCreateTarget] = useState<string>('daily');
+	const [otherPath, setOtherPath] = useState('');
+	const otherInputRef = useRef<HTMLInputElement>(null);
+	const fileTasks = useCalendarStore((st) => st.fileTasks);
+	const targetFileOptions = useMemo(() => {
+		const day = dayStartOf(targetDate ?? new Date()).getTime();
+		return fileTasks.filter((ft) => dayStartOf(ft.start).getTime() <= day && day <= dayStartOf(ft.end).getTime());
+	}, [fileTasks, targetDate]);
+	useEffect(() => {
+		if (createTarget !== 'other' || !otherInputRef.current) return;
+		const input = otherInputRef.current;
+		let close = (): void => {};
+		// 动态加载：AbstractInputSuggest 只在真实 Obsidian 里存在
+		void import('../../settings/components/FileSuggest').then(({ FileSuggest }) => {
+			const suggest = new FileSuggest(app, input);
+			close = () => suggest.close();
+		});
+		return () => close();
+	}, [createTarget, app]);
 	const [selectedTags, setSelectedTags] = useState<string[]>(mode === 'edit' ? (task?.tags || []) : []);
 	// 描述不含行首时间前缀：时刻由下方「时间片」管理，保存时再写回前缀
 	const [description, setDescription] = useState(mode === 'edit' ? stripPlannerTime(task?.description || '').trim() : '');
@@ -306,7 +327,17 @@ export function TaskFormModal({
 					tags: selectedTags.length > 0 ? selectedTags : undefined,
 					datePrecision: Object.keys(datePrecision).length > 0 ? datePrecision : undefined,
 				};
-				const targetFilePath = await createTaskInDailyNote(app, taskData, plugin.settings, plugin.dailyNoteIndex);
+				let targetFilePath: string | null;
+				if (createTarget === 'daily') {
+					targetFilePath = await createTaskInDailyNote(app, taskData, plugin.settings, plugin.dailyNoteIndex);
+				} else {
+					const path = createTarget === 'other' ? otherPath.trim() : createTarget;
+					targetFilePath = await createTaskInFile(app, path, taskData);
+					if (!targetFilePath) {
+						new Notice(i18n.t('modals.createTask.errorNoFile'));
+						return;
+					}
+				}
 				// 写回后立即刷新缓存并推送数据，跳过文件事件防抖回流
 				if (targetFilePath && plugin.taskCache) {
 					await plugin.taskCache.refreshFile(targetFilePath);
@@ -513,6 +544,31 @@ export function TaskFormModal({
 							prefix={isEdit ? 'editTask' : 'createTask'}
 						/>
 					</div>
+
+					{/* 创建位置（仅创建模式） */}
+					{!isEdit && (
+						<div className={EditTaskModalClasses.elements.section} style={{ marginBottom: '20px' }}>
+							<div className={EditTaskModalClasses.elements.createTarget}>
+								<label className={EditTaskModalClasses.elements.dateLabel}>{i18n.t('modals.createTask.createIn')}</label>
+								<select className="dropdown" value={createTarget} onChange={(e) => setCreateTarget(e.target.value)}>
+									<option value="daily">{i18n.t('modals.createTask.createInDaily')}</option>
+									{targetFileOptions.map((ft) => (
+										<option key={ft.filePath} value={ft.filePath}>{ft.title}</option>
+									))}
+									<option value="other">{i18n.t('modals.createTask.createInOther')}</option>
+								</select>
+								{createTarget === 'other' && (
+									<input
+										ref={otherInputRef}
+										type="text"
+										value={otherPath}
+										placeholder={i18n.t('modals.createTask.createInOtherPlaceholder')}
+										onChange={(e) => setOtherPath(e.target.value)}
+									/>
+								)}
+							</div>
+						</div>
+					)}
 
 					{/* 4. 标签选择器 */}
 					<div className={EditTaskModalClasses.elements.section} style={{ marginBottom: '20px' }}>

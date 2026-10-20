@@ -247,6 +247,11 @@ describe('clampForwardPointEnd', () => {
 		expect(clampForwardPointEnd(1410, [])).toBe(1440);
 	});
 
+	it('光标落在已有块内部：返回 min（抑制创建）', () => {
+		expect(clampForwardPointEnd(570, [{ startMin: 540, endMin: 600 }])).toBe(570);
+		expect(clampForwardPointEnd(600, [{ startMin: 540, endMin: 600 }])).toBe(660); // 块终点处可创建
+	});
+
 	it('光标处即块起点：返回值等于 min（无空隙，调用方抑制）', () => {
 		expect(clampForwardPointEnd(540, [seg(540)])).toBe(540);
 	});

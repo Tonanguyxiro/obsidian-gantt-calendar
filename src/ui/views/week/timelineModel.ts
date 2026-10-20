@@ -32,13 +32,15 @@ export const MAX_LANE = 3;
  * 快速创建（前向默认时长）的可用终点：钳到当日 24:00 与下一个块的起点。
  * ghost 悬浮预览与点击创建共用此判定，保证所见即所得——
  * 下方空隙不足默认时长时按空隙收缩（例：9:00 有块、光标 8:30 → 终点 9:00）。
- * 返回值等于 min 表示光标处即下一个块起点（无可用空隙），调用方应抑制。
+ * 返回值等于 min 表示光标处即下一个块起点、或已落在某个块内部（无可用空隙），调用方应抑制——
+ * 光标在已有事件上时只与该事件相关，不再出现创建 ghost / 响应创建点击。
  */
 export function clampForwardPointEnd(
 	min: number,
-	segs: ReadonlyArray<{ startMin: number }>,
+	segs: ReadonlyArray<{ startMin: number; endMin?: number }>,
 	durationMin: number = DEFAULT_POINT_DURATION_MIN,
 ): number {
+	if (segs.some((seg) => seg.endMin !== undefined && seg.startMin <= min && min < seg.endMin)) return min;
 	let end = Math.min(min + durationMin, MINUTES_PER_DAY);
 	for (const seg of segs) {
 		if (seg.startMin >= min && seg.startMin < end) {

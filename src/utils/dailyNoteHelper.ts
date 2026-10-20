@@ -320,6 +320,44 @@ async function insertTaskToFile(
 }
 
 /**
+ * 在指定笔记里创建任务：插在文件最后一个任务（含其缩进子行）之后；文件里还没有任务则追加到末尾。
+ * 用于「创建位置」选项（当日 file task 或任意其他笔记）。
+ *
+ * @returns 写入的文件路径；文件不存在时返回 null
+ */
+export async function createTaskInFile(
+	app: App,
+	filePath: string,
+	taskData: CreateTaskData
+): Promise<string | null> {
+	const file = app.vault.getFileByPath(filePath);
+	if (!file) return null;
+	const lines = (await app.vault.read(file)).split('\n');
+	const taskLine = serializeNewTask(taskData, app);
+
+	const indentOf = (line: string): number => line.length - line.trimStart().length;
+	let last = -1;
+	for (let i = 0; i < lines.length; i++) {
+		if (!/^\s*[-*+] \[.\]/.test(lines[i])) continue;
+		last = i;
+		// 吞掉缩进更深的子行（子任务 / 备注），新任务落在整棵子树之后
+		while (i + 1 < lines.length && lines[i + 1].trim() && indentOf(lines[i + 1]) > indentOf(lines[last])) i++;
+		last = i;
+	}
+
+	if (last >= 0) {
+		lines.splice(last + 1, 0, taskLine);
+	} else {
+		while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+		if (lines.length) lines.push('');
+		lines.push(taskLine, '');
+	}
+	await app.vault.modify(file, lines.join('\n'));
+	new Notice(i18n.t('modals.createTask.addedToFile', { name: file.basename }));
+	return file.path;
+}
+
+/**
  * 序列化新任务为文本行
  */
 function serializeNewTask(taskData: CreateTaskData, app: App): string {

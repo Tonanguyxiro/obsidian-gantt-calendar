@@ -1035,7 +1035,13 @@
         "inputPlaceholder": "Enter new tag name...",
         "searchOrCreate": "Search or create tag, press Enter to create",
         "addButton": "Add"
-      }
+      },
+      "createIn": "Create in",
+      "createInDaily": "Daily note",
+      "createInOther": "Other note…",
+      "createInOtherPlaceholder": "Search for a note…",
+      "addedToFile": "Task added to {{name}}",
+      "errorNoFile": "Pick an existing note to create the task in"
     },
     "editTask": {
       "title": "Edit Task",
@@ -1399,7 +1405,8 @@
       "feishuSyncComplete": "Feishu sync complete: {{summary}}"
     },
     "icsSync": "ICS Calendar Subscription Sync",
-    "editTask": "Edit task"
+    "editTask": "Edit task",
+    "editTaskNotATask": "The cursor is not on a task line"
   },
   "views": {
     "yearView": {

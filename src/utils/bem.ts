@@ -770,6 +770,7 @@ export const EditTaskModalClasses = {
 
 		// 标签选择器板块
 		tagsSection: bem(BLOCKS.EDIT_TASK_MODAL, 'tags-section'),
+		createTarget: bem(BLOCKS.EDIT_TASK_MODAL, 'create-target'),
 
 		// 周期设置板块
 		repeatSection: bem(BLOCKS.EDIT_TASK_MODAL, 'repeat-section'),

@@ -253,3 +253,15 @@
 		grid-template-columns: repeat(3, 1fr);
 	}
 }
+
+.gc-edit-task-modal__create-target {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
+.gc-edit-task-modal__create-target input[type="text"] {
+	flex: 1;
+	min-width: 160px;
+}

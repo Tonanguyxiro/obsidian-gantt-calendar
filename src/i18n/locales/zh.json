@@ -1035,7 +1035,13 @@
         "inputPlaceholder": "输入新标签名称...",
         "searchOrCreate": "搜索或创建标签，回车创建",
         "addButton": "添加"
-      }
+      },
+      "createIn": "创建位置",
+      "createInDaily": "当日日记",
+      "createInOther": "其他笔记…",
+      "createInOtherPlaceholder": "搜索笔记…",
+      "addedToFile": "任务已添加到 {{name}}",
+      "errorNoFile": "请选择一个已有的笔记来创建任务"
     },
     "editTask": {
       "title": "编辑任务",
@@ -1399,7 +1405,8 @@
       "feishuSyncComplete": "飞书同步完成: {{summary}}"
     },
     "icsSync": "ICS 日历订阅同步",
-    "editTask": "编辑任务"
+    "editTask": "编辑任务",
+    "editTaskNotATask": "光标所在行不是任务"
   },
   "views": {
     "yearView": {

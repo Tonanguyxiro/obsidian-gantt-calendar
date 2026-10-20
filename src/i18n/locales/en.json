@@ -1104,6 +1104,9 @@
       "push": "Push",
       "pull": "Pull",
       "conflict": "Conflict"
+    },
+    "common": {
+      "descriptionEditorHint": "Live Preview · type [[ to link a note"
     }
   },
   "toolbar": {
@@ -1199,9 +1202,9 @@
       "taskTab": "Task",
       "status": "Status",
       "tags": "Tags",
-      "query": "Task query (Tasks syntax)",
-      "queryPlaceholder": "not done\ndue before 2026-11-01\ntag includes #project\npriority above medium",
-      "queryHelp": "One filter per line (AND). Supports (A) OR (B), NOT (A). Filters: done, not done, due/scheduled/starts/created before|after|on <date>, has/no due date, tag includes, path/description includes, priority is|above|below, status.type is, is recurring.",
+      "query": "Task query (Tasks syntax or Dataview)",
+      "queryPlaceholder": "not done\ndue before 2026-11-01\ntag includes #project\n\n— or a Dataview query —\nTASK FROM \"Projects\" WHERE !completed",
+      "queryHelp": "Tasks syntax: one filter per line (AND). Supports (A) OR (B), NOT (A). Filters: done, not done, due/scheduled/starts/created before|after|on <date>, has/no due date, tag includes, path/description includes, priority is|above|below, status.type is, is recurring. Start with TASK to run a Dataview query (Dataview must be enabled).",
       "baseFile": "Base file",
       "baseNone": "None",
       "baseView": "Base view",
@@ -1209,7 +1212,10 @@
       "expression": "Filter expression (Bases syntax)",
       "expressionPlaceholder": "file.hasTag(\"project\")\nfile.inFolder(\"Projects\")\nstatus != \"archived\"",
       "expressionHelp": "One expression per line (AND). Filters notes, not tasks: file.hasTag(), file.inFolder(), file.name/path/ext/mtime, note properties, && || !, contains/startsWith/isEmpty. The Base file's filters are applied as well.",
-      "reset": "Reset filters"
+      "reset": "Reset filters",
+      "dataviewMissing": "Dataview is not installed or not enabled.",
+      "dataviewFailed": "Dataview query failed.",
+      "dataviewOnlyTask": "Only TASK queries are supported (TASK … WHERE …)."
     },
     "tagFilter": {
       "ariaLabel": "Tag Filter",

@@ -6,7 +6,7 @@ import { LinkClasses } from '../../utils/bem';
 import { i18n } from '../../i18n/i18n';
 import { openFileInExistingLeaf } from '../../utils/fileOpener';
 import { resolveLinkTarget, wikilinkDisplayText } from '../../utils/linkText';
-import { tokenizeInlineMarkdown, type InlineMarkdownToken } from '../../utils/inlineMarkdown';
+import { tokenizeInlineRich, type InlineMarkdownKind } from '../../utils/inlineMarkdown';
 
 export interface LinkSegment {
 	type: 'obsidian' | 'markdown' | 'url';
@@ -96,73 +96,72 @@ export function parseDescriptionSegments(text: string): DescriptionSegment[] {
 	return segments;
 }
 
-/**
- * React 富文本描述组件：渲染任务描述中的可点击链接
- */
-/** 行内 Markdown 渲染为对应的 HTML 元素 */
-function InlineMarkdown({ text }: { text: string }): JSX.Element {
-	const render = (t: InlineMarkdownToken, i: number): JSX.Element => {
-		switch (t.kind) {
-			case 'bold': return <strong key={i}>{t.text}</strong>;
-			case 'italic': return <em key={i}>{t.text}</em>;
-			case 'strike': return <del key={i}>{t.text}</del>;
-			case 'mark': return <mark key={i}>{t.text}</mark>;
-			case 'code': return <code key={i}>{t.text}</code>;
-			default: return <Fragment key={i}>{t.text}</Fragment>;
-		}
-	};
-	return <>{tokenizeInlineMarkdown(text).map(render)}</>;
+/** 行内 Markdown 类型 → 包裹元素；纯文字（text）不包裹 */
+const KIND_TAGS: Record<Exclude<InlineMarkdownKind, 'text'>, 'strong' | 'em' | 'del' | 'mark' | 'code'> = {
+	bold: 'strong', italic: 'em', strike: 'del', mark: 'mark', code: 'code',
+};
+
+function renderLink(link: LinkSegment, key: number, app: App, sourcePath: string): JSX.Element {
+	if (link.type === 'obsidian') {
+		return (
+			<a
+				key={key}
+				className={LinkClasses.modifiers.obsidian}
+				role="link"
+				data-href={link.href}
+				title={link.title}
+				onClick={(e) => {
+					e.preventDefault();
+					e.stopPropagation();
+					void (async () => {
+						const file = resolveLinkTarget(app, link.href, sourcePath);
+						if (file) {
+							await openFileInExistingLeaf(app, file.path, 0);
+						} else {
+							new Notice(i18n.t('common.fileNotFound', { path: link.href }));
+						}
+					})();
+				}}
+			>
+				{link.text}
+			</a>
+		);
+	}
+	return (
+		<a
+			key={key}
+			className={link.type === 'markdown' ? LinkClasses.modifiers.markdown : LinkClasses.modifiers.url}
+			href={link.href}
+			target="_blank"
+			rel="noopener noreferrer"
+			title={link.title}
+			onClick={(e) => e.stopPropagation()}
+		>
+			{link.text}
+		</a>
+	);
 }
 
+/**
+ * React 富文本描述组件：渲染任务描述中的可点击链接与行内 Markdown
+ * （行内标记可以包裹链接，如 **[[note]]**）
+ */
 export function DescriptionWithLinks({ text, app, sourcePath = '' }: { text: string; app: App; sourcePath?: string }): JSX.Element {
-	const segments = useMemo(() => parseDescriptionSegments(text), [text]);
+	const tokens = useMemo(() => {
+		// 链接段同样带 text 字段，必须按 type 区分
+		const pieces = parseDescriptionSegments(text).map((seg) => ('type' in seg ? seg : seg.text));
+		return tokenizeInlineRich<LinkSegment>(pieces);
+	}, [text]);
 
 	return (
 		<Fragment>
-			{segments.map((seg, i) => {
-				// 链接段同样带 text 字段，必须按 type 区分
-				if (!('type' in seg)) {
-					return <InlineMarkdown key={i} text={seg.text} />;
-				}
-				const link = seg;
-				if (link.type === 'obsidian') {
-					return (
-						<a
-							key={i}
-							className={LinkClasses.modifiers.obsidian}
-							role="link"
-							data-href={link.href}
-							title={link.title}
-							onClick={(e) => {
-								e.preventDefault();
-								e.stopPropagation();
-								void (async () => {
-									const file = resolveLinkTarget(app, link.href, sourcePath);
-									if (file) {
-										await openFileInExistingLeaf(app, file.path, 0);
-									} else {
-										new Notice(i18n.t('common.fileNotFound', { path: link.href }));
-									}
-								})();
-							}}
-						>
-							{link.text}
-						</a>
-					);
-				}
-				return (
-					<a
-						key={i}
-						className={link.type === 'markdown' ? LinkClasses.modifiers.markdown : LinkClasses.modifiers.url}
-						href={link.href}
-						target="_blank"
-						rel="noopener noreferrer"
-						title={link.title}
-						onClick={(e) => e.stopPropagation()}
-					>
-						{link.text}
-					</a>
-				);
+			{tokens.map((token, i) => {
+				const children = token.parts.map((part, j) => (
+					typeof part === 'string' ? <Fragment key={j}>{part}</Fragment> : renderLink(part, j, app, sourcePath)
+				));
+				if (token.kind === 'text') return <Fragment key={i}>{children}</Fragment>;
+				const Tag = KIND_TAGS[token.kind];
+				return <Tag key={i}>{children}</Tag>;
 			})}
 		</Fragment>
 	);

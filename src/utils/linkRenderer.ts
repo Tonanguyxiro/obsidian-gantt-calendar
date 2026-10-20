@@ -3,7 +3,7 @@ import { RegularExpressions } from './RegularExpressions';
 import { i18n } from '../i18n/i18n';
 import { openFileInExistingLeaf } from './fileOpener';
 import { resolveLinkTarget, wikilinkDisplayText } from './linkText';
-import { tokenizeInlineMarkdown } from './inlineMarkdown';
+import { tokenizeInlineRich } from './inlineMarkdown';
 
 /**
  * 链接渲染工具类
@@ -21,15 +21,6 @@ export class LinkRenderer {
 	 * @param text - 要渲染的文本
 	 * @param app - Obsidian App 实例，用于打开文件链接
 	 */
-	/** 纯文本段：行内 Markdown 渲染为对应元素 */
-	private static appendMarkdownText(container: HTMLElement, text: string): void {
-		const tags = { bold: 'strong', italic: 'em', strike: 'del', mark: 'mark', code: 'code' } as const;
-		for (const token of tokenizeInlineMarkdown(text)) {
-			if (token.kind === 'text') container.appendText(token.text);
-			else container.createEl(tags[token.kind], { text: token.text });
-		}
-	}
-
 	static renderTaskDescriptionWithLinks(container: HTMLElement, text: string, app: App, sourcePath = ''): void {
 		// 从统一正则入口获取链接正则表达式
 		const obsidianLinkRegex = RegularExpressions.Links.obsidianLinkRegex;
@@ -70,74 +61,86 @@ export class LinkRenderer {
 			}
 		}
 
-		// 渲染文本和链接
+		// 行内 Markdown 可以包裹链接（**[[note]]**）：文字与链接交错成片段后统一分词
+		type LinkMatch = (typeof uniqueMatches)[number];
+		const pieces: Array<string | LinkMatch> = [];
 		lastIndex = 0;
 		for (const m of uniqueMatches) {
-			// 添加前面的普通文本
-			if (m.start > lastIndex) {
-				LinkRenderer.appendMarkdownText(container, text.substring(lastIndex, m.start));
-			}
-
-			// 添加链接
-			if (m.type === 'obsidian') {
-				const notePath = m.groups[1]; // [[note]] 中的 note
-				const displayText = wikilinkDisplayText(notePath, m.groups[2]); // 别名优先，#标题显示为 "Note > 标题"
-				const link = container.createEl('a', { text: displayText, cls: 'gc-link gc-link--obsidian' });
-				link.setAttr('data-href', notePath);
-				link.setAttr('title', `打开：${notePath}`);
-				link.href = 'javascript:void(0)';
-				link.addEventListener('click', (e) => {
-					e.preventDefault();
-					e.stopPropagation();
-					void (async () => {
-						const file = resolveLinkTarget(app, notePath, sourcePath);
-						if (file) {
-							await openFileInExistingLeaf(app, file.path, 0);
-						} else {
-							new Notice(i18n.t('common.fileNotFound', { path: notePath }));
-						}
-					})();
-				});
-			} else if (m.type === 'markdown') {
-				const displayText = m.groups[1]; // [text]
-				const url = m.groups[2]; // (url)
-				const link = container.createEl('a', { text: displayText, cls: 'gc-link gc-link--markdown' });
-				const safeSchemes = ['http:', 'https:', 'mailto:', 'tel:', 'app:'];
-				try {
-					const parsed = new URL(url);
-					if (!safeSchemes.includes(parsed.protocol)) {
-						lastIndex = m.end;
-						continue;
-					}
-				} catch {
-					lastIndex = m.end;
-					continue;
-				}
-				link.href = url;
-				link.setAttr('target', '_blank');
-				link.setAttr('rel', 'noopener noreferrer');
-				link.setAttr('title', url);
-				link.addEventListener('click', (e) => {
-					e.stopPropagation();
-				});
-			} else if (m.type === 'url') {
-				const url = m.groups[1]; // 完整URL
-				const link = container.createEl('a', { text: url, cls: 'gc-link gc-link--url' });
-				link.href = url;
-				link.setAttr('target', '_blank');
-				link.setAttr('rel', 'noopener noreferrer');
-				link.setAttr('title', url);
-				link.addEventListener('click', (e) => {
-					e.stopPropagation();
-				});
-			}
-
+			if (m.start > lastIndex) pieces.push(text.substring(lastIndex, m.start));
+			pieces.push(m);
 			lastIndex = m.end;
 		}
+		if (lastIndex < text.length) pieces.push(text.substring(lastIndex));
 
-		// 添加剩余的普通文本
-		if (lastIndex < text.length) {
-			LinkRenderer.appendMarkdownText(container, text.substring(lastIndex));
+		const tags = { bold: 'strong', italic: 'em', strike: 'del', mark: 'mark', code: 'code' } as const;
+		for (const token of tokenizeInlineRich<LinkMatch>(pieces)) {
+			const host = token.kind === 'text' ? container : container.createEl(tags[token.kind]);
+			for (const part of token.parts) {
+				if (typeof part === 'string') host.appendText(part);
+				else LinkRenderer.appendLink(host, part, app, sourcePath);
+			}
 		}
+	}
+
+	/** 渲染一个链接元素；不安全协议的 Markdown 链接整段丢弃 */
+	private static appendLink(
+		container: HTMLElement,
+		m: { type: 'obsidian' | 'markdown' | 'url'; groups: RegExpExecArray },
+		app: App,
+		sourcePath: string,
+	): void {
+		if (m.type === 'obsidian') {
+			const notePath = m.groups[1]; // [[note]] 中的 note
+			const displayText = wikilinkDisplayText(notePath, m.groups[2]); // 别名优先，#标题显示为 "Note > 标题"
+			const link = container.createEl('a', { text: displayText, cls: 'gc-link gc-link--obsidian' });
+			link.setAttr('data-href', notePath);
+			link.setAttr('title', `打开：${notePath}`);
+			link.href = 'javascript:void(0)';
+			link.addEventListener('click', (e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				void (async () => {
+					const file = resolveLinkTarget(app, notePath, sourcePath);
+					if (file) {
+						await openFileInExistingLeaf(app, file.path, 0);
+					} else {
+						new Notice(i18n.t('common.fileNotFound', { path: notePath }));
+					}
+				})();
+			});
+		} else if (m.type === 'markdown') {
+			const displayText = m.groups[1]; // [text]
+			const url = m.groups[2]; // (url)
+			const link = container.createEl('a', { text: displayText, cls: 'gc-link gc-link--markdown' });
+			const safeSchemes = ['http:', 'https:', 'mailto:', 'tel:', 'app:'];
+			try {
+				const parsed = new URL(url);
+				if (!safeSchemes.includes(parsed.protocol)) {
+					link.remove();
+					return;
+				}
+			} catch {
+				link.remove();
+				return;
+			}
+			link.href = url;
+			link.setAttr('target', '_blank');
+			link.setAttr('rel', 'noopener noreferrer');
+			link.setAttr('title', url);
+			link.addEventListener('click', (e) => {
+				e.stopPropagation();
+			});
+		} else if (m.type === 'url') {
+			const url = m.groups[1]; // 完整URL
+			const link = container.createEl('a', { text: url, cls: 'gc-link gc-link--url' });
+			link.href = url;
+			link.setAttr('target', '_blank');
+			link.setAttr('rel', 'noopener noreferrer');
+			link.setAttr('title', url);
+			link.addEventListener('click', (e) => {
+				e.stopPropagation();
+			});
+		}
+
 	}
 }

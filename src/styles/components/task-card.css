@@ -227,6 +227,32 @@
 	text-overflow: ellipsis;
 }
 
+/* 允许换行的卡片（任务视图 / 日视图 / 文件卡悬浮列表）：文字给一个最小宽度，
+   空间不够时标签与日期整体换到下一行，而不是把文字挤成逐字换行的窄条（flex: 1 的基准是 0，不设下限永远不会触发换行） */
+.gc-task-card--task .gc-task-card__text,
+.gc-task-card--day .gc-task-card__text {
+	min-width: min(10em, 100%);
+}
+
+/* 允许换行的卡片（任务视图 / 日视图 / 文件卡悬浮列表）按自身宽度选择版式，使各处一致：
+   宽卡片 = 单行（文字 · 标签 · 日期同行）；窄卡片（< 520px）= 三行（文字 / 标签 / 日期）。
+   不按内容多少临时换行——否则同一列表里有的任务标签在右、有的在下 */
+.gc-task-card--task:not(.gc-task-card--timeline),
+.gc-task-card--day:not(.gc-task-card--timeline) {
+	container: gc-card / inline-size;
+}
+
+/* 时间线变体（日/周视图的时间块）另有标签/日期规则（day-canvas.css），不参与 */
+@container gc-card (max-width: 520px) {
+	.gc-task-card__tags,
+	.gc-task-card__times {
+		flex: 0 0 100%;
+		margin-left: 0;
+		padding-left: 24px; /* 对齐文字：复选框 16px + gap 8px */
+		box-sizing: border-box;
+	}
+}
+
 /* Task Card Modifiers */
 .gc-task-card--task,
 .gc-task-card--day {

@@ -482,6 +482,12 @@ export class RegularExpressions {
         collapseWhitespace: /\s{2,}/g,
 
         /**
+         * 标签前一个字符若匹配，则其后的 # 不是标签起点（与 removeTags/matchTags 的负向后行断言一致）
+         * 用于全局筛选符在行内任意位置的边界判断
+         */
+        tagPrecedingChar: /[\p{L}\p{N}\p{M}_/&#[]/u,
+
+        /**
          * 移除标签
          * 匹配 #tag 格式的标签及其后的空格（用于从描述中移除）
          *
@@ -720,6 +726,8 @@ export class RegularExpressions {
      * 高级过滤（Bases 表达式 / Tasks 查询）使用的正则
      */
     static readonly Filters = {
+        /** Dataview TASK 查询的首行（TASK / TASK FROM … / TASK WHERE …）；Tasks 语法里没有以 TASK 开头的过滤器 */
+        dataviewTask: /^TASK(?:\s|$)/i,
         /** YYYY-MM-DD */
         isoDate: /^\d{4}-\d{2}-\d{2}$/,
         /** /pattern/flags 形式的正则字面量 */

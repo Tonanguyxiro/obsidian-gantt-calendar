@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { EventRef } from 'obsidian';
 import type { FileTask, GCTask } from '../../types';
 import { useApp } from '../pluginContext';
 import { useCalendarStore, selectViewFilter, type ViewScope } from '../store/calendarStore';
 import { buildFileContext, compileFileFilter, readBaseText } from '../../filters/baseFilter';
 import { compileTaskQuery } from '../../filters/taskQuery';
+import { dataviewTaskKey, isDataviewQuery, runDataviewTaskQuery, type DataviewTaskResult } from '../../filters/dataviewQuery';
 
 export interface AdvancedFilters {
 	/** 应用文件筛选 + 任务查询 */
@@ -60,8 +62,49 @@ export function useAdvancedFilters(scope: ViewScope): AdvancedFilters {
 	const fileErrors = basePending ? [] : compiledFile.errors;
 	const filePredicate = compiledFile.predicate;
 
-	const compiledQuery = useMemo(() => compileTaskQuery(taskQuery ?? ''), [taskQuery]);
-	const taskPredicate = compiledQuery.predicate;
+	// 任务查询以 TASK 开头 → 交给 Dataview 执行；否则按 Tasks 语法编译
+	const useDataview = isDataviewQuery(taskQuery ?? '');
+	const compiledQuery = useMemo(
+		() => (useDataview ? { predicate: null, errors: [] as string[] } : compileTaskQuery(taskQuery ?? '')),
+		[useDataview, taskQuery],
+	);
+
+	// Dataview 查询是异步的：任务集或 Dataview 索引变化后（防抖）重新执行；
+	// 结果未返回、查询出错时不按它过滤（错误显示在面板里）
+	const tasksRef = useCalendarStore((s) => s.tasks);
+	const [dv, setDv] = useState<DataviewTaskResult | null>(null);
+	useEffect(() => {
+		if (!useDataview) {
+			setDv(null);
+			return;
+		}
+		let cancelled = false;
+		let timer = 0;
+		const run = () => {
+			window.clearTimeout(timer);
+			timer = window.setTimeout(() => {
+				void runDataviewTaskQuery(app, taskQuery ?? '').then((r) => { if (!cancelled) setDv(r); });
+			}, 150);
+		};
+		run();
+		// Dataview 的索引事件不在 Obsidian 的类型声明里
+		const mc = app.metadataCache as unknown as { on: (name: string, cb: () => void) => EventRef; offref: (ref: EventRef) => void };
+		const refs = [mc.on('dataview:index-ready', run), mc.on('dataview:metadata-change', run)];
+		return () => {
+			cancelled = true;
+			window.clearTimeout(timer);
+			refs.forEach((r) => mc.offref(r));
+		};
+	}, [app, useDataview, taskQuery, tasksRef]);
+
+	const dvKeys = useDataview ? dv?.keys ?? null : null;
+	const taskPredicate = useMemo(
+		() => (useDataview
+			? (dvKeys ? ((t: GCTask) => dvKeys.has(dataviewTaskKey(t))) : null)
+			: compiledQuery.predicate),
+		[useDataview, dvKeys, compiledQuery],
+	);
+	const taskErrors = useDataview ? (dv?.error ? [dv.error] : []) : compiledQuery.errors;
 
 	const pathPredicate = useCallback((): ((path: string) => boolean) | null => {
 		if (!filePredicate) return null;
@@ -93,6 +136,6 @@ export function useAdvancedFilters(scope: ViewScope): AdvancedFilters {
 		filterFileTasks,
 		active: !!filePredicate || !!taskPredicate,
 		fileErrors,
-		taskErrors: compiledQuery.errors,
+		taskErrors,
 	};
 }

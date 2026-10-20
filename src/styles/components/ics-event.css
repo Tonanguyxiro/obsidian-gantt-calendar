@@ -23,9 +23,88 @@
 	height: 100%;
 }
 
-.gc-week-view__time-block .gc-ics-event,
-.gc-day-canvas__block .gc-ics-event {
+/* 时间块内：纵向排列（标题在上、地点在下）。块容器是 size 容器（见 day-canvas.css），
+   按块高度取舍；时刻标签（右上角，约 14px 高、80px 宽）仅在 ≥30 分钟（≥25px）的块里显示，
+   版式必须保证标题不被标签遮挡：
+   ≥40px：顶部让出一行给标签；25–39px：标题与标签同一行，右侧让出标签宽度；<25px：无标签，单行紧凑 */
+:is(.gc-week-view__time-block, .gc-day-canvas__block) .gc-ics-event {
+	box-sizing: border-box;
+	flex-direction: column;
 	align-items: flex-start;
+	justify-content: flex-start;
+	gap: 0;
+}
+
+:is(.gc-week-view__time-block, .gc-day-canvas__block) .gc-ics-event__title {
+	max-width: 100%;
+	white-space: normal;
+	word-break: break-word;
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 3;
+}
+
+/* 地点只在块足够高时显示（标题一行 + 地点一行 + 顶部标签） */
+:is(.gc-week-view__time-block, .gc-day-canvas__block) .gc-ics-event__location {
+	display: none;
+	max-width: 100%;
+}
+
+@container (min-height: 40px) {
+	:is(.gc-week-view__time-block, .gc-day-canvas__block) .gc-ics-event {
+		padding-top: 14px;
+	}
+}
+
+@container (min-height: 56px) {
+	:is(.gc-week-view__time-block, .gc-day-canvas__block) .gc-ics-event__location {
+		display: block;
+	}
+}
+
+@container (max-height: 39px) {
+	:is(.gc-week-view__time-block, .gc-day-canvas__block) .gc-ics-event {
+		justify-content: center;
+		padding-top: 0;
+		padding-bottom: 0;
+		padding-right: 84px;
+		line-height: 1.15;
+	}
+
+	:is(.gc-week-view__time-block, .gc-day-canvas__block) .gc-ics-event__title {
+		display: block;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+}
+
+@container (max-height: 24px) {
+	:is(.gc-week-view__time-block, .gc-day-canvas__block) .gc-ics-event {
+		padding-right: 6px;
+		line-height: 1;
+	}
+}
+
+.gc-ics-event__title {
+	max-width: 100%;
+	white-space: normal;
+	word-break: break-word;
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 3;
+}
+
+/* 地点只在块足够高时显示（标题一行 + 地点一行 + 顶部标签） */
+:is(.gc-week-view__time-block, .gc-day-canvas__block) .gc-ics-event__location {
+	display: none;
+	max-width: 100%;
+}
+
+@container (min-height: 56px) {
+	:is(.gc-week-view__time-block, .gc-day-canvas__block) .gc-ics-event__location {
+		display: block;
+	}
 }
 
 .gc-ics-event__title {

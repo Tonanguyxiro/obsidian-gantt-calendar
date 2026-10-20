@@ -95,6 +95,7 @@ describe('多级标签', () => {
 	});
 	it('标签紧邻标点/零宽字符也能识别，双链锚点不误伤', () => {
 		expect(extractTags('(#task) **#a/b/c** x,#d​ #e')).toEqual(['task', 'a/b/c', 'd', 'e']);
+		expect(extractTags('#task 写报告 #task #Paper #paper #x')).toEqual(['task', 'Paper', 'x']);
 		expect(extractTags('see [[Note#Heading]] and [[#Top]] https://x.com/#frag')).toEqual([]);
 		expect(extractTaskDescription('#task **FACT** [[Note#H]]')).toBe('**FACT** [[Note#H]]');
 	});

@@ -393,10 +393,16 @@ type ParsedDates = Partial<Record<'createdDate' | 'startDate' | 'scheduledDate' 
  *
  * extractTags("任务 #前端 #vue3 开发")
  * // 返回: ['前端', 'vue3']
+ *
+ * extractTags("#task 写报告 #task #Paper #paper")
+ * // 返回: ['task', 'Paper']（重复标签只保留第一个）
  * ```
  */
 export function extractTags(description: string): string[] {
     const tags: string[] = [];
+    // Obsidian 标签不区分大小写：同一标签重复出现（#task … #task、#Task）只保留第一次，
+    // 所有显示（卡片 / 悬浮窗 / 筛选）与重新序列化都从这里取得去重后的标签
+    const seen = new Set<string>();
     let match: RegExpExecArray | null;
 
     // 使用统一正则入口
@@ -406,6 +412,9 @@ export function extractTags(description: string): string[] {
     tagRegex.lastIndex = 0;
 
     while ((match = tagRegex.exec(description)) !== null) {
+        const key = match[1].toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
         tags.push(match[1]);
     }
 

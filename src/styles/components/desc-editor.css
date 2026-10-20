@@ -1,0 +1,40 @@
+/* 任务描述编辑器：原生 Live Preview 编辑器的外框（编辑效果本身由 Obsidian 提供） */
+.gc-desc-editor__native {
+	box-sizing: border-box;
+	width: 100%;
+	min-height: 60px;
+	max-height: 140px;
+	overflow-y: auto;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 4px;
+	background: var(--background-secondary);
+	cursor: text;
+}
+
+.gc-desc-editor__native:focus-within {
+	border-color: var(--interactive-accent);
+}
+
+/* 覆盖笔记编辑器为阅读宽度留的大边距 */
+.gc-desc-editor__native.markdown-source-view.mod-cm6 .cm-editor,
+.gc-desc-editor__native.markdown-source-view.mod-cm6 .cm-scroller {
+	padding: 0;
+	min-height: 58px;
+}
+
+.gc-desc-editor__native.markdown-source-view.mod-cm6 .cm-content {
+	padding: 8px;
+	margin: 0;
+	max-width: none;
+	font-size: var(--font-ui-small);
+}
+
+.gc-desc-editor__native .cm-editor.cm-focused {
+	outline: none;
+}
+
+.gc-desc-editor__hint {
+	margin-top: 4px;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-faint);
+}

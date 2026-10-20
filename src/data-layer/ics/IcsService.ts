@@ -113,7 +113,7 @@ export class IcsService {
 	}
 
 	private async fetch(url: string): Promise<string> {
-		const res = await requestUrl({ url: normalizeIcsUrl(url), method: 'GET', throw: false });
+		const res = await requestUrl({ url: normalizeIcsUrl(url), method: 'GET', throw: false, headers: { 'Cache-Control': 'no-cache' } });
 		if (res.status < 200 || res.status >= 300) throw new Error(`HTTP ${res.status}`);
 		if (!res.text.includes('BEGIN:VCALENDAR')) throw new Error(i18n.t('settings.ics.notIcs'));
 		return res.text;

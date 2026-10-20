@@ -34,6 +34,10 @@ A powerful visual task management plugin for Obsidian.
 
 **ICS Calendar Subscriptions** — Subscribe to read-only Outlook / Google / Apple calendars; events show in the Day / Week / Month views and the sidebar in each subscription's color
 
+**Native Live Preview editing** — the task description box in the create/edit dialog uses Obsidian's own editor: live Markdown rendering, `[[` link completion and editing hotkeys
+
+**Advanced Filters** — File filter (Bases syntax) + task query: Tasks query syntax, or a Dataview query starting with `TASK` (requires the Dataview plugin)
+
 </div>
 
 ---
@@ -497,7 +501,7 @@ ICS subscriptions live on the **ICS** settings page; see [ICS Calendar Subscript
 
 **My tasks don't show up.**
 1. Confirm the line is a real task: `- [ ]` followed by text.
-2. If a **global filter marker** is configured, every task must carry it (`- [ ] 🎯 …`). Change or clear it in **Settings → Tasks → Global filter marker** — this requires an Obsidian restart.
+2. If a **global filter marker** is configured, every task must carry it (`- [ ] 🎯 …`), anywhere in the line: at the start, at the end, or right after a Day Planner time prefix (e.g. `- [ ] 09:00 - 10:30 #task Review`); a tag-style marker also matches sub-tags (`#task/work`). Change or clear it in **Settings → Tasks → Global filter marker** — this requires an Obsidian restart.
 3. Check that the enabled task format matches how you write tasks (Tasks emoji vs Dataview inline fields).
 4. In calendar views, tasks are placed by the **date filter field** — a task with no such date simply has nowhere to appear. Task View shows everything regardless.
 

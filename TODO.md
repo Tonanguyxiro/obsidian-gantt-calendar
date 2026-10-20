@@ -16,6 +16,17 @@
 
 ## ✅ 已完成（按日期倒序）
 
+### 2026-10-20（1.8.1）
+- [x] 任务文字支持标记包裹链接：`**[[note]]**`、`~~[[a|别名]]~~`、`*[文字](url)*`（`tokenizeInlineRich`：链接先占位再分词，React 与命令式渲染共用）
+- [x] ICS 事件块遮挡修复：时间块内按块高度分三档排版（≥40px 顶部让出时刻标签、25–39px 同行右侧让位、<25px 紧凑），地点仅在块够高时显示；拉取带 `Cache-Control: no-cache`
+- [x] 文件卡悬浮窗/任务视图/日视图卡片：文字最小宽度，空间不足时标签与日期整体换行，不再逐字换行
+- [x] 全局筛选符 `#task` 支持：`#task/xxx` 子标签（不再残留 `/xxx`）、时间区间在前（`09:00 - 10:30 #task …`）、行内任意位置（行尾也识别，标签边界判断）；序列化不再输出重复的 `#task #task`，已有子标签时不再补写筛选符
+- [x] 新增检查脚本 `tools/check-timeblock-overlap.js`、`tools/check-squeezed-text.js`，规则写入工作区 AGENTS.md §3.1 与本仓库 CLAUDE.md
+- [x] 任务查询支持 Dataview：查询框内容以 `TASK` 开头时整段交给 Dataview（`api.query`）执行，结果按 路径:行号 匹配任务（`src/filters/dataviewQuery.ts`、`useAdvancedFilters`）；支持 GROUP BY 展开，Dataview 索引变化自动重跑，未安装/语法错误/非 TASK 查询在面板内报错且不过滤；其余仍按 Tasks 语法
+- [x] 标签去重：同一标签重复出现（`#task … #task`、`#Task`）解析时只保留第一个（`extractTags`，不区分大小写），卡片/悬浮窗/筛选/重新序列化一致；允许换行的卡片（任务视图/日视图/文件卡悬浮列表）按自身宽度统一版式：≥520px 单行，<520px 三行（文字/标签/日期），不再出现同一列表里有的标签在右、有的在下
+- [x] 新建/编辑任务弹窗的描述框改为 Obsidian 原生 Live Preview 编辑器（`DescriptionEditor`）：Markdown 实时渲染（光标处显示标记）、原生 `[[` 补全（标题/块/别名）、Ctrl/⌘+B/I 等原生热键，Enter 提交、粘贴换行折成空格；原生编辑器取不到时退化为 textarea
+- [ ] 行为变化：标签形式的筛选符现在要求落在标签边界（`#tasks` 不再被 `#task` 命中）；非标签筛选符（如 🎯）也改为行内任意位置
+
 ### 2026-10-20（1.8.0）
 - [x] 新增 ICS 日历订阅（设置 → 新增「ICS」页，与「飞书同步」页分开）：只读、仅内存（参考 Day Planner），不写任何笔记。`src/data-layer/ics/`：`icsParser`（解析 + 重复事件展开，含 COUNT/UNTIL/EXDATE/RECURRENCE-ID、TZID 与 Outlook Windows 时区名）、`IcsService`（拉取/缓存回退/自动同步）、`icsTask`（事件 → 只读占位任务 `GCTask.icsEvent`）
 - [x] 日/周/月视图与侧边栏每日时间线显示 ICS 事件（`IcsEventCard`，按订阅配色；无勾选/拖动/缩放/右键）；`useIcsLayer` 合入时间线模型，`CalendarItemCard` 分派渲染

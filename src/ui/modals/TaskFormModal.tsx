@@ -14,6 +14,7 @@ import { Modal } from '../components/Modal';
 import { TagSelector } from './TagSelector';
 import { RepeatSection } from './RepeatSection';
 import { DateTimePicker } from '../components/DateTimePicker';
+import { DescriptionEditor } from '../components/DescriptionEditor';
 import { openReactModal } from './modalHost';
 
 /**
@@ -170,7 +171,7 @@ export function TaskFormModal({
 	);
 	const [selectedTags, setSelectedTags] = useState<string[]>(mode === 'edit' ? (task?.tags || []) : []);
 	const [description, setDescription] = useState(mode === 'edit' ? (task?.description || '') : '');
-	const descriptionRef = useRef<HTMLTextAreaElement | null>(null);
+	const descriptionRef = useRef<{ focus: () => void } | null>(null);
 
 	// 编辑模式：变更跟踪
 	const [priorityChanged, setPriorityChanged] = useState(false);
@@ -321,22 +322,17 @@ export function TaskFormModal({
 								<div className={EditTaskModalClasses.elements.sectionHint}>
 									{isEdit ? i18n.t('modals.editTask.submitHint') : i18n.t('modals.createTask.submitHint')}
 								</div>
-								<textarea
-									ref={descriptionRef}
-									className={EditTaskModalClasses.elements.descTextarea}
+								<DescriptionEditor
+									app={app}
+									focusRef={descriptionRef}
+									sourcePath={task?.filePath}
 									placeholder={isEdit ? undefined : i18n.t('modals.createTask.descriptionPlaceholder')}
 									value={description}
-									onChange={(e) => {
-										const v = e.target.value.replace(/[\r\n]+/g, ' ');
+									onChange={(v) => {
 										setDescription(v);
 										if (isEdit) setContentChanged(true);
 									}}
-									onKeyDown={(e) => {
-										if (e.key === 'Enter') {
-											e.preventDefault();
-											void saveTask();
-										}
-									}}
+									onSubmit={() => void saveTask()}
 								/>
 							</div>
 						</div>

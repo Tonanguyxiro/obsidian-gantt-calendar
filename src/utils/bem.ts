@@ -58,6 +58,7 @@ export const BLOCKS = {
 	CREATE_TASK_BUTTON: 'create-task-btn',
 	/** 编辑任务弹窗 */
 	EDIT_TASK_MODAL: 'edit-task-modal',
+	DESC_EDITOR: 'desc-editor',
 	/** 日期时间选择器（Linear 风格） */
 	DATE_TIME_PICKER: 'date-time-picker',
 	/** 确认弹窗 */
@@ -719,6 +720,14 @@ export const CreateTaskButtonClasses = {
 /**
  * 编辑任务弹窗类名常量
  */
+/**
+ * 任务描述编辑器（原生 Live Preview）类名常量
+ */
+export const DescEditorClasses = {
+	native: bem(BLOCKS.DESC_EDITOR, 'native'),
+	hint: bem(BLOCKS.DESC_EDITOR, 'hint'),
+};
+
 export const EditTaskModalClasses = {
 	block: bem(BLOCKS.EDIT_TASK_MODAL),
 

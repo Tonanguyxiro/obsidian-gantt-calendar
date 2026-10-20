@@ -188,14 +188,21 @@ export function serializeTask(
 	}
 	parts.push(`[${checkboxSymbol}]`);
 
+	// 标签形式的全局过滤器（#task）本身也会出现在 tags 里（解析时从整行提取）：
+	// 已有子标签（#task/work）时，标签写在行首即满足过滤，不再重复写过滤器；
+	// 过滤器自身从标签列表中剔除，避免输出 "#task #task"
+	const tagFilter = globalFilter.startsWith('#') ? globalFilter.slice(1) : '';
+	const hasSubTag = !!tagFilter && !!merged.tags?.some(tag => tag.trim().startsWith(`${tagFilter}/`));
+	const tags = (merged.tags ?? []).filter(tag => !tagFilter || tag.trim() !== tagFilter);
+
 	// 全局过滤器
-	if (globalFilter) {
+	if (globalFilter && !hasSubTag) {
 		parts.push(globalFilter);
 	}
 
 	// 标签（复选框之后，任务描述之前）
-	if (merged.tags && merged.tags.length > 0) {
-		const tagsStr = merged.tags.map(tag => `#${tag.trim()}`).join(' ');
+	if (tags.length > 0) {
+		const tagsStr = tags.map(tag => `#${tag.trim()}`).join(' ');
 		parts.push(tagsStr);
 	}
 

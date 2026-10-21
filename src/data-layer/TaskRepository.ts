@@ -199,7 +199,19 @@ export class TaskRepository {
 			// 优先使用完整的新任务对象（如果提供）
 			if (newTask) {
 				updatedTask = newTask;
-				this.taskCache.set(id, newTask);
+				// 行号漂移的指纹重配以旧 ID 发 updated：换到新 key，否则旧 key 残留成重复任务
+				const newId = generateTaskId(newTask);
+				if (newId !== id) {
+					this.taskCache.delete(id);
+					this.fileIndex.get(newTask.filePath)?.delete(id);
+					if (newTask.filePath) {
+						if (!this.fileIndex.has(newTask.filePath)) {
+							this.fileIndex.set(newTask.filePath, new Set());
+						}
+						this.fileIndex.get(newTask.filePath)!.add(newId);
+					}
+				}
+				this.taskCache.set(newId, newTask);
 			} else {
 				// 否则使用增量更新
 				const task = this.taskCache.get(id);

@@ -8,7 +8,7 @@ import { useCalendarStore } from '../store/calendarStore';
 import { i18n } from '../../i18n/i18n';
 import { formatDate, getWeekOfDate } from '../../dateUtils/dateUtilsIndex';
 import { openCreateTaskModal } from '../modals/TaskFormModal';
-import { syncFeishuTasks } from '../../commands/feishuCommands';
+import { isFeishuSyncEnabled, syncFeishuTasks } from '../../commands/feishuCommands';
 import type GanttCalendarPlugin from '../../../main';
 import { Icon } from './Icon';
 import { MOTION, easeOutTransition } from '../motion';
@@ -195,7 +195,9 @@ export function MobileNavDock(): JSX.Element {
 
 								<div className={ContextMenuClasses.section}>
 									{renderItem('act-create', 'plus', i18n.t('toolbar.createTask.ariaLabel'), openCreateTask)}
-									{renderItem('act-sync', 'cloud-download', i18n.t('toolbar.syncButton.defaultTitle'), () => void syncFeishuTasks(plugin as GanttCalendarPlugin))}
+									{isFeishuSyncEnabled(plugin.settings.syncConfiguration)
+										? renderItem('act-sync', 'cloud-download', i18n.t('toolbar.syncButton.defaultTitle'), () => void syncFeishuTasks(plugin as GanttCalendarPlugin))
+										: null}
 									{renderItem('act-refresh', 'refresh-cw', i18n.t('toolbar.refresh.refreshTask'), () => void handleRefresh())}
 									{renderItem('act-settings', 'settings', i18n.t('toolbar.settingsButton.ariaLabel'), openSettings)}
 								</div>

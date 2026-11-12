@@ -84,13 +84,159 @@
 	font-size: var(--font-ui-small);
 }
 
-.gc-filter-panel__textarea {
+.gc-filter-panel__query {
+	position: relative;
+}
+
+/* textarea 与镜像层共用排版，镜像层用于求光标坐标（补全弹窗定位） */
+.gc-filter-panel__textarea,
+.gc-filter-panel__query-mirror {
 	width: 100%;
-	min-height: 64px;
-	resize: vertical;
+	padding: 4px 8px;
+	border-width: 1px;
 	font-family: var(--font-monospace);
 	font-size: var(--font-ui-smaller);
 	line-height: 1.4;
+	letter-spacing: normal;
+	tab-size: 4;
+}
+
+.gc-filter-panel__textarea {
+	display: block;
+	min-height: 64px;
+	resize: vertical;
+}
+
+.gc-filter-panel__query-mirror {
+	position: absolute;
+	top: 0;
+	left: 0;
+	height: 100%;
+	overflow: hidden;
+	border-style: solid;
+	border-color: transparent;
+	white-space: pre-wrap;
+	overflow-wrap: break-word;
+	visibility: hidden;
+	pointer-events: none;
+}
+
+.gc-filter-panel__status {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 2px 8px;
+	font-size: var(--font-ui-smaller);
+	line-height: 1.4;
+}
+
+.gc-filter-panel__engine {
+	padding: 0 6px;
+	border-radius: var(--radius-s);
+	background: var(--background-modifier-hover);
+	color: var(--text-muted);
+}
+
+.gc-filter-panel__status--ok {
+	color: var(--text-success);
+}
+
+.gc-filter-panel__status--error {
+	color: var(--text-error);
+}
+
+.gc-filter-panel__status--pending {
+	color: var(--text-faint);
+}
+
+.gc-filter-panel__examples {
+	font-size: var(--font-ui-smaller);
+}
+
+.gc-filter-panel__examples-summary {
+	color: var(--text-muted);
+	cursor: pointer;
+	user-select: none;
+}
+
+.gc-filter-panel__example-group {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	margin-top: 4px;
+}
+
+.gc-filter-panel__example-group-title {
+	color: var(--text-faint);
+	font-weight: 600;
+}
+
+.gc-filter-panel__example {
+	display: block;
+	width: 100%;
+	height: auto;
+	padding: 2px 6px;
+	border: none;
+	border-radius: var(--radius-s);
+	background: transparent;
+	box-shadow: none;
+	color: var(--text-normal);
+	font-family: var(--font-monospace);
+	font-size: var(--font-ui-smaller);
+	line-height: 1.4;
+	text-align: left;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	cursor: pointer;
+}
+
+.gc-filter-panel__example:hover {
+	background: var(--background-modifier-hover);
+}
+
+/* 补全弹窗：原生 suggestion-container 外观，挂在 body 上，需高于筛选下拉 */
+.gc-filter-panel__suggest {
+	z-index: calc(var(--layer-popover) + 1);
+	max-height: 260px;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+
+.gc-filter-panel__suggest .suggestion {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+}
+
+.gc-filter-panel__suggest .suggestion-item {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-family: var(--font-monospace);
+	font-size: var(--font-ui-smaller);
+}
+
+.gc-filter-panel__suggest .suggestion-content {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.gc-filter-panel__suggest-kind {
+	flex: none;
+	color: var(--text-faint);
+	font-family: var(--font-interface);
+}
+
+.gc-filter-panel__suggest-hint {
+	flex: none;
+	padding: 4px 8px;
+	border-top: 1px solid var(--background-modifier-border);
+	color: var(--text-faint);
+	font-size: var(--font-ui-smaller);
 }
 
 .gc-filter-panel__hint {

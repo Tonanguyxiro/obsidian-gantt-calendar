@@ -1,20 +1,24 @@
-import { useCallback,  useEffect, useMemo, useRef, useState, type CSSProperties, type JSX  } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type JSX, type ReactNode } from 'react';
 import { unwrapTask } from '../../tasks/scheduledFallback';
 import { Notice } from 'obsidian';
 import type { App } from 'obsidian';
 import type { GCTask, IPluginContext } from '../../types';
 import type { CreateTaskData } from '../../utils/dailyNoteHelper';
-import { createTaskInDailyNote, createTaskInFile } from '../../utils/dailyNoteHelper';
+import { createTaskInDailyNote, createTaskInFile, createTaskAtLine, type CreateAtLine } from '../../utils/dailyNoteHelper';
 import type { TaskUpdates } from '../../tasks/taskSerializer';
 import { updateTaskProperties } from '../../tasks/taskUpdater';
 import { Logger } from '../../utils/logger';
 import { i18n } from '../../i18n/i18n';
-import { EditTaskModalClasses } from '../../utils/bem';
+import { EditTaskModalClasses, ModalClasses, TaskKindClasses } from '../../utils/bem';
 import { Modal } from '../components/Modal';
 import { TagSelector } from './TagSelector';
 import { RepeatSection } from './RepeatSection';
 import { DateTimePicker } from '../components/DateTimePicker';
 import { DescriptionEditor } from '../components/DescriptionEditor';
+import { Popover } from '../components/Popover';
+import { WhenPicker, type WhenValue } from '../components/WhenPicker';
+import { formatDuration, formatHm, hmToMin, type TimeFormat } from '../../utils/timeOfDay';
+import { Icon } from '../components/Icon';
 import { statusTransitionUpdates, getConfiguredStatuses, getPickerStatuses } from '../../tasks/statusTransition';
 import { legacyDaySlot, rewritePlannerPrefix } from '../../tasks/scheduledFallback';
 import { stripPlannerTime } from '../../tasks/taskParser/utils';
@@ -30,6 +34,9 @@ export interface PriorityOption {
 	label: string;
 	icon: string;
 }
+
+/** 任务类型：时间段（开始~截止，跨日）/ 当日（⏳ 某天 + 当日时刻） */
+export type TaskKind = 'period' | 'day';
 
 export interface TaskFormModalProps {
 	/** 创建或编辑模式 */
@@ -47,6 +54,10 @@ export interface TaskFormModalProps {
 	task?: GCTask;
 	enabledFormats?: string[];
 	allowEditContent?: boolean;
+	/** 创建模式：写到指定文件的指定行（「Edit task」命令在空行 / 普通文本行上触发） */
+	createAt?: CreateAtLine;
+	/** 创建模式：预填的描述 */
+	initialDescription?: string;
 	onSuccess: () => void;
 	/** 宿主关闭函数（真正卸载元素） */
 	onClose: () => void;
@@ -65,22 +76,8 @@ function getPriorityOptions(): PriorityOption[] {
 	];
 }
 
-function getDateFields(): DateFieldDef[] {
-	return [
-		{ key: 'createdDate', label: i18n.t('modals.createTask.dateFields.created') },
-		{ key: 'startDate', label: i18n.t('modals.createTask.dateFields.start') },
-		{ key: 'scheduledDate', label: i18n.t('modals.createTask.dateFields.scheduled') },
-		{ key: 'dueDate', label: i18n.t('modals.createTask.dateFields.due') },
-		{ key: 'completionDate', label: i18n.t('modals.createTask.dateFields.completion') },
-		{ key: 'cancelledDate', label: i18n.t('modals.createTask.dateFields.cancelled') },
-	];
-}
-
-/** 日期字段定义 */
-interface DateFieldDef {
-	key: string;
-	label: string;
-}
+const sameDay = (a: Date | null | undefined, b: Date | null | undefined): boolean =>
+	!!a && !!b && a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 
 /**
  * 截止早于开始判定（保存前保护）：双端均带时刻才按时刻比较，
@@ -143,12 +140,13 @@ export function TaskFormModal({
 	task,
 	enabledFormats,
 	allowEditContent,
+	createAt,
+	initialDescription,
 	onSuccess,
 	onClose,
 }: TaskFormModalProps): JSX.Element {
 	const [open, setOpen] = useState(true);
 	const priorityOptions = useMemo(getPriorityOptions, []);
-	const dateFields = useMemo(getDateFields, []);
 
 	// ========== 表单状态 ==========
 	const [priority, setPriority] = useState<PriorityOption['value']>(
@@ -230,10 +228,24 @@ export function TaskFormModal({
 	}, [createTarget, app]);
 	const [selectedTags, setSelectedTags] = useState<string[]>(mode === 'edit' ? (task?.tags || []) : []);
 	// 描述不含行首时间前缀：时刻由下方「时间片」管理，保存时再写回前缀
-	const [description, setDescription] = useState(mode === 'edit' ? stripPlannerTime(task?.description || '').trim() : '');
-	// 一天中的具体时间只在时间线里拖动安排；弹窗不提供时刻选项，保存时原样保留已有的时间片（⏳ + 行首时间前缀）
-	const slotStart = initialSlot.start;
-	const slotEnd = initialSlot.end;
+	const [description, setDescription] = useState(mode === 'edit' ? stripPlannerTime(task?.description || '').trim() : (initialDescription ?? ''));
+	// 当日任务的时刻（写成行首时间前缀 "09:00 - 10:30"）；时间段任务不涉及时刻
+	const [slotStart, setSlotStart] = useState(initialSlot.start);
+	const [slotEnd, setSlotEnd] = useState(initialSlot.end);
+	const [slotChangedByUser, setSlotChangedByUser] = useState(false);
+
+	// 任务类型：有起止 → 时间段；只有 ⏳ / 时间片 → 当日。旧写法（同日带时刻的起止）读成当日任务
+	const initialKind: TaskKind = useMemo(() => {
+		if (mode === 'edit' && task) {
+			if (initialSlot.legacy) return 'day';
+			if (task.startDate || task.dueDate) return 'period';
+			if (task.scheduledDate || initialSlot.start) return 'day';
+			return 'period';
+		}
+		return initialSlot.start ? 'day' : 'period';
+	}, [mode, task, initialSlot]);
+	const [kind, setKind] = useState<TaskKind>(initialKind);
+	const kindChanged = kind !== initialKind;
 	const descriptionRef = useRef<{ focus: () => void } | null>(null);
 	// 状态：设置里配置的全部状态（含自定义）；编辑模式默认取任务当前状态
 	const initialStatus = mode === 'edit' ? (task?.status ?? (task?.completed ? 'done' : task?.cancelled ? 'canceled' : 'todo')) : 'todo';
@@ -291,6 +303,27 @@ export function TaskFormModal({
 		}
 	};
 
+	const setDate = (key: string, d: Date | null) => {
+		setDates((prev) => ({ ...prev, [key]: d }));
+		if (isEdit) setDatesChanged(true);
+	};
+
+	/**
+	 * 完成 / 取消日期与状态双向联动：直接填完成日期 = 标记完成（并清掉取消日期），
+	 * 清空完成日期而状态仍是完成 = 退回待办；取消日期同理。改状态时日期已由 pickStatus 写入 / 清除
+	 */
+	const setStatusDate = (key: 'completionDate' | 'cancelledDate', d: Date | null) => {
+		const linked = key === 'completionDate' ? 'done' : 'canceled';
+		const other = key === 'completionDate' ? 'cancelledDate' : 'completionDate';
+		setDates((prev) => ({ ...prev, [key]: d, ...(d ? { [other]: null } : {}) }));
+		if (isEdit) setDatesChanged(true);
+		const nextStatus = d ? linked : (status === linked ? 'todo' : status);
+		if (nextStatus !== status) {
+			setStatus(nextStatus);
+			if (isEdit) setStatusChanged(true);
+		}
+	};
+
 	// ========== 保存逻辑 ==========
 	const saveTask = async () => {
 		if (mode === 'create') {
@@ -301,34 +334,40 @@ export function TaskFormModal({
 				descriptionRef.current?.focus();
 				return;
 			}
-			if (dates.createdDate && dates.dueDate && dates.createdDate > dates.dueDate) {
-				new Notice(i18n.t('modals.createTask.errorDateOrder'));
-				return;
-			}
-			if (dates.startDate && dates.dueDate && isDueBeforeStart(dates.startDate, dates.dueDate, datePrecision)) {
+			if (kind === 'period' && dates.startDate && dates.dueDate && isDueBeforeStart(dates.startDate, dates.dueDate, datePrecision)) {
 				new Notice(i18n.t('modals.createTask.errorStartDueOrder'));
 				return;
 			}
+			if (kind === 'day' && slotStart && slotEnd && slotEnd <= slotStart) {
+				new Notice(i18n.t('modals.task.errorSlotOrder'));
+				return;
+			}
 			try {
-				// 时间片：⏳ 当日 + 行首时间前缀；只填了时刻没填计划日期时，落到截止 / 开始日（都没有则今天）
-				const slotPrefix = slotPrefixOf(slotStart, slotEnd);
-				const scheduled = dates.scheduledDate ?? (slotPrefix ? (dates.dueDate ?? dates.startDate ?? dayStartOf(new Date())) : null);
+				// 时间段：只写开始 / 截止；当日：⏳ 当天 + 行首时间前缀
+				const slotPrefix = kind === 'day' ? slotPrefixOf(slotStart, slotEnd) : null;
+				const scheduled = kind === 'day' ? (dates.scheduledDate ?? dayStartOf(targetDate ?? new Date())) : null;
 				const taskData: CreateTaskData = {
 					description: rewritePlannerPrefix(desc, slotPrefix),
 					priority: priority === 'normal' ? undefined : priority,
 					status: status !== 'todo' ? status : undefined,
 					repeat: repeat || undefined,
 					createdDate: dates.createdDate!,
-					startDate: dates.startDate,
+					startDate: kind === 'period' ? dates.startDate : null,
 					scheduledDate: scheduled,
-					dueDate: dates.dueDate!,
+					dueDate: kind === 'period' ? dates.dueDate : null,
 					completionDate: dates.completionDate,
 					cancelledDate: dates.cancelledDate,
 					tags: selectedTags.length > 0 ? selectedTags : undefined,
 					datePrecision: Object.keys(datePrecision).length > 0 ? datePrecision : undefined,
 				};
 				let targetFilePath: string | null;
-				if (createTarget === 'daily') {
+				if (createAt) {
+					targetFilePath = await createTaskAtLine(app, createAt, taskData);
+					if (!targetFilePath) {
+						new Notice(i18n.t('modals.createTask.errorNoFile'));
+						return;
+					}
+				} else if (createTarget === 'daily') {
 					targetFilePath = await createTaskInDailyNote(app, taskData, plugin.settings, plugin.dailyNoteIndex);
 				} else {
 					const path = createTarget === 'other' ? otherPath.trim() : createTarget;
@@ -358,8 +397,12 @@ export function TaskFormModal({
 
 		// 编辑模式
 		if (!task) return;
-		if (dates.startDate && dates.dueDate && isDueBeforeStart(dates.startDate, dates.dueDate, datePrecision)) {
+		if (kind === 'period' && dates.startDate && dates.dueDate && isDueBeforeStart(dates.startDate, dates.dueDate, datePrecision)) {
 			new Notice(i18n.t('modals.editTask.errorStartDueOrder'));
+			return;
+		}
+		if (kind === 'day' && slotStart && slotEnd && slotEnd <= slotStart) {
+			new Notice(i18n.t('modals.task.errorSlotOrder'));
 			return;
 		}
 		try {
@@ -372,16 +415,36 @@ export function TaskFormModal({
 				updates.cancelled = t.cancelled;
 			}
 			if (repeatChanged) updates.repeat = repeat;
-			// 时间片：⏳ 当日 + 行首时间前缀。旧写法（起止 / ⏳ 上带时刻）打开时已读成时间片，保存即迁移
-			const slotPrefix = slotPrefixOf(slotStart, slotEnd);
+			// 时间片：⏳ 当日 + 行首时间前缀。旧写法（起止 / ⏳ 上带时刻）打开时已读成时间片，保存即迁移。
+			// 切换了任务类型 = 转换：时间段 → 当日 清掉起止；当日 → 时间段 清掉 ⏳ 与时刻。
+			// 没切换时另一类的字段原样保留（同一任务可以既有日期区间又有时间片）
+			const initialPrefix = slotPrefixOf(initialSlot.start, initialSlot.end);
+			let slotPrefix: string | null;
+			let startDate = dates.startDate;
+			let dueDate = dates.dueDate;
+			let scheduledDate = dates.scheduledDate;
+			if (kind === 'day') {
+				slotPrefix = slotPrefixOf(slotStart, slotEnd);
+				scheduledDate = dates.scheduledDate ?? dayStartOf(new Date());
+				// 转换，或旧写法里与时间片同一天的起止（它们只是时刻的旧载体）：起止去掉
+				const legacySameDay = initialSlot.legacy && !!initialSlot.day
+					&& (!startDate || sameDay(startDate, initialSlot.day)) && (!dueDate || sameDay(dueDate, initialSlot.day));
+				if (kindChanged || legacySameDay) {
+					startDate = null;
+					dueDate = null;
+				}
+			} else {
+				slotPrefix = kindChanged ? null : initialPrefix;
+				if (kindChanged) scheduledDate = null;
+			}
 			const hasTimedDates = (['startDate', 'dueDate', 'scheduledDate'] as const).some((f) => task.datePrecision?.[f] === 'time');
-			const slotChanged = hasTimedDates || initialSlot.legacy;
+			const slotChanged = hasTimedDates || initialSlot.legacy || slotChangedByUser || kindChanged;
 			const writeDates = datesChanged || slotChanged;
 			if (writeDates) {
 				updates.createdDate = dates.createdDate;
-				updates.startDate = dates.startDate;
-				updates.scheduledDate = dates.scheduledDate ?? (slotPrefix ? (dates.dueDate ?? dates.startDate ?? dayStartOf(new Date())) : null);
-				updates.dueDate = dates.dueDate;
+				updates.startDate = startDate;
+				updates.scheduledDate = scheduledDate;
+				updates.dueDate = dueDate;
 				updates.completionDate = dates.completionDate;
 				updates.cancelledDate = dates.cancelledDate;
 			}
@@ -423,49 +486,141 @@ export function TaskFormModal({
 		return internal?.taskCache?.getAllTasks() || [];
 	}, [mode, plugin, app]);
 
+	// 「时间」行的摘要（选择器收在弹层里，切换类型时弹窗高度不变、控件不移动）
+	// 「时间」面板的值与回写：严格对应 Tasks 字段（时间段 🛫/📅，当日 ⏳ + 时间前缀）
+	const timeFormat: TimeFormat = (plugin?.settings.timeFormat
+		?? (app as unknown as { plugins?: { plugins?: Record<string, { settings?: { timeFormat?: TimeFormat } }> } }).plugins?.plugins?.['gantt-calendar']?.settings?.timeFormat)
+		?? '24h';
+	const whenValue: WhenValue = {
+		kind,
+		start: dates.startDate ?? null,
+		due: dates.dueDate ?? null,
+		scheduled: dates.scheduledDate ?? null,
+		timeStart: slotStart,
+		timeEnd: slotEnd,
+	};
+	const applyWhen = (v: WhenValue) => {
+		setKind(v.kind);
+		if (v.start !== whenValue.start || v.due !== whenValue.due || v.scheduled !== whenValue.scheduled) {
+			setDates((prev) => ({ ...prev, startDate: v.start, dueDate: v.due, scheduledDate: v.scheduled }));
+			if (isEdit) setDatesChanged(true);
+		}
+		if (v.timeStart !== slotStart || v.timeEnd !== slotEnd) {
+			setSlotStart(v.timeStart);
+			setSlotEnd(v.timeEnd);
+			setSlotChangedByUser(true);
+		}
+	};
+	// 摘要：Nov 10 → Nov 14 · 5 days / Due Nov 14 / Fri, Nov 13 · 14:00–16:00 · 2 h
+	const fmtDay = (d: Date) => window.moment(d).format(i18n.t('modals.task.summaryDateFormat'));
+	const whenSummary = (() => {
+		if (kind === 'period') {
+			const { startDate: st, dueDate: du } = dates;
+			if (st && du) {
+				const n = Math.round((dayStartOf(du).getTime() - dayStartOf(st).getTime()) / 86400000) + 1;
+				return n > 1 ? `${fmtDay(st)} → ${fmtDay(du)} · ${i18n.t('modals.when.days', { count: n })}` : fmtDay(st);
+			}
+			if (du) return i18n.t('modals.when.summaryDue', { date: fmtDay(du) });
+			if (st) return i18n.t('modals.when.summaryStart', { date: fmtDay(st) });
+			return i18n.t('modals.task.notSet');
+		}
+		if (!dates.scheduledDate && !slotStart) return i18n.t('modals.task.notSet');
+		const day = window.moment(dates.scheduledDate ?? new Date()).format(i18n.t('modals.when.previewFormat'));
+		if (!slotStart) return `${day} · ${i18n.t('modals.task.allDay')}`;
+		const sMin = hmToMin(slotStart);
+		const eMin = hmToMin(slotEnd);
+		const range = slotEnd ? `${formatHm(slotStart, timeFormat)}–${formatHm(slotEnd, timeFormat)}` : formatHm(slotStart, timeFormat);
+		const len = sMin !== null && eMin !== null && eMin > sMin ? ` · ${formatDuration(eMin - sMin)}` : '';
+		return `${day} · ${range}${len}`;
+	})();
+
+	// 分段控件里 ◽ 几乎看不见，普通优先级用短横表示
+	const priorityIcon = (v: PriorityOption['value']) => (v === 'normal' ? '–' : priorityOptions.find((o) => o.value === v)?.icon ?? '');
+
 	return (
-		<Modal open={open} onClose={handleClose} onExited={onClose} title={title} width={560}>
+		<Modal open={open} onClose={handleClose} onExited={onClose} title={title} width={600} className={ModalClasses.overlayTop}>
 			<div className={EditTaskModalClasses.block}>
-				{/* 滚动容器 */}
 				<div className={EditTaskModalClasses.elements.scrollContainer}>
-					{/* 1. 任务描述板块（编辑模式仅在允许时显示） */}
+					{/* 描述：原生 Live Preview 编辑器，作为弹窗的主角 */}
 					{!isEdit || allowEditContent ? (
-						<div className={EditTaskModalClasses.elements.section}>
-							<div className={EditTaskModalClasses.elements.descContainer}>
-								<label className={EditTaskModalClasses.elements.sectionLabel}>
-									{isEdit ? i18n.t('modals.editTask.descriptionLabel') : i18n.t('modals.createTask.descriptionLabel')}
-								</label>
-								<div className={EditTaskModalClasses.elements.sectionHint}>
-									{isEdit ? i18n.t('modals.editTask.submitHint') : i18n.t('modals.createTask.submitHint')}
-								</div>
-								<DescriptionEditor
-									app={app}
-									focusRef={descriptionRef}
-									sourcePath={task?.filePath}
-									placeholder={isEdit ? undefined : i18n.t('modals.createTask.descriptionPlaceholder')}
-									value={description}
-									onChange={(v) => {
-										setDescription(v);
-										if (isEdit) setContentChanged(true);
-									}}
-									onSubmit={() => void saveTask()}
-								/>
+						<div className={EditTaskModalClasses.elements.descContainer}>
+							<DescriptionEditor
+								app={app}
+								focusRef={descriptionRef}
+								sourcePath={task?.filePath ?? createAt?.filePath}
+								placeholder={i18n.t('modals.createTask.descriptionPlaceholder')}
+								value={description}
+								onChange={(v) => {
+									setDescription(v);
+									if (isEdit) setContentChanged(true);
+								}}
+								onSubmit={() => void saveTask()}
+							/>
+							<div className={EditTaskModalClasses.elements.sectionHint}>
+								{isEdit ? i18n.t('modals.editTask.submitHint') : i18n.t('modals.createTask.submitHint')}
 							</div>
 						</div>
 					) : null}
 
-					{/* 2. 优先级板块 */}
-					<div className={EditTaskModalClasses.elements.section}>
-						<div className={EditTaskModalClasses.elements.priorityContainer}>
-							<label className={EditTaskModalClasses.elements.sectionLabel}>
-								{i18n.t('modals.editTask.priorityLabel')}
-							</label>
-							<div className={EditTaskModalClasses.elements.priorityGrid}>
+					{/* 属性列表：与 Obsidian 笔记属性面板同样的「图标 + 名称 | 值」排版 */}
+					<div className={EditTaskModalClasses.elements.props}>
+						<PropRow icon="circle-dot" label={i18n.t('modals.editTask.statusLabel')}>
+							<div className={EditTaskModalClasses.elements.statusGrid}>
+								{statuses.map(st => {
+									const colors = getStatusColor(st.key, allStatuses, themeMode);
+									return (
+										<button
+											key={st.key}
+											type="button"
+											className={[
+												EditTaskModalClasses.elements.statusBtn,
+												...(st.key === status ? [EditTaskModalClasses.elements.priorityBtnSelected] : []),
+											].join(' ')}
+											style={colors ? ({ '--status-bg': colors.bg, '--status-fg': colors.text } as CSSProperties) : undefined}
+											data-value={st.key}
+											title={`[${st.symbol}] ${st.description ?? ''}`}
+											onClick={() => pickStatus(st.key)}
+										>
+											<span className={EditTaskModalClasses.elements.statusDot} />
+											{st.name}
+										</button>
+									);
+								})}
+							</div>
+						</PropRow>
+
+						<PropRow icon="calendar-check" label={i18n.t('modals.task.statusDates')}>
+							<div className={EditTaskModalClasses.elements.inlineDates}>
+								<DateField
+									label={i18n.t('modals.createTask.dateFields.completion')}
+									current={dates.completionDate ?? null}
+									onChange={(d) => setStatusDate('completionDate', d)}
+								/>
+								<DateField
+									label={i18n.t('modals.createTask.dateFields.cancelled')}
+									current={dates.cancelledDate ?? null}
+									onChange={(d) => setStatusDate('cancelledDate', d)}
+								/>
+								<DateField
+									label={i18n.t('modals.createTask.dateFields.created')}
+									current={dates.createdDate ?? null}
+									onChange={(d) => setDate('createdDate', d)}
+								/>
+							</div>
+						</PropRow>
+
+						<PropRow icon="flag" label={i18n.t('modals.editTask.priorityLabel')}>
+							<div className={EditTaskModalClasses.elements.prioritySegments} role="radiogroup">
 								{priorityOptions.map(option => (
 									<button
 										key={option.value}
+										type="button"
+										role="radio"
+										aria-checked={option.value === priority}
+										aria-label={option.label}
+										title={option.label}
 										className={[
-											EditTaskModalClasses.elements.priorityBtn,
+											EditTaskModalClasses.elements.prioritySegment,
 											...(option.value === priority ? [EditTaskModalClasses.elements.priorityBtnSelected] : []),
 										].join(' ')}
 										data-value={option.value}
@@ -474,105 +629,56 @@ export function TaskFormModal({
 											if (isEdit) setPriorityChanged(true);
 										}}
 									>
-										{`${option.icon} ${option.label}`}
+										<span>{priorityIcon(option.value)}</span>
 									</button>
 								))}
 							</div>
-						</div>
-					</div>
+							{/* 选中项名称放在分段控件外的固定位置：切换时按钮不改变宽度、不移动 */}
+							<span className={EditTaskModalClasses.elements.priorityName}>
+								{priorityOptions.find((o) => o.value === priority)?.label}
+							</span>
+						</PropRow>
 
-					{/* 状态板块：设置里配置的全部状态 */}
-					<div className={EditTaskModalClasses.elements.section}>
-						<div className={EditTaskModalClasses.elements.priorityContainer}>
-							<label className={EditTaskModalClasses.elements.sectionLabel}>
-								{i18n.t('modals.editTask.statusLabel')}
-							</label>
-							<div className={EditTaskModalClasses.elements.statusGrid}>
-								{statuses.map(st => {
-									const colors = getStatusColor(st.key, allStatuses, themeMode);
-									return (
-										<button
-											key={st.key}
-											className={[
-												EditTaskModalClasses.elements.priorityBtn,
-												EditTaskModalClasses.elements.statusBtn,
-												...(st.key === status ? [EditTaskModalClasses.elements.priorityBtnSelected] : []),
-											].join(' ')}
-											style={colors ? ({ '--status-bg': colors.bg, '--status-fg': colors.text } as CSSProperties) : undefined}
-											data-value={st.key}
-											title={st.description}
-											onClick={() => pickStatus(st.key)}
-										>
-											{`${st.key === status ? '✓ ' : ''}[${st.symbol}] ${st.name}`}
-										</button>
-									);
-								})}
-							</div>
-						</div>
-					</div>
-
-					{/* 3. 时间设置板块 */}
-					<div className={EditTaskModalClasses.elements.section}>
-						<div className={EditTaskModalClasses.elements.datesContainer}>
-							<label className={EditTaskModalClasses.elements.sectionLabel}>
-								{i18n.t('modals.editTask.datesLabel')}
-							</label>
-							<div className={EditTaskModalClasses.elements.datesGrid}>
-								{dateFields.map(field => (
-									<DateField
-										key={field.key}
-										label={field.label}
-										current={dates[field.key] ?? null}
-										onChange={(d) => {
-											setDates((prev) => ({ ...prev, [field.key]: d }));
-											if (isEdit) setDatesChanged(true);
-										}}
-									/>
-								))}
-							</div>
-						</div>
-					</div>
-
-					{/* 3.5. 周期设置板块 */}
-					<div className={EditTaskModalClasses.elements.section} style={{ marginBottom: '20px' }}>
-						<RepeatSection
-							value={repeat}
-							onChange={(rule) => {
-								setRepeat(rule);
-								if (isEdit) setRepeatChanged(true);
-							}}
-							prefix={isEdit ? 'editTask' : 'createTask'}
-						/>
-					</div>
-
-					{/* 创建位置（仅创建模式） */}
-					{!isEdit && (
-						<div className={EditTaskModalClasses.elements.section} style={{ marginBottom: '20px' }}>
-							<div className={EditTaskModalClasses.elements.createTarget}>
-								<label className={EditTaskModalClasses.elements.dateLabel}>{i18n.t('modals.createTask.createIn')}</label>
-								<select className="dropdown" value={createTarget} onChange={(e) => setCreateTarget(e.target.value)}>
-									<option value="daily">{i18n.t('modals.createTask.createInDaily')}</option>
-									{targetFileOptions.map((ft) => (
-										<option key={ft.filePath} value={ft.filePath}>{ft.title}</option>
-									))}
-									<option value="other">{i18n.t('modals.createTask.createInOther')}</option>
-								</select>
-								{createTarget === 'other' && (
-									<input
-										ref={otherInputRef}
-										type="text"
-										value={otherPath}
-										placeholder={i18n.t('modals.createTask.createInOtherPlaceholder')}
-										onChange={(e) => setOtherPath(e.target.value)}
-									/>
+						<PropRow icon="calendar-range" label={i18n.t('modals.task.when')}>
+							<Popover
+								width={368}
+								trigger={({ toggle, open: popOpen, ref }) => (
+									<button
+										type="button"
+										ref={ref}
+										aria-expanded={popOpen}
+										className={`${TaskKindClasses.elements.summary}${popOpen ? ` ${TaskKindClasses.modifiers.summaryOpen}` : ''}`}
+										onClick={toggle}
+									>
+										<Icon icon={kind === 'period' ? 'calendar-range' : 'clock'} />
+										<span className={TaskKindClasses.elements.summaryText}>{whenSummary}</span>
+										{kindChanged && isEdit ? (
+											<span className={TaskKindClasses.elements.summaryBadge} title={i18n.t(kind === 'day' ? 'modals.task.convertToDay' : 'modals.task.convertToPeriod')}>
+												{i18n.t('modals.task.converting')}
+											</span>
+										) : null}
+										<Icon icon="chevron-down" />
+									</button>
 								)}
-							</div>
-						</div>
-					)}
+							>
+								{() => (
+									<WhenPicker value={whenValue} onChange={applyWhen} timeFormat={timeFormat} />
+								)}
+							</Popover>
+						</PropRow>
 
-					{/* 4. 标签选择器 */}
-					<div className={EditTaskModalClasses.elements.section} style={{ marginBottom: '20px' }}>
-						<div className={EditTaskModalClasses.elements.tagsSection}>
+						<PropRow icon="repeat" label={i18n.t('modals.task.repeat')}>
+							<RepeatSection
+								value={repeat}
+								onChange={(rule) => {
+									setRepeat(rule);
+									if (isEdit) setRepeatChanged(true);
+								}}
+								prefix={isEdit ? 'editTask' : 'createTask'}
+							/>
+						</PropRow>
+
+						<PropRow icon="tags" label={i18n.t('modals.task.tags')}>
 							<TagSelector
 								allTasks={allTasksForTags}
 								initialTags={selectedTags}
@@ -581,19 +687,61 @@ export function TaskFormModal({
 									if (isEdit) setTagsChanged(true);
 								}}
 							/>
-						</div>
+						</PropRow>
+
+						{!isEdit && !createAt && (
+							<PropRow icon="file-plus" label={i18n.t('modals.createTask.createIn')}>
+								<div className={EditTaskModalClasses.elements.createTarget}>
+									<select className="dropdown" value={createTarget} onChange={(e) => setCreateTarget(e.target.value)}>
+										<option value="daily">{i18n.t('modals.createTask.createInDaily')}</option>
+										{targetFileOptions.map((ft) => (
+											<option key={ft.filePath} value={ft.filePath}>{ft.title}</option>
+										))}
+										<option value="other">{i18n.t('modals.createTask.createInOther')}</option>
+									</select>
+									{createTarget === 'other' && (
+										<input
+											ref={otherInputRef}
+											type="text"
+											value={otherPath}
+											placeholder={i18n.t('modals.createTask.createInOtherPlaceholder')}
+											onChange={(e) => setOtherPath(e.target.value)}
+										/>
+									)}
+								</div>
+							</PropRow>
+						)}
 					</div>
 				</div>
 
-				{/* 操作按钮 */}
+				{/* 操作按钮（固定在底部） */}
 				<div className={EditTaskModalClasses.elements.buttons}>
-					<button onClick={handleClose}>{i18n.t('common.cancel')}</button>
-					<button className="mod-cta" onClick={() => void saveTask()}>
+					{isEdit && task ? (
+						<span className={EditTaskModalClasses.elements.footerMeta} title={task.filePath}>
+							{`${task.fileName}:${task.lineNumber}`}
+						</span>
+					) : null}
+					<button type="button" onClick={handleClose}>{i18n.t('common.cancel')}</button>
+					<button type="button" className="mod-cta" onClick={() => void saveTask()}>
 						{saveText}
 					</button>
 				</div>
 			</div>
 		</Modal>
+	);
+}
+
+// ==================== 属性行 ====================
+
+function PropRow({ icon, label, children }: { icon: string; label: string; children: ReactNode }): JSX.Element {
+	return (
+		<div className={EditTaskModalClasses.elements.propRow}>
+			<div className={EditTaskModalClasses.elements.propLabel}>
+				<Icon icon={icon} />
+				<span>{label}</span>
+			</div>
+			<div className={EditTaskModalClasses.elements.propValue}>{children}</div>
+		</div>
 	);
 }
 
@@ -633,6 +781,8 @@ export function openCreateTaskModal(options: {
 	targetHour?: number;
 	targetMinute?: number;
 	targetRange?: { start: Date; end: Date };
+	createAt?: CreateAtLine;
+	initialDescription?: string;
 	onSuccess: () => void;
 }): void {
 	const close = openReactModal(
@@ -640,6 +790,8 @@ export function openCreateTaskModal(options: {
 			mode="create"
 			app={options.app}
 			plugin={options.plugin}
+			createAt={options.createAt}
+			initialDescription={options.initialDescription}
 			targetDate={options.targetDate}
 			targetHour={options.targetHour}
 			targetMinute={options.targetMinute}

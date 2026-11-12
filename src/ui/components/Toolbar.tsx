@@ -1,4 +1,4 @@
-import { useMemo, type JSX, type MouseEvent as ReactMouseEvent } from 'react';
+import { useMemo, useRef, type JSX, type MouseEvent as ReactMouseEvent } from 'react';
 import type { CalendarViewType, SortField } from '../../types';
 import { ToolbarClasses, CreateTaskButtonClasses } from '../../utils/bem';
 import { usePlugin } from '../pluginContext';
@@ -6,7 +6,7 @@ import { useCalendarStore, type ViewScope } from '../store/calendarStore';
 import { i18n } from '../../i18n/i18n';
 import { formatDate, getWeekOfDate } from '../../dateUtils/dateUtilsIndex';
 import { openCreateTaskModal } from '../modals/TaskFormModal';
-import { syncFeishuTasks } from '../../commands/feishuCommands';
+import { isFeishuSyncEnabled, syncFeishuTasks } from '../../commands/feishuCommands';
 import type GanttCalendarPlugin from '../../../main';
 import type { TaskStatus } from '../../tasks/taskStatus';
 import { DEFAULT_TASK_STATUSES } from '../../tasks/taskStatus';
@@ -14,7 +14,10 @@ import { Icon } from './Icon';
 import { FilterPanel } from './FilterPanel';
 import { DropdownMenu, type MenuItemDef, type DropdownMenuSection } from './DropdownMenu';
 import type { DateFieldType, GanttCalendarSettings } from '../../settings/types';
-import { useIsNarrow } from '../utils/platform';
+import { useIsNarrow, useElementNarrow } from '../utils/platform';
+
+/** 视图宽度不超过该值时，次要按钮收进 ⋯ 菜单（视图按钮此时已只剩图标） */
+const TOOLBAR_COLLAPSE_WIDTH = 640;
 
 const VIEW_BUTTONS: Array<{ type: CalendarViewType; icon: string }> = [
 	{ type: 'day', icon: 'sun' },
@@ -34,6 +37,9 @@ const MONTH_ABBR = () => i18n.t('common.monthsAbbr') as unknown as string[];
  */
 export function ToolbarBar(): JSX.Element {
 	const plugin = usePlugin();
+	// 飞书同步未开启时不显示同步按钮（设置页开启后视图会重新挂载，这里随之更新）
+	useCalendarStore((s) => s.settingsVersion);
+	const feishuEnabled = isFeishuSyncEnabled(plugin.settings.syncConfiguration);
 	const viewType = useCalendarStore((s) => s.viewType);
 	const currentDate = useCalendarStore((s) => s.currentDate);
 	const scope = viewType as ViewScope;
@@ -214,7 +220,7 @@ export function ToolbarBar(): JSX.Element {
 		sections.push({
 			items: [
 				{ key: '__settings__', icon: 'settings', title: i18n.t('toolbar.settingsButton.ariaLabel'), onClick: openSettings },
-				{ key: '__sync__', icon: 'cloud-download', title: i18n.t('toolbar.syncButton.defaultTitle'), onClick: () => void syncFeishuTasks(plugin as GanttCalendarPlugin) },
+				...(feishuEnabled ? [{ key: '__sync__', icon: 'cloud-download', title: i18n.t('toolbar.syncButton.defaultTitle'), onClick: () => void syncFeishuTasks(plugin as GanttCalendarPlugin) }] : []),
 				{ key: '__refresh__', icon: 'refresh-cw', title: i18n.t('toolbar.refresh.refreshTask'), onClick: () => void handleRefresh() },
 			],
 		});
@@ -235,10 +241,13 @@ export function ToolbarBar(): JSX.Element {
 		</div>
 	);
 	// 空间适配：窄窗口即收纳（桌面窄分栏同样受益），非视图形态判定
-	const isPhone = useIsNarrow();
+	// 视图自身宽度不足（分屏）时同样收纳到 ⋯ 菜单，避免右侧按钮被裁掉
+	const rootRef = useRef<HTMLDivElement>(null);
+	const isPaneNarrow = useElementNarrow(rootRef, TOOLBAR_COLLAPSE_WIDTH, true);
+	const isPhone = useIsNarrow() || isPaneNarrow;
 
 	return (
-		<div className={ToolbarClasses.block}>
+		<div ref={rootRef} className={ToolbarClasses.block}>
 			<div className={ToolbarClasses.elements.left}>
 				<div className={`${ToolbarClasses.components.viewSelectorGroup.group}${showButtonText ? '' : ` ${ToolbarClasses.components.viewSelectorGroup.iconOnly}`}`}>
 					{VIEW_BUTTONS.map((btn) => (
@@ -357,7 +366,7 @@ export function ToolbarBar(): JSX.Element {
 								</div>
 							</>
 						)}
-						{!isPhone && filterButton}
+						{filterButton}
 						</>
 					)}
 
@@ -382,15 +391,17 @@ export function ToolbarBar(): JSX.Element {
 								/>
 							</div>
 
-							<div className={ToolbarClasses.components.navButtons.group}>
-								<ToolbarBtn
-									icon="cloud-download"
-									label={i18n.t('toolbar.syncButton.defaultTitle')}
-									onClick={() => {
-										void syncFeishuTasks(plugin as GanttCalendarPlugin);
-									}}
-								/>
-							</div>
+							{feishuEnabled ? (
+								<div className={ToolbarClasses.components.navButtons.group}>
+									<ToolbarBtn
+										icon="cloud-download"
+										label={i18n.t('toolbar.syncButton.defaultTitle')}
+										onClick={() => {
+											void syncFeishuTasks(plugin as GanttCalendarPlugin);
+										}}
+									/>
+								</div>
+							) : null}
 
 							<div className={ToolbarClasses.components.navButtons.group}>
 								<ToolbarBtn

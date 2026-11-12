@@ -1,37 +1,37 @@
-# Agent Session Protocol
+# Agent session protocol
 
-本项目面向 Codex / Claude 等代码代理的会话规范如下。
+Session rules for coding agents (Codex, Claude, …) working in this repo.
 
-## 1. 项目约定入口
+## 1. Where the project rules live
 
-- 构建命令、测试命令、架构说明、代码约定和 Git 规则见根目录的 `CLAUDE.md`。
-- 所有代理必须遵守 `CLAUDE.md` 中的项目规则；本文件只补充会话进度追踪要求。
+- Build and test commands, architecture, code conventions and Git rules: `CLAUDE.md` at the repo root. Every agent must follow it; this file only adds progress tracking.
+- End-to-end testing in real Obsidian (fixtures, acceptance checklist, check scripts in `tools/`, gantt-calendar pitfalls): `TESTING.md`.
+- Workspace-wide setup and general Obsidian testing pitfalls: `../AGENTS.md`.
 
-## 2. TODO.md 会话协议
+## 2. TODO.md protocol
 
-根目录的 `TODO.md` 是项目唯一的主要待办与进度追踪文件。
+`TODO.md` at the repo root is the single to-do and progress file.
 
-每次会话必须按以下顺序处理：
+Every session, in this order:
 
-1. **会话开始**
-   - 先完整读取 `TODO.md`。
-   - 查看「进行中」「待办」「新需求」区块，确认上次进度和当前上下文。
-   - 不要仅凭记忆恢复上下文。
-2. **会话中出现新需求**
-   - 用户提出的新功能、修复、重构、发布、文档或排查任务，应及时追加到 `TODO.md`。
-   - 适合纳入既有改进计划的，添加到对应 Phase 任务下。
-   - 暂不确定排期或范围的，放入「💡 新需求」区块。
-   - 新需求应使用可勾选的 `- [ ]` 形式，并写清目标和关键验收点。
-3. **会话结束**
-   - 再次读取并更新 `TODO.md`。
-   - 已完成事项改为 `- [x]`，移入「✅ 已完成」区块，并注明完成日期。
-   - 部分完成事项保留在「📌 进行中」，明确说明剩余步骤。
-   - 未开始或延期事项保留在「📋 待办」「🔭 远期路线图」对应区块。
-   - 不删除历史已完成记录；如有关联提交哈希，应保留可追溯信息。
+1. **Start**
+   - Read all of `TODO.md`.
+   - Check the in-progress, to-do and new-requests sections to recover the last state.
+   - Do not reconstruct context from memory alone.
+2. **New requests during the session**
+   - Add every new feature, fix, refactor, release, doc or investigation request to `TODO.md` promptly.
+   - Put it under the matching plan/phase if it fits one; otherwise in the "💡 新需求" (new requests) section.
+   - Use `- [ ]` items with the goal and the key acceptance points.
+3. **End**
+   - Re-read and update `TODO.md`.
+   - Mark finished items `- [x]`, move them to "✅ 已完成" (done) with the date.
+   - Keep partly done items in "📌 进行中" (in progress) with the remaining steps spelled out.
+   - Leave not-started or postponed items in their sections.
+   - Never delete finished history; keep commit hashes where known.
 
-## 3. 记录要求
+## 3. Recording rules
 
-- 只记录已实际完成的内容；必须先通过必要的 build、test 或人工验证，再标记完成。
-- 不虚构日期、提交哈希或测试结果。
-- 保持 `TODO.md` 中文、简洁、可扫描。
-- 遵守 `CLAUDE.md` 的 Git 规则：代理绝不自动 commit 或 push。
+- Only record what was actually done, and only after the needed build, tests or manual verification.
+- Never invent dates, commit hashes or test results.
+- Keep `TODO.md` in Chinese, short and scannable.
+- Follow the Git rules in `CLAUDE.md`: agents never commit or push on their own.

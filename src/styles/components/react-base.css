@@ -416,3 +416,19 @@ button.gc-context-menu__item--disabled {
 		animation: none;
 	}
 }
+
+/* 关闭中的遮罩不再拦截点击（退出动画照常播放） */
+.gc-modal__overlay--closing {
+	pointer-events: none;
+}
+
+/* 顶部对齐的弹窗（任务编辑）：内容变高 / 变矮时只有下方伸缩，鼠标下的控件位置不变 */
+.gc-modal__overlay.gc-modal__overlay--top {
+	align-items: flex-start;
+	padding-top: 6vh;
+}
+
+/* 下拉面板（筛选等）内容变长出现滚动条时不挤动内容 */
+.gc-dropdown-menu {
+	scrollbar-gutter: stable;
+}

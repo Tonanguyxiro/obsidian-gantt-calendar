@@ -11,7 +11,7 @@ npm run build        # tsc 类型检查 + esbuild 生产打包 + 同步到 examp
 
 构建产物为 `main.js`（单文件 CJS bundle，外部依赖 `obsidian`、`electron`）。
 
-**测试**：`src/data-layer/__tests__/` 下有少量 Jest 测试，直接 `npx jest` 运行（270 用例）。
+**测试**：Jest 单测在 `tests/` 与 `src/data-layer/__tests__/`，`npx jest` 运行（559 用例）。真机端到端测试（夹具、验收清单、检查脚本、已知坑）见 `TESTING.md`；工作区通用测试方法见 `../AGENTS.md`。
 
 ## 架构
 
@@ -70,9 +70,9 @@ TaskStore（门面，供视图使用）
 - **修改 DOM/样式前**：先检查并移除已废弃的旧类名
 - **React 代码**：UI 一律走声明式 React，禁止 createEl/createDiv/addEventListener 手写 DOM（基础组件/宿主/Icon 封装除外）
 
-- **UI 遮挡/渲染检查**：改动日/周/月视图与侧边栏里的卡片、时间块、标签（含新增卡片类型）后，必须在真实 Obsidian 里按多种尺寸（15/30/60/180 分钟块、带地点/标签/长标题、窄 lane）截图肉眼检查，并运行工作区 `tools/check-timeblock-overlap.js` 确认时刻标签与块内文字无遮挡；详见工作区 `AGENTS.md` §3.1。仅类型检查/单测通过不算完成
-- **编辑效果用原生 Live Preview**：需要 Markdown 编辑/实时渲染/双链补全时，引入 Obsidian 原生编辑器（`DescriptionEditor.tsx` 的做法），不要自己实现编辑效果；接入要点与测试坑见工作区 `AGENTS.md` §3.2
-- **全局一致性**：修改组件/数据/样式前先 grep 出所有使用方与变体（任务卡片有 task/day/week/month/sidebar/timeline 等多种变体），改完在每个使用场景里验证；数据问题在解析入口一处修（如 `extractTags` 去重、`step2` 筛选符识别），不要在各显示层分别补丁；同一列表内同类元素版式必须一致（`tools/check-card-layout.js`）
+- **UI 遮挡/渲染检查**：改动日/周/月视图与侧边栏里的卡片、时间块、标签（含新增卡片类型）后，必须在真实 Obsidian 里按多种尺寸（15/30/60/180 分钟块、带地点/标签/长标题、窄 lane）截图肉眼检查，并运行本仓库 `tools/` 下的检查脚本（时刻标签遮挡、文字被挤、卡片版式、弹窗溢出）；详见 `TESTING.md` §3。仅类型检查/单测通过不算完成
+- **编辑效果用原生 Live Preview**：需要 Markdown 编辑/实时渲染/双链补全时，引入 Obsidian 原生编辑器（`DescriptionEditor.tsx` 的做法），不要自己实现编辑效果；接入要点与测试坑见工作区 `../AGENTS.md` §5.1
+- **全局一致性**：修改组件/数据/样式前先 grep 出所有使用方与变体（任务卡片有 task/day/week/month/sidebar/timeline 等多种变体），改完在每个使用场景里验证；数据问题在解析入口一处修（如 `extractTags` 去重、`step2` 筛选符识别），不要在各显示层分别补丁；同一列表内同类元素版式必须一致（本仓库 `tools/check-card-layout.js`）
 
 **代码模式：**
 - 各视图在 `src/components/TaskCard/presets/` 下有对应配置 preset

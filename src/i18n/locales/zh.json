@@ -18,7 +18,7 @@
     "syncedYesterdayAt": "昨日 {{time}}",
     "today": "今天",
     "clear": "清除",
-    "none": "无",
+    "none": "(无)",
     "noContent": "无内容",
     "fileNotFound": "文件未找到：{{path}}",
     "priority": {
@@ -122,7 +122,11 @@
       "10月",
       "11月",
       "12月"
-    ]
+    ],
+    "untitledTask": "无标题任务",
+    "noOptions": "无选项",
+    "rootFolder": "(根目录)",
+    "openTarget": "打开：{{path}}"
   },
   "main": {
     "ribbonTooltip": "甘特日历",
@@ -1034,7 +1038,14 @@
         "noSelected": "未选择标签",
         "inputPlaceholder": "输入新标签名称...",
         "searchOrCreate": "搜索或创建标签，回车创建",
-        "addButton": "添加"
+        "addButton": "添加",
+        "allTags": "全部标签",
+        "showSubTags": "展开子标签",
+        "hideSubTags": "收起子标签",
+        "removeTag": "移除标签",
+        "noMatches": "没有匹配的标签",
+        "pressEnterToCreate": "按回车创建 #{{tag}}",
+        "impliedBy": "已由选中的子标签包含——点击浏览其子标签"
       },
       "createIn": "创建位置",
       "createInDaily": "当日日记",
@@ -1114,10 +1125,55 @@
       "update": "更新",
       "push": "推送",
       "pull": "拉取",
-      "conflict": "冲突"
+      "conflict": "冲突",
+      "countItem": "{{label}} {{count}} 个"
     },
     "common": {
       "descriptionEditorHint": "Live Preview 实时预览 · 输入 [[ 补全双链"
+    },
+    "task": {
+      "kindPeriod": "时间段",
+      "kindDay": "当日",
+      "kindPeriodHint": "跨日任务：选开始和截止日期（在月历上点两下）。",
+      "kindDayHint": "某一天做的任务：选日期，可选当天的时间段。",
+      "convertToDay": "保存后转为当日任务：去掉开始/截止日期。",
+      "convertToPeriod": "保存后转为时间段任务：去掉计划日期与时刻。",
+      "timeRange": "时间",
+      "startTime": "开始时刻",
+      "endTime": "结束时刻",
+      "clearTime": "清除时刻（全天）",
+      "errorSlotOrder": "结束时刻必须晚于开始时刻",
+      "rangeMonthFormat": "YYYY年M月",
+      "rangeHintStart": "点击一天设为开始",
+      "rangeHintEnd": "再点一天设为截止",
+      "statusDates": "日期",
+      "when": "时间",
+      "repeat": "重复",
+      "tags": "标签",
+      "converting": "保存时转换",
+      "summaryDateFormat": "M月D日",
+      "notSet": "未设置，点击选择",
+      "today": "今天",
+      "allDay": "全天"
+    },
+    "when": {
+      "today": "今天",
+      "tomorrow": "明天",
+      "thisWeek": "本周",
+      "nextWeek": "下周",
+      "cellFormat": "M月D日 ddd",
+      "cellFormatYear": "YYYY年M月D日",
+      "previewFormat": "M月D日 ddd",
+      "quickPlaceholder": "输入：明天 14-16 · 周五 到 下周三 · 11/20 3d",
+      "notUnderstood": "未能识别——试试“明天 14-16”或“周五 到 下周三”",
+      "hintDay": "点一天设为计划日 · 在小时条上拖动设置时间",
+      "hintStart": "点一天设为开始",
+      "hintDue": "点一天设为截止",
+      "days": "共 {{count}} 天",
+      "timeForDay": "时刻只属于当日任务——设置时刻会切换为当日",
+      "timeHint": "在小时条上拖动或输入时刻 · ↑↓ ±15 分钟",
+      "summaryDue": "{{date}} 截止",
+      "summaryStart": "{{date}} 开始"
     }
   },
   "toolbar": {
@@ -1213,20 +1269,49 @@
       "taskTab": "任务",
       "status": "状态",
       "tags": "标签",
-      "query": "任务查询（Tasks 语法 / Dataview）",
-      "queryPlaceholder": "not done\ndue before 2026-11-01\ntag includes #project\n\n— 或 Dataview 查询 —\nTASK FROM \"Projects\" WHERE !completed",
-      "queryHelp": "Tasks 语法：每行一个过滤器（AND）。支持 (A) OR (B)、NOT (A)。可用：done、not done、due/scheduled/starts/created before|after|on <日期>、has/no due date、tag includes、path/description includes、priority is|above|below、status.type is、is recurring。以 TASK 开头则执行 Dataview 查询（需启用 Dataview）。",
+      "query": "任务查询（Tasks / Dataview / Datacore）",
+      "queryPlaceholder": "not done\ndue before tomorrow\ntag includes #project\n\n以 TASK 开头用 Dataview，以 @ 开头用 Datacore",
+      "queryHelp": "按首行选择引擎：TASK … → Dataview；@task … → Datacore；其他 → Tasks 语法（每行一个过滤器，行间 AND；支持 (A) OR (B)、NOT (A)）。Ctrl+Space 显示补全。",
       "baseFile": "Base 文件",
       "baseNone": "不使用",
       "baseView": "Base 视图",
       "baseViewNone": "仅顶层过滤器",
-      "expression": "过滤表达式（Bases 语法）",
-      "expressionPlaceholder": "file.hasTag(\"project\")\nfile.inFolder(\"Projects\")\nstatus != \"archived\"",
-      "expressionHelp": "每行一个表达式（AND）。筛选的是笔记而非任务：file.hasTag()、file.inFolder()、file.name/path/ext/mtime、笔记属性、&& || !、contains/startsWith/isEmpty。所选 Base 文件的过滤器同时生效。",
+      "expression": "文件筛选（Bases / Dataview / Datacore）",
+      "expressionPlaceholder": "file.hasTag(\"project\")\nfile.inFolder(\"Projects\")\nstatus != \"archived\"\n\n或 LIST / FROM …（Dataview）、@page …（Datacore）",
+      "expressionHelp": "筛选的是笔记而非任务。按首行选择引擎：LIST / TABLE / FROM（大写）→ Dataview；@page … → Datacore；其他 → Bases 表达式（每行一个，行间 AND）。所选 Base 文件的过滤器同时生效。Ctrl+Space 显示补全。",
       "reset": "重置筛选",
       "dataviewMissing": "未安装或未启用 Dataview 插件。",
       "dataviewFailed": "Dataview 查询失败。",
-      "dataviewOnlyTask": "仅支持 TASK 查询（TASK … WHERE …）。"
+      "dataviewOnlyTask": "仅支持 TASK 查询（TASK … WHERE …）。",
+      "dataviewOnlyFile": "此处仅支持 LIST 或 TABLE 查询（或只写 FROM …）。",
+      "dataviewNoLinks": "查询结果中没有文件链接——请不要使用 WITHOUT ID 或 GROUP BY。",
+      "datacoreMissing": "未安装或未启用 Datacore 插件。",
+      "datacoreFailed": "Datacore 查询失败。",
+      "datacoreOnlyTask": "查询结果中没有任务——请以 @task 开头。",
+      "engine": {
+        "tasks": "Tasks 语法",
+        "bases": "Bases 表达式",
+        "dataview": "Dataview",
+        "datacore": "Datacore"
+      },
+      "engineMissing": "插件未启用",
+      "examples": "示例",
+      "exampleInsert": "点击插入",
+      "statusRunning": "执行中…",
+      "statusTyping": "…",
+      "statusTaskMatches": "✓ 命中 {{count}} 个任务",
+      "statusNoteMatches": "✓ 命中 {{count}} 篇笔记",
+      "statusError": "✗ 未生效",
+      "suggestHint": "↑↓ 选择 · ↵ / Tab 插入 · Esc 关闭",
+      "suggestKind": {
+        "keyword": "语法",
+        "field": "字段",
+        "function": "函数",
+        "tag": "标签",
+        "folder": "文件夹",
+        "property": "属性",
+        "value": "值"
+      }
     },
     "tagFilter": {
       "ariaLabel": "标签筛选",
@@ -1374,7 +1459,11 @@
     "createCancelled": "已取消创建任务",
     "taskAdded": "已添加任务到 Daily Note",
     "createdAndAdded": "已创建 Daily Note 并添加任务",
-    "createFailed": "创建 Daily Note 失败: {{error}}"
+    "createFailed": "创建 Daily Note 失败: {{error}}",
+    "missingTitle": "Daily Note 不存在",
+    "missingMessage": "当天的 Daily Note 尚未创建，是否现在创建？",
+    "create": "创建",
+    "templateNotFound": "模板文件未找到: {{path}}"
   },
   "sync": {
     "feishuAuthRenewed": "飞书授权已自动续期"
@@ -1631,5 +1720,30 @@
     "noProject": "无项目",
     "dateFromTasks": "日期来自任务",
     "datesPinned": "已将时间范围写入笔记属性：{{start}} → {{end}}"
+  },
+  "plugin": {
+    "name": "甘特日历"
+  },
+  "notices": {
+    "taskCacheInitFailed": "任务缓存初始化失败"
+  },
+  "noteFromTask": {
+    "taskInfo": "任务信息",
+    "priority": "优先级",
+    "tags": "标签",
+    "created": "创建日期",
+    "start": "开始日期",
+    "scheduled": "计划日期",
+    "due": "截止日期",
+    "completed": "完成日期",
+    "cancelled": "取消日期",
+    "original": "原任务",
+    "source": "来源",
+    "notes": "笔记内容",
+    "aliasPlaceholder": "请输入笔记名称(任务描述为笔记别名)"
+  },
+  "taskWarnings": {
+    "mixedFormat": "混用任务格式，请修改",
+    "unscheduled": "未规划任务时间，请设置"
   }
 }

@@ -73,7 +73,7 @@ class AliasInputModal extends Modal {
 		contentEl.createEl('h2', { text: i18n.t('contextMenu.commands.enterNoteName') });
 
 		const input = contentEl.createEl('input', { type: 'text', value: '' });
-		input.placeholder = '请输入笔记名称(任务描述为笔记别名)';
+		input.placeholder = i18n.t('noteFromTask.aliasPlaceholder');
 		setCssProps(input, { width: '100%' });
 		input.focus();
 

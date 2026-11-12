@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, type PointerEvent as ReactPointerEvent 
 import type { TimeBlock, TimeBlockSegment } from './timelineModel';
 import { MIN_DURATION_MIN, minutesToPx, pxToMinutes, snapMinutes, formatMinutes } from './timelineModel';
 import { WeekViewClasses, setCssProps } from '../../../utils/bem';
+import { rafThrottle, type RafThrottled } from './dragFeedback';
 
 /**
  * 时间块上下边缘 resize 鼠标状态机（参考甘特 taskDragController 模式）：
@@ -38,6 +39,8 @@ interface ActiveResize {
 interface DragHandlers {
 	move: (e: PointerEvent) => void;
 	end: (e: PointerEvent) => void;
+	/** 按帧合并的预览更新（布局读取 + 样式写入每帧至多一次） */
+	frame: RafThrottled<[number, number, boolean]>;
 }
 
 /**
@@ -87,6 +90,7 @@ export function useBlockResize(onCommit: BlockResizeCommit) {
 	const detach = useCallback(() => {
 		const handlers = handlersRef.current;
 		if (handlers) {
+			handlers.frame.cancel();
 			document.removeEventListener('pointermove', handlers.move);
 			document.removeEventListener('pointerup', handlers.end);
 			handlersRef.current = null;
@@ -133,9 +137,12 @@ export function useBlockResize(onCommit: BlockResizeCommit) {
 		};
 		activeRef.current = active;
 
-		const move = (ev: PointerEvent) => {
+		// 时刻标签只查一次（原每次 pointermove 都 querySelector）
+		const label = blockEl.querySelector(`.${WeekViewClasses.elements.timeBlockTime}`);
+
+		const frame = rafThrottle((clientX: number, clientY: number, altKey: boolean) => {
 			const rect = active.columnEl.getBoundingClientRect();
-			const minutes = snapMinutes(pxToMinutes(ev.clientY - rect.top), ev.altKey);
+			const minutes = snapMinutes(pxToMinutes(clientY - rect.top), altKey);
 
 			if (active.edge === 'top') {
 				// 上边缘：钳制 [0, 段终点 - 最小时长]
@@ -151,21 +158,24 @@ export function useBlockResize(onCommit: BlockResizeCommit) {
 			// 乐观 DOM 预览
 			active.blockEl.style.top = `${minutesToPx(active.newStartMin)}px`;
 			active.blockEl.style.height = `${minutesToPx(active.newEndMin - active.newStartMin)}px`;
-			const label = active.blockEl.querySelector(`.${WeekViewClasses.elements.timeBlockTime}`);
 			if (label) label.textContent = `${formatMinutes(active.newStartMin)} – ${formatMinutes(active.newEndMin)}`;
-			active.tipEl.style.left = `${ev.clientX + 12}px`;
-			active.tipEl.style.top = `${ev.clientY - 28}px`;
+			active.tipEl.style.left = `${clientX + 12}px`;
+			active.tipEl.style.top = `${clientY - 28}px`;
 			active.tipEl.textContent = `${formatMinutes(active.newStartMin)} – ${formatMinutes(active.newEndMin)}`;
-		};
+		});
+
+		const move = (ev: PointerEvent) => frame(ev.clientX, ev.clientY, ev.altKey);
 
 		const end = () => {
+			// 松手前落实最后一次挂起的位置（提交值与预览一致）
+			frame.flush();
 			const finished = activeRef.current;
 			detach();
 			if (!finished || !finished.changed) return; // 未产生时间变化：样式未被改写，无需提交
 			commitRef.current(finished.block, finished.seg, finished.edge, finished.newStartMin, finished.newEndMin, finished.blockEl);
 		};
 
-		handlersRef.current = { move, end };
+		handlersRef.current = { move, end, frame };
 		setCssProps(document.body, { cursor: 'ns-resize', userSelect: 'none' });
 		document.addEventListener('pointermove', move);
 		document.addEventListener('pointerup', end);

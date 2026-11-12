@@ -110,6 +110,11 @@ export interface DataSourceChanges {
 	updated: Array<{ id: string; changes: TaskChanges; task?: GCTask }>;
 	deleted: GCTask[];
 	deletedFilePaths?: string[];  // 已删除的文件路径列表
+	/**
+	 * 本次处理后各文件的权威任务 ID 列表（`路径:行号`）。仓库在应用完
+	 * created/updated/deleted 后，删除该文件下不在列表中的残留 key（自愈）
+	 */
+	fileSnapshots?: Array<{ filePath: string; taskIds: string[] }>;
 }
 
 /**

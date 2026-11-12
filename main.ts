@@ -8,7 +8,7 @@ import { registerAllCommands } from './src/commands/commandsIndex';
 import { TooltipManager } from './src/utils/tooltipManager';
 import { Logger } from './src/utils/logger';
 import { setTimezoneOffset } from './src/dateUtils/timezone';
-import { i18n, initializeI18n, setLanguage, isChineseLanguage } from './src/i18n/i18n';
+import { i18n, initializeI18n, setLanguage } from './src/i18n/i18n';
 import { refreshPresetStatusNames } from './src/tasks/taskStatus';
 
 import { SettingsManager } from './src/managers/SettingsManager';
@@ -74,8 +74,6 @@ export default class GanttCalendarPlugin extends Plugin {
 		}
 		// 刷新预设状态名称以匹配当前语言
 		refreshPresetStatusNames(this.settings.taskStatuses);
-		// 英文模式下自动关闭农历显示
-		this.settings.showLunar = isChineseLanguage();
 
 		Logger.init(this);
 		setTimezoneOffset(this.settings.timezoneOffset);
@@ -262,14 +260,14 @@ export default class GanttCalendarPlugin extends Plugin {
 					await this.loadLastSyncTime();
 				}).catch(error => {
 					Logger.error('Main', 'Failed to initialize task cache:', error);
-					new Notice('任务缓存初始化失败');
+					new Notice(i18n.t('notices.taskCacheInitFailed'));
 				});
 			}, 0);
 		});
 	}
 
 	private registerUIElements(): void {
-		const ribbonIconEl = this.addRibbonIcon('goal', '\u7518\u7279\u65E5\u5386', () => {
+		const ribbonIconEl = this.addRibbonIcon('goal', i18n.t('plugin.name'), () => {
 			void this.activateView();
 		});
 		ribbonIconEl.addClass('gantt-calendar-ribbon');

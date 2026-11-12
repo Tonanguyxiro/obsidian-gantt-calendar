@@ -4,7 +4,7 @@
     平铺列 tasks-column 已随双模式移除，剩余时间线样式在下方） */
 
 .gc-week-view__header-cell {
-	padding: 12px 20%;
+	padding: 12px 8px;
 	text-align: center;
 	border-right: 1px solid var(--background-modifier-border);
 	border-bottom: 2px solid var(--background-modifier-border);
@@ -41,10 +41,14 @@
 
 .gc-week-view__lunar-text {
 	flex: 1;
+	min-width: 0;
 	font-size: 16px;
 	font-weight: 500;
 	color: var(--text-normal);
 	text-align: right;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: clip;
 }
 
 /* ==================== Week View Timeline（连续时间画布） ==================== */

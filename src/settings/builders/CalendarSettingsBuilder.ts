@@ -57,9 +57,9 @@ export class CalendarSettingsBuilder extends BaseBuilder {
 			const available = isObsidianDailyNoteAvailable();
 			if (available) {
 				const obsidianSettings = getObsidianDailyNoteSettings();
-				const folder = obsidianSettings.folder || '(根目录)';
+				const folder = obsidianSettings.folder || i18n.t('common.rootFolder');
 				const format = obsidianSettings.format || 'YYYY-MM-DD';
-				const template = obsidianSettings.template || '(无)';
+				const template = obsidianSettings.template || i18n.t('common.none');
 
 				new Setting(obsidianSection)
 					.setName(i18n.t('settings.calendar.obsidianMode.folder.name'))

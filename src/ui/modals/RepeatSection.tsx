@@ -179,7 +179,7 @@ export function RepeatSection({ value, onChange, prefix }: RepeatSectionProps): 
 					style={{ display: ui.freq ? undefined : 'none' }}
 					onClick={clearAll}
 				>
-					{'× 清除'}
+					{`× ${i18n.t('common.clear')}`}
 				</button>
 			</div>
 

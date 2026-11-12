@@ -1,0 +1,188 @@
+
+/* ==================== 内联月历选区（BEM: gc-month-range） ==================== */
+.gc-month-range {
+	padding: 6px 4px 2px;
+	border-radius: var(--radius-m, 8px);
+	border: 1px solid var(--background-modifier-border);
+	background: var(--background-primary);
+	max-width: 340px;
+}
+
+.gc-month-range__header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 4px;
+}
+
+.gc-month-range__title {
+	font-weight: 600;
+	font-size: var(--font-ui-small);
+}
+
+.gc-month-range__grid {
+	display: grid;
+	grid-template-columns: repeat(7, 1fr);
+	row-gap: 2px;
+}
+
+.gc-month-range__weekday {
+	text-align: center;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-faint);
+	padding: 2px 0;
+}
+
+.gc-month-range__grid button.gc-month-range__day {
+	height: 32px;
+	margin: 1px 0;
+	padding: 0;
+	border: none;
+	border-radius: 0;
+	background: transparent;
+	box-shadow: none;
+	outline: none;
+	color: var(--text-normal);
+	font-size: var(--font-ui-small);
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.gc-month-range__day > span {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 26px;
+	height: 26px;
+	border-radius: 999px;
+}
+
+.gc-month-range__grid button.gc-month-range__day:hover > span {
+	background-color: var(--background-modifier-hover);
+}
+
+.gc-month-range__grid button.gc-month-range__day--outside {
+	color: var(--text-faint);
+}
+
+.gc-month-range__day--today > span {
+	color: var(--gc-today, var(--color-red));
+	font-weight: 700;
+}
+
+.gc-month-range__grid button.gc-month-range__day--in-range {
+	background-color: color-mix(in srgb, var(--text-normal) 10%, transparent);
+}
+
+.gc-month-range__grid button.gc-month-range__day--range-start {
+	border-top-left-radius: 999px;
+	border-bottom-left-radius: 999px;
+}
+
+.gc-month-range__grid button.gc-month-range__day--range-end {
+	border-top-right-radius: 999px;
+	border-bottom-right-radius: 999px;
+}
+
+.gc-month-range__day--range-start > span,
+.gc-month-range__day--range-end > span {
+	background-color: var(--interactive-accent);
+	color: var(--text-on-accent);
+	font-weight: 600;
+}
+
+.gc-month-range__hint {
+	margin-top: 4px;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-faint);
+	text-align: center;
+}
+
+/* ==================== 「时间」摘要按钮 + 弹层 ==================== */
+.gc-edit-task-modal button.gc-task-kind__summary {
+	display: flex;
+	justify-content: flex-start;
+	height: auto;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	min-height: 32px;
+	padding: 4px 8px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--input-radius, 6px);
+	background: var(--background-modifier-form-field);
+	box-shadow: none;
+	color: var(--text-normal);
+	font-size: var(--font-ui-small);
+	text-align: left;
+	cursor: pointer;
+}
+
+.gc-edit-task-modal button.gc-task-kind__summary:hover,
+.gc-edit-task-modal button.gc-task-kind__summary--open {
+	border-color: var(--background-modifier-border-hover);
+}
+
+.gc-task-kind__summary > .svg-icon {
+	margin-left: auto;
+	flex: 0 0 auto;
+	width: 14px;
+	height: 14px;
+	color: var(--text-faint);
+}
+
+.gc-task-kind__summary-text {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-variant-numeric: tabular-nums;
+}
+
+.gc-task-kind__summary-badge {
+	flex: 0 0 auto;
+	padding: 1px 6px;
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--color-orange) 18%, transparent);
+	color: var(--color-orange);
+	font-size: var(--font-ui-smaller);
+}
+
+/* 弹层：叠在任务弹窗之上（日期选择器在更上一层） */
+.gc-popover {
+	position: fixed;
+	z-index: calc(var(--layer-modal) + 20);
+	max-height: calc(100vh - 16px);
+	overflow-y: auto;
+	scrollbar-gutter: stable;
+	padding: 12px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-l, 10px);
+	background: var(--background-primary);
+	box-shadow: var(--shadow-l);
+}
+
+.gc-popover .gc-month-range {
+	max-width: none;
+}
+
+/* 弹层内两列日期框按可用宽度均分，不溢出 */
+.gc-popover .gc-edit-task-modal__dates-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 8px;
+}
+
+.gc-popover .gc-edit-task-modal__date-item {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	min-width: 0;
+}
+
+.gc-popover .gc-edit-task-modal__date-label {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+}

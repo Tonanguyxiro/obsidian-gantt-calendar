@@ -688,6 +688,14 @@ export class RegularExpressions {
          * "[下载文件](https://example.com/file.pdf)" -> 匹配，捕获组1: "下载文件"，捕获组2: "https://example.com/file.pdf"
          */
         markdownLinkRegex: /\[([^\]]+)\]\(([^)]+)\)/g,
+        /** URL 协议头（`zotero:`、`https:`）；Windows 盘符 `C:` 单字母不算 */
+        /** 普通列表行：缩进 + 列表标记（`- ` `* ` `+ ` `1. `）+ 文字；用于在非任务行上新建任务 */
+        plainListLineRegex: /^(\s*)(?:[-*+]\s+|\d+[.)]\s+)?(.*)$/,
+        /** 不应转成任务的块：标题、引用、代码围栏、表格、分隔线 */
+        nonTaskBlockRegex: /^\s*(#{1,6}\s|>|```|~~~|\||---\s*$)/,
+        urlSchemeRegex: /^([a-z][a-z0-9+.-]+):/i,
+        /** 库内路径末尾的 .md 扩展名（保留 #子路径） */
+        mdExtensionRegex: /\.md(#.*)?$/i,
 
         /**
          * 纯URL链接正则
@@ -738,5 +746,76 @@ export class RegularExpressions {
         relativeDate: /^(?:in\s+)?(\d+)\s+(day|days|week|weeks)(\s+ago)?$/,
         /** 空白序列 */
         whitespace: /\s+/,
+    } as const;
+
+    /** 筛选面板：查询引擎识别与输入补全 */
+    static readonly QueryAssist = {
+        /** Datacore 查询（首行以 @ 开头：@task / @page …） */
+        datacoreQuery: /^@/,
+        /** 文件页 Dataview 查询（首行以大写 LIST / TABLE / FROM 开头） */
+        dataviewFileQuery: /^(?:LIST|TABLE|FROM)(?:\s|$)/,
+        /** 只有 FROM 子句的 Dataview 文件查询 */
+        dataviewFromOnly: /^FROM(?:\s|$)/,
+        /** // 注释行 */
+        slashComment: /^\s*\/\//,
+        /** Tasks 语法：按括号与大写 AND / OR / NOT 切出当前过滤器片段 */
+        tasksSegmentSplit: /\(|\)|\b(?:AND|OR|NOT)\b/,
+        /** Tasks：tag(s) include(s) / does not include <值> */
+        tasksTagArg: /^tags?\s+(?:includes?|does not include|do not include)\s+(\S*)$/i,
+        /** Tasks：path / folder 文本过滤的参数 */
+        tasksFolderArg: /^(?:path|folder)\s+(?:includes|does not include)\s+(.*)$/i,
+        /** Tasks：priority 比较的参数 */
+        tasksPriorityArg: /^priority\s+(?:is not|is|above|below)\s+(\S*)$/i,
+        /** Tasks：status.type 的参数 */
+        tasksStatusTypeArg: /^status\.type\s+(?:is not|is)\s+(\S*)$/i,
+        /** Tasks：日期比较的参数 */
+        tasksDateArg: /^(?:due|scheduled|starts?|created|done|cancelled|happens)\s+(?:on or before|on or after|before|after|on)\s+(.*)$/i,
+        /** 光标前的最后一个"词"（空白与括号、逗号分隔） */
+        lastWord: /[^\s(),]*$/,
+        /** 光标前的标识符链（Bases：file.name / note.status） */
+        identChain: /[\w$.\u00C0-\uFFFF]*$/,
+        /** 光标处于函数的字符串参数中：callee("部分值 */
+        callStringArg: /([\w$.]+)\(\s*["']([^"']*)$/,
+        /** 光标处于比较右侧的字符串中：prop == "部分值 */
+        compareStringArg: /([\w$.\u00C0-\uFFFF]+)\s*(?:==|!=)\s*["']([^"']*)$/,
+        /** Dataview：FROM 之后未闭合的引号 */
+        dataviewFromQuote: /\bFROM\b[^"]*(?:"[^"]*"[^"]*)*"([^"]*)$/i,
+        /** Datacore：path("部分值 */
+        datacorePathArg: /\bpath\(\s*"([^"]*)$/,
+        /** 单词边界字符（用于判断候选项中的词首匹配） */
+        wordBoundary: /[\s./_\-(#$@"]/,
+    } as const;
+
+    /**
+     * 任务弹窗「时间」快速输入（parseWhenText）：
+     * "tmr 14-16"、"fri → next wed"、"11/20 3d"、"明天 下午2点"……
+     */
+    static readonly WhenText = {
+        /** 日期区间分隔：→ -> ~ to 至 到 */
+        rangeSeparator: /\s*(?:→|->|~|～|\bto\b|至|到)\s*/,
+        /** 末尾的时刻区间：14-16、9:30-11、2pm-4pm、14:00–15:30 */
+        timeRangeTail: /(?:^|\s)(\d{1,2})(?::?(\d{2}))?\s*(am|pm|a|p)?\s*[-–—]\s*(\d{1,2})(?::?(\d{2}))?\s*(am|pm|a|p)?$/,
+        /** 末尾的单个时刻：14:30、2pm、2:30pm、1430、at 9 */
+        timeSingleTail: /(?:^|\s)(?:at\s+|@)?(?:(\d{1,2}):(\d{2})\s*(am|pm|a|p)?|(\d{1,2})\s*(am|pm|a|p)|(\d{3,4}))$/,
+        /** 末尾裸小时（前面已有日期时才当作时刻）："tmr 14" */
+        timeBareHourTail: /\s(\d{1,2})$/,
+        /** 中文时刻：下午2点、14点半、9点30 */
+        timeZhTail: /(上午|早上|中午|下午|晚上)?\s*(\d{1,2})\s*[点點时](半|(\d{1,2})分?)?$/,
+        /** 完整日期 2026-11-20 / 2026/11/20 */
+        isoDate: /^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/,
+        /** 月日 11/20、11-20、11.20 */
+        monthDay: /^(\d{1,2})[/.-](\d{1,2})$/,
+        /** 中文月日 11月20日 */
+        monthDayZh: /^(\d{1,2})月(\d{1,2})[日号]?$/,
+        /** 相对天数 +3d、+2w、in 3 days */
+        relative: /^(?:\+|in\s+)(\d+)\s*(d|day|days|w|week|weeks)$/,
+        /** 时长（只用于区间终点）：3d、2w、3 days */
+        duration: /^(\d+)\s*(d|day|days|w|week|weeks|天|周)$/,
+        /** 星期：fri、friday、next fri、周五、星期五、下周五 */
+        /** 连续空白（归一化输入） */
+        whitespaceRun: /\s+/g,
+        /** 时长单位是否为「周」 */
+        weekUnit: /^w|周/,
+        weekday: /^(next\s+|下)?(?:(mon|tue|wed|thu|fri|sat|sun)[a-z]*|(?:周|星期|礼拜)([一二三四五六日天]))$/,
     } as const;
 }

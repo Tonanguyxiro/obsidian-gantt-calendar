@@ -220,6 +220,75 @@
 		min-height: 25px;
 		align-items: center;
 	}
+	.gc-tag-selector__hint {
+		font-size: 11px;
+		color: var(--text-faint);
+		align-self: center;
+	}
+	/* 层级逐级展开：面包屑 + 每级一行，子级行左侧竖线缩进 */
+	.gc-tag-selector__breadcrumb {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 4px;
+		margin-bottom: 6px;
+		font-size: 11px;
+		color: var(--text-muted);
+	}
+	.gc-tag-selector__crumb {
+		padding: 1px 4px;
+		border-radius: var(--gc-radius-sm, 4px);
+		cursor: pointer;
+	}
+	.gc-tag-selector__crumb:hover {
+		color: var(--text-normal);
+		background: var(--background-modifier-hover);
+	}
+	.gc-tag-selector__crumb--current {
+		color: var(--text-normal);
+		font-weight: 600;
+		cursor: default;
+	}
+	.gc-tag-selector__crumb--current:hover {
+		background: none;
+	}
+	.gc-tag-selector__crumb-separator {
+		color: var(--text-faint);
+	}
+	.gc-tag-selector__rows {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+	}
+	.gc-tag-selector__pills--nested {
+		padding-left: 10px;
+		margin-left: 6px;
+		border-left: 2px solid var(--background-modifier-border);
+	}
+	.gc-tag-selector__pill--expanded {
+		box-shadow: 0 0 0 1px var(--text-muted);
+	}
+	.gc-tag-selector__pill-expand,
+	.gc-tag-selector__pill-remove {
+		display: inline-flex;
+		align-items: center;
+		margin-right: -4px;
+		border-radius: 50%;
+		color: var(--text-muted);
+	}
+	.gc-tag-selector__pill-expand:hover,
+	.gc-tag-selector__pill-remove:hover {
+		color: var(--text-normal);
+		background: var(--background-modifier-hover);
+	}
+	.gc-tag-selector__pill-expand svg,
+	.gc-tag-selector__pill-remove svg {
+		width: 12px;
+		height: 12px;
+	}
+	.gc-tag-selector__pill--selected .gc-tag-selector__pill-remove {
+		color: var(--interactive-accent);
+	}
 	.gc-edit-task-modal__buttons {
 		display: flex;
 		gap: 8px;
@@ -264,4 +333,247 @@
 .gc-edit-task-modal__create-target input[type="text"] {
 	flex: 1;
 	min-width: 160px;
+}
+
+/* ==================== 1.9 版式：属性面板式排版（图标 + 名称 | 值） ==================== */
+.gc-edit-task-modal__desc-container {
+	margin-bottom: 14px;
+}
+
+.gc-edit-task-modal__desc-container .gc-desc-editor__native {
+	min-height: 64px;
+	border: 1px solid transparent;
+	border-radius: var(--radius-m, 8px);
+	background: var(--background-modifier-form-field, var(--background-secondary));
+	font-size: var(--font-ui-medium);
+}
+
+.gc-edit-task-modal__desc-container .gc-desc-editor__native:focus-within {
+	border-color: var(--background-modifier-border-focus, var(--interactive-accent));
+	box-shadow: 0 0 0 2px var(--background-modifier-box-shadow, transparent);
+}
+
+.gc-edit-task-modal__desc-container .gc-desc-editor__native.markdown-source-view.mod-cm6 .cm-content {
+	padding: 10px 12px;
+	font-size: var(--font-ui-medium);
+}
+
+.gc-edit-task-modal__desc-container .gc-edit-task-modal__section-hint {
+	margin: 4px 2px 0;
+	color: var(--text-faint);
+}
+
+.gc-edit-task-modal__props {
+	display: flex;
+	flex-direction: column;
+	border-top: 1px solid var(--background-modifier-border);
+}
+
+.gc-edit-task-modal__prop-row {
+	display: grid;
+	grid-template-columns: 112px minmax(0, 1fr);
+	gap: 12px;
+	align-items: start;
+	padding: 10px 2px;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.gc-edit-task-modal__prop-label {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 28px;
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+}
+
+.gc-edit-task-modal__prop-label .svg-icon {
+	width: 15px;
+	height: 15px;
+	color: var(--text-faint);
+}
+
+.gc-edit-task-modal__prop-value {
+	min-width: 0;
+}
+
+/* 状态：圆点 + 名称的胶囊，选中实心状态色 */
+.gc-edit-task-modal__prop-value .gc-edit-task-modal__status-grid {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin: 0;
+}
+
+.gc-edit-task-modal__status-grid button.gc-edit-task-modal__status-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	height: 26px;
+	padding: 0 10px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 999px;
+	background: transparent;
+	box-shadow: none;
+	color: var(--text-normal);
+	font-size: var(--font-ui-smaller);
+	font-weight: 500;
+	opacity: 1;
+	cursor: pointer;
+}
+
+.gc-edit-task-modal__status-grid button.gc-edit-task-modal__status-btn:hover {
+	background: var(--background-modifier-hover);
+}
+
+.gc-edit-task-modal__status-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: var(--status-bg, var(--text-faint));
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--status-fg, #000) 25%, transparent);
+}
+
+.gc-edit-task-modal__status-grid button.gc-edit-task-modal__status-btn.gc-edit-task-modal__priority-btn--selected {
+	background: var(--status-bg);
+	color: var(--status-fg);
+	border-color: transparent;
+	border-left: 1px solid transparent;
+	font-weight: 600;
+	box-shadow: 0 0 0 1px color-mix(in srgb, var(--status-fg, var(--text-normal)) 30%, transparent);
+}
+
+.gc-edit-task-modal__priority-btn--selected .gc-edit-task-modal__status-dot {
+	background: var(--status-fg);
+}
+
+/* 优先级：分段控件，只有选中项显示文字 */
+.gc-edit-task-modal__priority-segments {
+	display: inline-flex;
+	flex-wrap: wrap;
+	gap: 2px;
+	padding: 2px;
+	border-radius: var(--radius-m, 8px);
+	background: var(--background-modifier-hover);
+}
+
+.gc-edit-task-modal__priority-segments button.gc-edit-task-modal__priority-segment {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	height: 26px;
+	min-width: 30px;
+	padding: 0 8px;
+	border: none;
+	border-radius: var(--radius-s, 6px);
+	background: transparent;
+	box-shadow: none;
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	cursor: pointer;
+}
+
+.gc-edit-task-modal__priority-segments button.gc-edit-task-modal__priority-segment:hover {
+	color: var(--text-normal);
+}
+
+.gc-edit-task-modal__priority-segments button.gc-edit-task-modal__priority-segment.gc-edit-task-modal__priority-btn--selected {
+	background: var(--background-primary);
+	color: var(--text-normal);
+	border-left: none;
+	font-weight: 600;
+	box-shadow: var(--shadow-s);
+}
+
+/* 状态日期：三列紧凑排列 */
+.gc-edit-task-modal__inline-dates {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 8px;
+}
+
+.gc-edit-task-modal__prop-value .gc-edit-task-modal__dates-grid {
+	gap: 8px;
+}
+
+/* 底部操作栏：固定，左侧显示来源位置 */
+.gc-edit-task-modal__buttons {
+	align-items: center;
+	margin-top: 0;
+	padding-top: 12px;
+	border-top: 1px solid var(--background-modifier-border);
+}
+
+.gc-edit-task-modal__footer-meta {
+	margin-right: auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--text-faint);
+	font-size: var(--font-ui-smaller);
+}
+
+.gc-edit-task-modal__scroll-container {
+	padding-bottom: 8px;
+}
+
+/* 窄弹窗（手机 / 窄窗口）：名称在上、值在下 */
+@media (max-width: 560px) {
+	.gc-edit-task-modal__prop-row {
+		grid-template-columns: 1fr;
+		gap: 6px;
+	}
+
+	.gc-edit-task-modal__inline-dates {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+
+/* 重复：行名已是「重复」，组件自带的标题不再重复显示；摘要作为可点的值 */
+.gc-edit-task-modal__prop-value .gc-edit-task-modal__repeat-section > div:first-child {
+	padding: 4px 0;
+	min-height: 28px;
+}
+
+.gc-edit-task-modal__prop-value .gc-edit-task-modal__repeat-section .gc-edit-task-modal__section-label {
+	display: none;
+}
+
+/* ==================== 切换不移位：选中态不改变任何控件的尺寸 ==================== */
+/* 状态胶囊：选中只换颜色，不加粗（加粗会让后面的胶囊右移） */
+.gc-edit-task-modal__status-grid button.gc-edit-task-modal__status-btn,
+.gc-edit-task-modal__status-grid button.gc-edit-task-modal__status-btn.gc-edit-task-modal__priority-btn--selected {
+	font-weight: 500;
+}
+
+/* 优先级：等宽图标分段，名称放在控件右侧 */
+.gc-edit-task-modal__priority-segments button.gc-edit-task-modal__priority-segment,
+.gc-edit-task-modal__priority-segments button.gc-edit-task-modal__priority-segment.gc-edit-task-modal__priority-btn--selected {
+	width: 34px;
+	min-width: 34px;
+	padding: 0;
+	justify-content: center;
+	font-weight: 500;
+}
+
+.gc-edit-task-modal__priority-name {
+	display: inline-block;
+	margin-left: 10px;
+	vertical-align: middle;
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+}
+
+/* 滚动条出现 / 消失不改变内容宽度：始终预留滚动条槽位 */
+.gc-edit-task-modal__scroll-container {
+	scrollbar-gutter: stable;
+}
+
+/* 已被选中的子标签涵盖（选了 #task/project，#task 自动包含）：虚线描边 + 淡色，不另占一个选择 */
+.gc-tag-selector__pill.gc-tag-selector__pill--implied {
+	border-style: dashed;
+	border-color: var(--text-faint);
+	color: var(--text-muted);
+	background: transparent;
 }

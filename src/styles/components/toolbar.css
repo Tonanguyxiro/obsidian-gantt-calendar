@@ -364,9 +364,9 @@
 	transition: opacity 0.15s ease;
 }
 
-/* 保持原有的媒体查询作为后备方案（针对窗口宽度的响应） */
+/* 按视图宽度（容器查询 gc-app）收缩：分屏时同样生效 */
 /* 中等屏幕 (< 900px) - 视图按钮只显示图标 */
-@media (max-width: 900px) {
+@container gc-app (max-width: 900px) {
 	.gc-toolbar__view-selector-group button.gc-toolbar__view-selector-btn {
 		padding: 6px 8px;
 		min-width: 32px;
@@ -376,13 +376,11 @@
 		display: none;
 	}
 
-	.gc-toolbar__view-selector-group button.gc-toolbar__view-selector-btn--active .gc-toolbar__view-selector-label {
-		display: inline;
-	}
+	/* 选中项也只显示图标：切换视图时按钮位置不变 */
 }
 
 /* 小屏幕 (< 700px) - 隐藏工具栏部分次要功能 */
-@media (max-width: 700px) {
+@container gc-app (max-width: 700px) {
 	/* 减小工具栏内边距 */
 	.gc-toolbar {
 		gap: 8px;
@@ -397,7 +395,7 @@
 }
 
 /* 极小屏幕 (< 550px) - 进一步优化 */
-@media (max-width: 550px) {
+@container gc-app (max-width: 550px) {
 	/* 激活按钮也只显示图标 */
 	.gc-toolbar__view-selector-group button.gc-toolbar__view-selector-btn--active .gc-toolbar__view-selector-label {
 		display: none;
@@ -747,5 +745,34 @@
 	.gc-toolbar__nav-buttons .gc-toolbar__btn {
 		min-height: 34px;
 		min-width: 34px;
+	}
+}
+
+/* 分屏窄视图（≤ 640px）：收紧间距，保证 ⋯ 菜单完整可见 */
+@container gc-app (max-width: 640px) {
+	.gc-toolbar {
+		gap: 6px;
+		padding: 8px 10px;
+		margin-left: 6px;
+		margin-right: 6px;
+	}
+
+	.gc-toolbar__left,
+	.gc-toolbar__center,
+	.gc-toolbar__right {
+		gap: 4px;
+	}
+
+	.gc-toolbar__center {
+		display: none;
+	}
+}
+
+/* 约 400px 的分屏列：工具栏换成两行（视图切换一行，操作一行），不裁掉按钮 */
+@container gc-app (max-width: 480px) {
+	.gc-toolbar {
+		flex-wrap: wrap;
+		justify-content: center;
+		row-gap: 6px;
 	}
 }

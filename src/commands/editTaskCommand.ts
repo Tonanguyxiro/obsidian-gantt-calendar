@@ -1,6 +1,6 @@
 /**
  * 编辑任务命令：打开光标所在任务行的编辑弹窗（与 Tasks 插件的 "Create or edit Task" 同类，仅编辑）。
- * 命令面板里只要在编辑器内就能看到它（不依赖光标所在行），光标不在任务行上时给出提示；
+ * 命令面板里只要在编辑器内就能看到它（不依赖光标所在行）；光标在空行 / 普通文字行上时改为新建任务并写到该行；
  * 可由用户经 Commander 等插件加入编辑器右键菜单。
  */
 
@@ -9,7 +9,8 @@ import type GanttCalendarPlugin from '../../main';
 import { parseSingleTaskLine } from '../tasks/taskParser/main';
 import { parseTaskLine } from '../tasks/taskParser/step1';
 import type { TaskFormatType } from '../tasks/taskSerializerSymbols';
-import { openEditTaskModal } from '../ui/modals/TaskFormModal';
+import { openCreateTaskModal, openEditTaskModal } from '../ui/modals/TaskFormModal';
+import { RegularExpressions } from '../utils/RegularExpressions';
 import { Logger } from '../utils/logger';
 import { i18n } from '../i18n/i18n';
 
@@ -42,7 +43,21 @@ export function registerEditTaskCommand(plugin: GanttCalendarPlugin): void {
 			}
 
 			if (!task) {
-				new Notice(i18n.t('commands.editTaskNotATask'));
+				// 空行 / 普通文字或列表行：打开新建弹窗，保存后把这一行变成任务（文字作为描述）
+				if (RegularExpressions.Links.nonTaskBlockRegex.test(line) || parseTaskLine(line)) {
+					new Notice(i18n.t('commands.editTaskNotATask'));
+					return;
+				}
+				const m = RegularExpressions.Links.plainListLineRegex.exec(line);
+				const today = new Date();
+				openCreateTaskModal({
+					app: plugin.app,
+					plugin,
+					targetDate: new Date(today.getFullYear(), today.getMonth(), today.getDate()),
+					createAt: { filePath: file.path, line: lineIndex, original: line, indent: m?.[1] ?? '' },
+					initialDescription: (m?.[2] ?? '').trim(),
+					onSuccess: () => plugin.refreshCalendarViews(),
+				});
 				return;
 			}
 

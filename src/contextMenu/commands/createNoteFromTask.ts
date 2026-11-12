@@ -105,44 +105,44 @@ export function generateNoteContent(data: NoteTemplateData): string {
 
 	lines.push(`# ${title}`);
 	lines.push('');
-	lines.push('## 任务信息');
+	lines.push(`## ${i18n.t('noteFromTask.taskInfo')}`);
 	lines.push('');
 
 	if (task.priority) {
-		lines.push(`- **优先级**: ${task.priority}`);
+		lines.push(`- **${i18n.t('noteFromTask.priority')}**: ${task.priority}`);
 	}
 
 	if (task.tags && task.tags.length > 0) {
-		lines.push(`- **标签**: ${task.tags.map(t => `#${t}`).join(' ')}`);
+		lines.push(`- **${i18n.t('noteFromTask.tags')}**: ${task.tags.map(t => `#${t}`).join(' ')}`);
 	}
 
 	if (task.createdDate) {
-		lines.push(`- **创建日期**: ${formatDate(task.createdDate, 'yyyy-MM-dd')}`);
+		lines.push(`- **${i18n.t('noteFromTask.created')}**: ${formatDate(task.createdDate, 'yyyy-MM-dd')}`);
 	}
 
 	if (task.startDate) {
-		lines.push(`- **开始日期**: ${formatDate(task.startDate, 'yyyy-MM-dd')}`);
+		lines.push(`- **${i18n.t('noteFromTask.start')}**: ${formatDate(task.startDate, 'yyyy-MM-dd')}`);
 	}
 
 	if (task.scheduledDate) {
-		lines.push(`- **计划日期**: ${formatDate(task.scheduledDate, 'yyyy-MM-dd')}`);
+		lines.push(`- **${i18n.t('noteFromTask.scheduled')}**: ${formatDate(task.scheduledDate, 'yyyy-MM-dd')}`);
 	}
 
 	if (task.dueDate) {
-		lines.push(`- **截止日期**: ${formatDate(task.dueDate, 'yyyy-MM-dd')}`);
+		lines.push(`- **${i18n.t('noteFromTask.due')}**: ${formatDate(task.dueDate, 'yyyy-MM-dd')}`);
 	}
 
 	if (task.completionDate) {
-		lines.push(`- **完成日期**: ${formatDate(task.completionDate, 'yyyy-MM-dd')}`);
+		lines.push(`- **${i18n.t('noteFromTask.completed')}**: ${formatDate(task.completionDate, 'yyyy-MM-dd')}`);
 	}
 
 	if (task.cancelledDate) {
-		lines.push(`- **取消日期**: ${formatDate(task.cancelledDate, 'yyyy-MM-dd')}`);
+		lines.push(`- **${i18n.t('noteFromTask.cancelled')}**: ${formatDate(task.cancelledDate, 'yyyy-MM-dd')}`);
 	}
 
 	// 如果有原任务描述（别名笔记的情况）
 	if (data.originalDescription) {
-		lines.push(`- **原任务**: ${data.originalDescription}`);
+		lines.push(`- **${i18n.t('noteFromTask.original')}**: ${data.originalDescription}`);
 	}
 
 	// 参考链接
@@ -159,9 +159,9 @@ export function generateNoteContent(data: NoteTemplateData): string {
 	}
 
 	lines.push('');
-	lines.push(`- **来源**: [[${task.fileName}#^line-${task.lineNumber}|${task.fileName}:${task.lineNumber}]]`);
+	lines.push(`- **${i18n.t('noteFromTask.source')}**: [[${task.fileName}#^line-${task.lineNumber}|${task.fileName}:${task.lineNumber}]]`);
 	lines.push('');
-	lines.push('## 笔记内容');
+	lines.push(`## ${i18n.t('noteFromTask.notes')}`);
 	lines.push('');
 
 	return lines.join('\n');

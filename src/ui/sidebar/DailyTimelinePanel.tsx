@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type JSX } from 'react';
 import { Notice } from 'obsidian';
-import type { GCTask } from '../../types';
 import type { DateFieldType } from '../../settings/types';
 import { i18n } from '../../i18n/i18n';
 import { SidebarClasses } from '../../utils/bem';
@@ -135,70 +134,75 @@ export function DailyTimelinePanel(): JSX.Element {
 
 	return (
 		<>
-			<div className={SidebarClasses.elements.timelineHeader}>
-				<div className={SidebarClasses.elements.timelineTitle}>
-					{`${formatDate(day, 'MM/dd')} ${weekdayNames[day.getDay()]}`}
+			{/* 固定头部：日期导航 + 全天区不随时间画布滚动 */}
+			<div className={SidebarClasses.elements.panelHeader}>
+				<div className={SidebarClasses.elements.timelineHeader}>
+					<div className={SidebarClasses.elements.timelineTitle}>
+						{`${formatDate(day, 'MM/dd')} ${weekdayNames[day.getDay()]}`}
+					</div>
+					<div className={SidebarClasses.elements.timelineNav}>
+						<button
+							type="button"
+							className="clickable-icon"
+							aria-label={navPrevLabel}
+							onClick={goPrevDay}
+						>
+							<Icon icon="chevron-left" />
+						</button>
+						<button
+							type="button"
+							className={SidebarClasses.elements.timelineTodayBtn}
+							aria-label={navTodayLabel}
+							disabled={pickedDate === null}
+							onClick={goToday}
+						>
+							{i18n.t('sidebar.dailyTimeline.nav.today')}
+						</button>
+						<button
+							type="button"
+							className="clickable-icon"
+							aria-label={navNextLabel}
+							onClick={goNextDay}
+						>
+							<Icon icon="chevron-right" />
+						</button>
+					</div>
 				</div>
-				<div className={SidebarClasses.elements.timelineNav}>
-					<button
-						type="button"
-						className="clickable-icon"
-						aria-label={navPrevLabel}
-						onClick={goPrevDay}
-					>
-						<Icon icon="chevron-left" />
-					</button>
-					<button
-						type="button"
-						className={SidebarClasses.elements.timelineTodayBtn}
-						aria-label={navTodayLabel}
-						disabled={pickedDate === null}
-						onClick={goToday}
-					>
-						{i18n.t('sidebar.dailyTimeline.nav.today')}
-					</button>
-					<button
-						type="button"
-						className="clickable-icon"
-						aria-label={navNextLabel}
-						onClick={goNextDay}
-					>
-						<Icon icon="chevron-right" />
-					</button>
+
+				{/* 全天区域（始终渲染为拖放目标）：day 精度命中 + 覆盖当日的 ≥24h 长区间 */}
+				<div className={SidebarClasses.elements.timelineAllDay} {...allDayDropProps}>
+					<div className={SidebarClasses.elements.timelineAllDayLabel}>
+						{i18n.t('sidebar.dailyTimeline.allDay')}
+					</div>
+					<div className={SidebarClasses.elements.timelineAllDayTasks}>
+						{model.allday.map(({ task, timeLabel }) => (
+							<div key={`${task.filePath}:${task.lineNumber}`} className={SidebarClasses.elements.timelineAllDayItem}>
+								<CalendarItemCard task={task} config={timelineConfig} />
+								{timeLabel ? (
+									<span className={SidebarClasses.elements.timelineAllDayTime}>{timeLabel}</span>
+								) : null}
+							</div>
+						))}
+					</div>
 				</div>
 			</div>
 
-			{isEmpty ? (
-				<div className={SidebarClasses.elements.emptyState}>
-					{i18n.t('sidebar.dailyTimeline.noTasks')}
-				</div>
-			) : null}
+			<div className={SidebarClasses.elements.panelBody}>
+				{isEmpty ? (
+					<div className={SidebarClasses.elements.emptyState}>
+						{i18n.t('sidebar.dailyTimeline.noTasks')}
+					</div>
+				) : null}
 
-			{/* 全天区域（始终渲染为拖放目标）：day 精度命中 + 覆盖当日的 ≥24h 长区间 */}
-			<div className={SidebarClasses.elements.timelineAllDay} {...allDayDropProps}>
-				<div className={SidebarClasses.elements.timelineAllDayLabel}>
-					{i18n.t('sidebar.dailyTimeline.allDay')}
-				</div>
-				<div className={SidebarClasses.elements.timelineAllDayTasks}>
-					{model.allday.map(({ task, timeLabel }) => (
-						<div key={`${task.filePath}:${task.lineNumber}`} className={SidebarClasses.elements.timelineAllDayItem}>
-							<CalendarItemCard task={task} config={timelineConfig} />
-							{timeLabel ? (
-								<span className={SidebarClasses.elements.timelineAllDayTime}>{timeLabel}</span>
-							) : null}
-						</div>
-					))}
-				</div>
+				{/* 连续时间画布（与周视图/日视图同语义的共享组件） */}
+				<DayTimelineCanvas
+					day={day}
+					model={model}
+					config={timelineConfig}
+					tasks={candidates}
+					refresh={handleRefresh}
+				/>
 			</div>
-
-			{/* 连续时间画布（与周视图/日视图同语义的共享组件） */}
-			<DayTimelineCanvas
-				day={day}
-				model={model}
-				config={timelineConfig}
-				tasks={candidates}
-				refresh={handleRefresh}
-			/>
 		</>
 	);
 }

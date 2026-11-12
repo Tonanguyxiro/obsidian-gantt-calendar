@@ -14,14 +14,28 @@ import { showSyncResultModal } from '../ui/modals/SyncResultDialog';
 import { i18n } from '../i18n/i18n';
 
 /**
+ * 飞书同步是否已开启：有飞书授权（access token + 应用凭据），或旧版里打开过同步开关。
+ * 工具栏 / 溢出菜单 / 手机 Dock 的同步按钮与命令面板里的同步命令都按它显示，
+ * 未开启时整体隐藏（设置页的飞书分页始终保留，用来开启）
+ */
+export function isFeishuSyncEnabled(config: { enabledSources?: { api?: boolean; caldav?: boolean }; api?: { accessToken?: string; clientId?: string; appId?: string } } | undefined): boolean {
+	if (!config) return false;
+	if (config.enabledSources?.api || config.enabledSources?.caldav) return true;
+	return !!(config.api?.accessToken && (config.api.clientId || config.api.appId));
+}
+
+/**
  * 注册飞书相关命令
  */
 export function registerFeishuCommands(plugin: GanttCalendarPlugin): void {
     plugin.addCommand({
         id: 'feishu-sync-tasks',
         name: i18n.t('commands.feishuSync'),
-        callback: async () => {
-            await syncFeishuTasks(plugin);
+        // 未开启飞书同步时不出现在命令面板
+        checkCallback: (checking: boolean) => {
+            if (!isFeishuSyncEnabled(plugin.settings.syncConfiguration)) return false;
+            if (!checking) void syncFeishuTasks(plugin);
+            return true;
         }
     });
 }

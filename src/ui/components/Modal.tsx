@@ -39,6 +39,27 @@ export function Modal({
 	const panelRef = useRef<HTMLDivElement | null>(null);
 	const overlayRef = useRef<HTMLDivElement | null>(null);
 
+	// 退出收尾只做一次：正常由退出动画完成回调触发；动画被节流 / 打断时（窗口在后台、
+	// 连续打开关闭）回调可能不来，透明的遮罩会留在页面上挡住所有点击——超时兜底移除
+	const exitedRef = useRef(false);
+	const onExitedRef = useRef(onExited);
+	onExitedRef.current = onExited;
+	const finishExit = () => {
+		if (exitedRef.current) return;
+		exitedRef.current = true;
+		onExitedRef.current?.();
+	};
+	useEffect(() => {
+		if (open) {
+			exitedRef.current = false;
+			return;
+		}
+		// 关闭瞬间就让遮罩不再接收点击，动画照常播放
+		overlayRef.current?.classList.add(ModalClasses.overlayClosing);
+		const timer = window.setTimeout(finishExit, MOTION.dur.normal * 1000 + 400);
+		return () => window.clearTimeout(timer);
+	}, [open]);
+
 	useEffect(() => {
 		if (!open) return;
 		// 焦点管理：打开时记录来源并聚焦面板（键盘用户可直接 Tab 操作），
@@ -89,7 +110,7 @@ export function Modal({
 	const classes = [ModalClasses.overlay, className].filter(Boolean).join(' ');
 
 	return createPortal(
-		<AnimatePresence onExitComplete={onExited}>
+		<AnimatePresence onExitComplete={finishExit}>
 			{open ? (
 				<motion.div
 					ref={overlayRef}

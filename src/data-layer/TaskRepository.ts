@@ -32,6 +32,9 @@ export class TaskRepository {
 	private dataSources: Map<string, IDataSource> = new Map();
 	private taskCache: Map<string, GCTask> = new Map();
 	private fileIndex: Map<string, Set<string>> = new Map();
+	/** 各缓存 key 的写入序号（越大越新），输出端去重兜底时保留最新的一份 */
+	private writeSeq: Map<string, number> = new Map();
+	private seqCounter = 0;
 	private eventBus: EventBus;
 
 	constructor(eventBus: EventBus) {
@@ -55,8 +58,70 @@ export class TaskRepository {
 	 * @returns 任务列表
 	 */
 	getAllTasks(options?: QueryOptions): GCTask[] {
-		const tasks = Array.from(this.taskCache.values());
+		const tasks = this.dedupeOutput();
 		return this.filterTasks(tasks, options);
+	}
+
+	/**
+	 * 不变量兜底：同一 `路径:行号` 只能出现一次。
+	 * 正常情况下缓存 key 与任务的 `路径:行号` 一一对应；若某条路径的 bug 让旧 key
+	 * 残留（日历里同一任务出现 2~3 份），这里保留最新写入的一份、清掉其余 key，
+	 * 并 warn——让回归出现在日志里而不是界面上。
+	 */
+	private dedupeOutput(): GCTask[] {
+		const winners = new Map<string, { key: string; task: GCTask; seq: number }>();
+		const losers: string[] = [];
+		for (const [key, task] of this.taskCache) {
+			const identity = generateTaskId(task);
+			const seq = this.writeSeq.get(key) ?? 0;
+			const prev = winners.get(identity);
+			if (!prev) {
+				winners.set(identity, { key, task, seq });
+			} else if (seq >= prev.seq) {
+				losers.push(prev.key);
+				winners.set(identity, { key, task, seq });
+			} else {
+				losers.push(key);
+			}
+		}
+		if (losers.length === 0) return Array.from(this.taskCache.values());
+
+		Logger.warn('TaskRepository', `Duplicate tasks by path:line dropped (${losers.length}):`, losers);
+		for (const key of losers) this.removeKey(key);
+		return Array.from(winners.values(), w => w.task);
+	}
+
+	/** 写入缓存并维护文件索引与写入序号 */
+	private putTask(taskId: string, task: GCTask): void {
+		this.taskCache.set(taskId, task);
+		this.writeSeq.set(taskId, ++this.seqCounter);
+		if (task.filePath) {
+			let ids = this.fileIndex.get(task.filePath);
+			if (!ids) {
+				ids = new Set();
+				this.fileIndex.set(task.filePath, ids);
+			}
+			ids.add(taskId);
+		}
+	}
+
+	/** 从缓存、文件索引（按任务实际路径与 key 推得的路径）中移除一个 key */
+	private removeKey(taskId: string, filePath?: string): void {
+		const task = this.taskCache.get(taskId);
+		this.taskCache.delete(taskId);
+		this.writeSeq.delete(taskId);
+		const paths = new Set<string>();
+		if (filePath) paths.add(filePath);
+		if (task?.filePath) paths.add(task.filePath);
+		const sep = taskId.lastIndexOf(':');
+		if (sep > 0) paths.add(taskId.slice(0, sep));
+		for (const p of paths) {
+			const ids = this.fileIndex.get(p);
+			if (ids) {
+				ids.delete(taskId);
+				if (ids.size === 0) this.fileIndex.delete(p);
+			}
+		}
 	}
 
 	/**
@@ -176,15 +241,7 @@ export class TaskRepository {
 		// 处理新增任务
 		for (const task of changes.created) {
 			const taskId = generateTaskId(task);
-			this.taskCache.set(taskId, task);
-
-			// 更新文件索引
-			if (task.filePath) {
-				if (!this.fileIndex.has(task.filePath)) {
-					this.fileIndex.set(task.filePath, new Set());
-				}
-				this.fileIndex.get(task.filePath)!.add(taskId);
-			}
+			this.putTask(taskId, task);
 
 			// 首扫只维护缓存，等批量加载完成后统一通知，避免大库产生任务数级别的定时器 churn
 			if (!isInitialLoad) {
@@ -202,22 +259,16 @@ export class TaskRepository {
 				// 行号漂移的指纹重配以旧 ID 发 updated：换到新 key，否则旧 key 残留成重复任务
 				const newId = generateTaskId(newTask);
 				if (newId !== id) {
-					this.taskCache.delete(id);
-					this.fileIndex.get(newTask.filePath)?.delete(id);
-					if (newTask.filePath) {
-						if (!this.fileIndex.has(newTask.filePath)) {
-							this.fileIndex.set(newTask.filePath, new Set());
-						}
-						this.fileIndex.get(newTask.filePath)!.add(newId);
-					}
+					this.removeKey(id, newTask.filePath);
 				}
-				this.taskCache.set(newId, newTask);
+				// 同 key 也走 putTask：仓库此前缺该 key 时补上文件索引
+				this.putTask(newId, newTask);
 			} else {
 				// 否则使用增量更新
 				const task = this.taskCache.get(id);
 				if (task) {
 					updatedTask = { ...task, ...taskChanges };
-					this.taskCache.set(id, updatedTask);
+					this.putTask(id, updatedTask);
 				}
 			}
 
@@ -230,18 +281,7 @@ export class TaskRepository {
 		// 处理删除任务
 		for (const task of changes.deleted) {
 			const taskId = generateTaskId(task);
-			this.taskCache.delete(taskId);
-
-			// 更新文件索引
-			if (task.filePath) {
-				const taskIds = this.fileIndex.get(task.filePath);
-				if (taskIds) {
-					taskIds.delete(taskId);
-					if (taskIds.size === 0) {
-						this.fileIndex.delete(task.filePath);
-					}
-				}
-			}
+			this.removeKey(taskId, task.filePath);
 
 			// 发布事件
 			this.eventBus.emit('task:deleted', { taskId });
@@ -255,10 +295,27 @@ export class TaskRepository {
 					// 删除该文件的所有任务
 					for (const taskId of taskIds) {
 						this.taskCache.delete(taskId);
+						this.writeSeq.delete(taskId);
 						this.eventBus.emit('task:deleted', { taskId });
 					}
 					// 清理文件索引
 					this.fileIndex.delete(filePath);
+				}
+			}
+		}
+
+		// 按数据源给出的权威快照对账：删除该文件下数据源已不认识的残留 key
+		if (changes.fileSnapshots) {
+			for (const { filePath, taskIds } of changes.fileSnapshots) {
+				const indexed = this.fileIndex.get(filePath);
+				if (!indexed) continue;
+				const keep = new Set(taskIds);
+				const stale = Array.from(indexed).filter(id => !keep.has(id));
+				if (stale.length === 0) continue;
+				Logger.warn('TaskRepository', `Stale task keys purged for ${filePath}:`, stale);
+				for (const taskId of stale) {
+					this.removeKey(taskId, filePath);
+					this.eventBus.emit('task:deleted', { taskId });
 				}
 			}
 		}
@@ -281,6 +338,7 @@ export class TaskRepository {
 	clear(): void {
 		this.taskCache.clear();
 		this.fileIndex.clear();
+		this.writeSeq.clear();
 		// 【修复】不清空 eventBus，因为它是 TaskStore 的实例，TaskStore 的监听器会受影响
 		// this.eventBus.clear();
 	}

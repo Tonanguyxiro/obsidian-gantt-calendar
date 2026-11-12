@@ -146,7 +146,7 @@
 /* ==================== 响应式设计 ==================== */
 
 /* 小屏幕适配 */
-@media (max-width: 768px) {
+@container gc-app (max-width: 768px) {
 	.gc-tag {
 		font-size: 10px;
 		padding: 1px 6px;

@@ -8,7 +8,7 @@ import type GanttCalendarPlugin from '../../main';
 import type { SyncConfiguration } from '../data-layer/sync/syncTypes';
 import { SyncManager } from '../data-layer/sync/syncManager';
 import { createSyncManager } from '../data-layer/sync/syncFactory';
-import { syncFeishuTasks } from '../commands/feishuCommands';
+import { isFeishuSyncEnabled, syncFeishuTasks } from '../commands/feishuCommands';
 import { Logger } from '../utils/logger';
 
 /**
@@ -126,15 +126,8 @@ export class SyncManagerBridge {
 	 * 同时支持新版无开关模式：只要配置了 API 认证信息即视为可同步。
 	 */
 	private hasSyncCapability(config: SyncConfiguration): boolean {
-		// 旧版兼容：用户曾通过开关启用过
-		if (config.enabledSources?.api || config.enabledSources?.caldav) {
-			return true;
-		}
-		// 新版：有飞书认证配置即视为可同步
-		if (config.api?.accessToken && (config.api.clientId || config.api.appId)) {
-			return true;
-		}
-		return false;
+		// 与界面上同步入口的显示条件同一规则
+		return isFeishuSyncEnabled(config);
 	}
 
 	/**

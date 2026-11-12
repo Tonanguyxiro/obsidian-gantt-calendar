@@ -93,7 +93,8 @@ export interface CreateTaskData {
 	createdDate: Date;
 	startDate?: Date | null;
 	scheduledDate?: Date | null;
-	dueDate: Date;
+	/** 当日任务（只有 ⏳ + 时刻）没有截止日期 */
+	dueDate?: Date | null;
 	completionDate?: Date | null;
 	cancelledDate?: Date | null;
 	tags?: string[];
@@ -139,8 +140,8 @@ export async function createTaskInDailyNote(
 		if (!file) {
 			// 弹出确认对话框
 			const confirmed = await showConfirmDialog(
-				app, 'Daily Note 不存在', '当天的 Daily Note 尚未创建，是否现在创建？',
-				{ confirmText: '创建', cancelText: '取消' }
+				app, i18n.t('dailyNote.missingTitle'), i18n.t('dailyNote.missingMessage'),
+				{ confirmText: i18n.t('dailyNote.create'), cancelText: i18n.t('common.cancel') }
 			);
 			if (!confirmed) {
 				new Notice(i18n.t('dailyNote.createCancelled'));
@@ -190,8 +191,8 @@ async function handleMissingDailyNote(
 ): Promise<string | null> {
 	// 弹出确认对话框
 	const confirmed = await showConfirmDialog(
-		app, 'Daily Note 不存在', '当天的 Daily Note 尚未创建，是否现在创建？',
-		{ confirmText: '创建', cancelText: '取消' }
+		app, i18n.t('dailyNote.missingTitle'), i18n.t('dailyNote.missingMessage'),
+		{ confirmText: i18n.t('dailyNote.create'), cancelText: i18n.t('common.cancel') }
 	);
 
 	if (!confirmed) {
@@ -242,7 +243,7 @@ async function createDailyNoteFromTemplate(
 			content = await app.vault.read(templateFile);
 			content = replaceTemplateVariables(content, filePath);
 		} else {
-			throw new Error(`模板文件未找到: ${templatePath}`);
+			throw new Error(i18n.t('dailyNote.templateNotFound', { path: templatePath }));
 		}
 	}
 
@@ -438,12 +439,14 @@ function serializeNewTask(taskData: CreateTaskData, app: App): string {
 	}
 
 	// 截止日期
-	const duePrecision = taskData.datePrecision?.['dueDate'];
+	if (taskData.dueDate) {
+		const duePrecision = taskData.datePrecision?.['dueDate'];
 		const dueStr = formatDate(taskData.dueDate, duePrecision === 'time' ? 'yyyy-MM-dd HH:mm' : 'yyyy-MM-dd');
-	if (format === 'tasks') {
-		parts.push(`📅 ${dueStr}`);
-	} else {
-		parts.push(`[due:: ${dueStr}]`);
+		if (format === 'tasks') {
+			parts.push(`📅 ${dueStr}`);
+		} else {
+			parts.push(`[due:: ${dueStr}]`);
+		}
 	}
 
 	// 完成日期
@@ -517,4 +520,34 @@ function findLastContentLineIndex(lines: string[], startIdx: number): number {
 	}
 
 	return lastContentIdx;
+}
+
+/** 在笔记的某一行原地创建任务（「Edit task」命令在空行 / 普通文本行上触发） */
+export interface CreateAtLine {
+	filePath: string;
+	/** 0 起的行号 */
+	line: number;
+	/** 该行原文（确认弹窗期间没有被改动） */
+	original: string;
+	/** 新任务行的缩进 */
+	indent: string;
+}
+
+/**
+ * 把新任务写到指定行：该行内容未变则替换它，否则（弹窗期间被编辑过）插在其后，不覆盖用户的改动
+ */
+export async function createTaskAtLine(app: App, at: CreateAtLine, taskData: CreateTaskData): Promise<string | null> {
+	const file = app.vault.getFileByPath(at.filePath);
+	if (!file) return null;
+	const taskLine = at.indent + serializeNewTask(taskData, app);
+	await app.vault.process(file, (data) => {
+		const lines = data.split('\n');
+		if (at.line < lines.length && lines[at.line] === at.original) {
+			lines[at.line] = taskLine;
+		} else {
+			lines.splice(Math.min(at.line + 1, lines.length), 0, taskLine);
+		}
+		return lines.join('\n');
+	});
+	return file.path;
 }

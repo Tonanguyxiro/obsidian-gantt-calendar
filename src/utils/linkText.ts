@@ -61,3 +61,34 @@ export function globalFilterPrefix(showInText: boolean | undefined, globalFilter
 	const gf = (globalFilter || '').trim();
 	return showInText && gf && !gf.startsWith('#') ? `${gf} ` : '';
 }
+
+/** Markdown 链接 `[文字](目标)` 的目标分类 */
+export type MarkdownHrefKind =
+	/** 外部地址（http/https/mailto，以及 zotero:// obsidian:// 等应用协议，交给系统打开） */
+	| { kind: 'external'; href: string }
+	/** 库内笔记（`[x](Note.md)`、`[x](Folder/Note%20name#标题)`），按双链解析 */
+	| { kind: 'internal'; target: string }
+	/** 可执行脚本类协议：只显示文字，不生成链接 */
+	| { kind: 'blocked' };
+
+const BLOCKED_SCHEMES = new Set(['javascript:', 'data:', 'vbscript:', 'file:']);
+
+/**
+ * 分类 Markdown 链接目标（与 Obsidian 阅读模式一致：带协议的是外部链接，否则是库内路径）。
+ * 无论哪类，链接文字都要显示——此前非 http 协议的链接整段被丢弃，只有链接的任务就成了空行。
+ */
+export function classifyMarkdownHref(raw: string): MarkdownHrefKind {
+	const href = raw.trim().replace(/^<(.*)>$/, '$1');
+	const scheme = RegularExpressions.Links.urlSchemeRegex.exec(href)?.[1]?.toLowerCase();
+	if (scheme) {
+		if (BLOCKED_SCHEMES.has(`${scheme}:`)) return { kind: 'blocked' };
+		return { kind: 'external', href };
+	}
+	let target = href;
+	try {
+		target = decodeURI(href);
+	} catch {
+		// 非法转义保持原样
+	}
+	return { kind: 'internal', target: target.replace(RegularExpressions.Links.mdExtensionRegex, '$1') };
+}

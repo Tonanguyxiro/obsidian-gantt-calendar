@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type JSX } from 'react';
-import { FilterPanelClasses } from '../../utils/bem';
+import { useCallback, useEffect, useMemo, useState, type JSX } from 'react';
+import { FilterPanelClasses, QueryEditorClasses } from '../../utils/bem';
 import { usePlugin, useApp } from '../pluginContext';
 import { useCalendarStore, selectViewFilter, type ViewScope } from '../store/calendarStore';
 import { useAdvancedFilters } from '../utils/useAdvancedFilters';
@@ -10,39 +10,32 @@ import { DEFAULT_TASK_STATUSES } from '../../tasks/taskStatus';
 import { listBaseViews } from '../../filters/baseFilter';
 import { readBaseText } from '../../filters/baseFilter';
 import { TagTreeFilter } from './TagTreeFilter';
+import { QueryEditor } from './QueryEditor';
+import { useQueryVocab } from '../utils/useQueryVocab';
+import { detectFileEngine, detectTaskEngine, isEngineAvailable, type QueryEngine } from '../../filters/queryEngines';
+import { FILE_QUERY_EXAMPLES, TASK_QUERY_EXAMPLES } from '../../filters/queryExamples';
 
 type Tab = 'file' | 'task';
 
-const COMMIT_DELAY = 400;
-
-/** 输入过程中本地缓冲，停顿后再写入 store（避免每个按键都重算全部视图） */
-function DraftTextarea({ value, placeholder, onCommit }: {
-	value: string;
-	placeholder: string;
-	onCommit: (v: string) => void;
-}): JSX.Element {
-	const [draft, setDraft] = useState(value);
-	useEffect(() => setDraft(value), [value]);
-	// 切换标签页/关闭面板时卸载：把尚未提交的草稿立即写入，避免丢失
-	const latest = useRef({ draft, value, onCommit });
-	latest.current = { draft, value, onCommit };
-	useEffect(() => () => {
-		const { draft: d, value: v, onCommit: commit } = latest.current;
-		if (d !== v) commit(d);
-	}, []);
-	useEffect(() => {
-		if (draft === value) return;
-		const timer = window.setTimeout(() => onCommit(draft), COMMIT_DELAY);
-		return () => window.clearTimeout(timer);
-	}, [draft, value, onCommit]);
+/** 查询框下的状态行：进行中 / ✓ 命中数；错误逐条列出（Tasks 语法里有效行仍生效，故可与命中数并存） */
+function QueryStatus({ pending, errors, count, unit }: {
+	pending: boolean;
+	errors: string[];
+	count: number | null;
+	unit: 'tasks' | 'notes';
+}): JSX.Element | null {
+	if (pending) return <span className={QueryEditorClasses.statusPending}>{i18n.t('toolbar.filterPanel.statusRunning')}</span>;
 	return (
-		<textarea
-			className={FilterPanelClasses.textarea}
-			value={draft}
-			placeholder={placeholder}
-			spellCheck={false}
-			onChange={(e) => setDraft(e.target.value)}
-		/>
+		<>
+			{count !== null ? (
+				<span className={QueryEditorClasses.statusOk}>
+					{i18n.t(unit === 'tasks' ? 'toolbar.filterPanel.statusTaskMatches' : 'toolbar.filterPanel.statusNoteMatches', { count })}
+				</span>
+			) : null}
+			{errors.length > 0 && count === null ? (
+				<span className={QueryEditorClasses.statusError}>{i18n.t('toolbar.filterPanel.statusError')}</span>
+			) : null}
+		</>
 	);
 }
 
@@ -50,7 +43,7 @@ function Errors({ errors }: { errors: string[] }): JSX.Element | null {
 	if (errors.length === 0) return null;
 	return (
 		<div className={FilterPanelClasses.error}>
-			{errors.map((e, i) => <div key={i}>{e}</div>)}
+			{errors.map((e, i) => <div key={i}>✗ {e}</div>)}
 		</div>
 	);
 }
@@ -102,6 +95,21 @@ export function FilterPanel({ scope }: { scope: ViewScope }): JSX.Element {
 		for (const t of plugin.taskCache.getAllTasks()) for (const tag of t.tags || []) set.add(tag);
 		return Array.from(set).sort();
 	}, [plugin]);
+
+	// ===== 查询框：补全词汇、命中数 =====
+	const vocab = useQueryVocab(app);
+	const isAvailable = useCallback((engine: QueryEngine) => isEngineAvailable(app, engine), [app]);
+	const tasksRef = useCalendarStore((s) => s.tasks);
+	const { taskMatches, fileMatches } = advanced;
+	const taskMatchCount = useMemo(
+		() => (taskMatches ? plugin.taskCache.getAllTasks().filter(taskMatches).length : null),
+		// tasksRef：任务集变化后重算
+		[plugin, taskMatches, tasksRef],
+	);
+	const fileMatchCount = useMemo(
+		() => (tab === 'file' && fileMatches ? app.vault.getMarkdownFiles().filter((f) => fileMatches(f.path)).length : null),
+		[app, tab, fileMatches],
+	);
 
 	const reset = () => {
 		setFileFilter(scope, { ...DEFAULT_FILE_FILTER_STATE });
@@ -158,12 +166,18 @@ export function FilterPanel({ scope }: { scope: ViewScope }): JSX.Element {
 					</div>
 					<div className={FilterPanelClasses.section}>
 						<div className={FilterPanelClasses.label}>{i18n.t('toolbar.filterPanel.expression')}</div>
-						<DraftTextarea
+						<QueryEditor
 							value={file.expression}
 							placeholder={i18n.t('toolbar.filterPanel.expressionPlaceholder')}
 							onCommit={(expression) => setFileFilter(scope, { ...file, expression })}
+							page="file"
+							detect={detectFileEngine}
+							vocab={vocab}
+							examples={FILE_QUERY_EXAMPLES}
+							isAvailable={isAvailable}
+							status={<QueryStatus pending={advanced.filePending} errors={advanced.fileErrors} count={fileMatchCount} unit="notes" />}
+							messages={<Errors errors={advanced.fileErrors} />}
 						/>
-						<Errors errors={advanced.fileErrors} />
 						<div className={FilterPanelClasses.hint}>{i18n.t('toolbar.filterPanel.expressionHelp')}</div>
 					</div>
 				</div>
@@ -206,12 +220,18 @@ export function FilterPanel({ scope }: { scope: ViewScope }): JSX.Element {
 					</div>
 					<div className={FilterPanelClasses.section}>
 						<div className={FilterPanelClasses.label}>{i18n.t('toolbar.filterPanel.query')}</div>
-						<DraftTextarea
+						<QueryEditor
 							value={taskQuery}
 							placeholder={i18n.t('toolbar.filterPanel.queryPlaceholder')}
 							onCommit={(q) => setTaskQuery(scope, q)}
+							page="task"
+							detect={detectTaskEngine}
+							vocab={vocab}
+							examples={TASK_QUERY_EXAMPLES}
+							isAvailable={isAvailable}
+							status={<QueryStatus pending={advanced.taskPending} errors={advanced.taskErrors} count={taskMatchCount} unit="tasks" />}
+							messages={<Errors errors={advanced.taskErrors} />}
 						/>
-						<Errors errors={advanced.taskErrors} />
 						<div className={FilterPanelClasses.hint}>{i18n.t('toolbar.filterPanel.queryHelp')}</div>
 					</div>
 				</div>

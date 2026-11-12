@@ -18,10 +18,9 @@ function getObsidianLanguage(): string {
 }
 
 function resolveEffectiveLanguage(): string {
-	if (languageOverride && languageOverride !== 'system') {
-		return languageOverride;
-	}
-	return getObsidianLanguage();
+	const raw = languageOverride && languageOverride !== 'system' ? languageOverride : getObsidianLanguage();
+	// Obsidian 语言码可能是 zh / zh-TW 等，统一归到已有的语言包
+	return raw.toLowerCase().startsWith('zh') ? 'zh' : raw;
 }
 
 function resolve(obj: TranslationMap, path: string): unknown {

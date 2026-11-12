@@ -1,3 +1,4 @@
+import { i18n } from '../../i18n/i18n';
 import {
 	useCallback,
 	useEffect,
@@ -139,7 +140,7 @@ export function DropdownMenu({
 							) : (
 								<>
 									{allItems.length === 0 ? (
-										<div className={DropdownMenuClasses.empty}>{'无选项'}</div>
+										<div className={DropdownMenuClasses.empty}>{i18n.t('common.noOptions')}</div>
 									) : (
 										sections.map((section, si) => (
 											<div key={si} className={DropdownMenuClasses.section}>

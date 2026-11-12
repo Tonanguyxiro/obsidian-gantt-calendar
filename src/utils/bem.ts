@@ -62,6 +62,14 @@ export const BLOCKS = {
 	STATUS_CHIP: 'status-chip',
 	/** 日期时间选择器（Linear 风格） */
 	DATE_TIME_PICKER: 'date-time-picker',
+	/** 时间段任务的内联月历选区 */
+	MONTH_RANGE: 'month-range',
+	/** 任务弹窗：时间段 / 当日 切换 */
+	TASK_KIND: 'task-kind',
+	/** 锚定弹层（可在弹窗内使用） */
+	POPOVER: 'popover',
+	/** 任务弹窗「时间」面板 */
+	WHEN_PICKER: 'when-picker',
 	/** 确认弹窗 */
 	CONFIRM_MODAL: 'confirm-modal',
 
@@ -307,6 +315,10 @@ export const ModalClasses = {
 	title: bem(BLOCKS.MODAL, 'title'),
 	closeBtn: bem(BLOCKS.MODAL, 'close-btn'),
 	content: bem(BLOCKS.MODAL, 'content'),
+	/** 关闭中：退出动画期间不再接收点击 */
+	overlayClosing: bem(BLOCKS.MODAL, 'overlay', 'closing'),
+	/** 顶部对齐：内容高度变化（切换页签等）时上方元素不移动，只向下伸缩 */
+	overlayTop: bem(BLOCKS.MODAL, 'overlay', 'top'),
 };
 
 /**
@@ -759,6 +771,18 @@ export const EditTaskModalClasses = {
 		// 状态板块（按钮外观复用优先级按钮，颜色取自设置里的状态配色）
 		statusGrid: bem(BLOCKS.EDIT_TASK_MODAL, 'status-grid'),
 		statusBtn: bem(BLOCKS.EDIT_TASK_MODAL, 'status-btn'),
+		statusDot: bem(BLOCKS.EDIT_TASK_MODAL, 'status-dot'),
+		prioritySegments: bem(BLOCKS.EDIT_TASK_MODAL, 'priority-segments'),
+		prioritySegment: bem(BLOCKS.EDIT_TASK_MODAL, 'priority-segment'),
+
+		// 属性列表（图标 + 名称 | 值，对齐 Obsidian 属性面板）
+		props: bem(BLOCKS.EDIT_TASK_MODAL, 'props'),
+		propRow: bem(BLOCKS.EDIT_TASK_MODAL, 'prop-row'),
+		propLabel: bem(BLOCKS.EDIT_TASK_MODAL, 'prop-label'),
+		propValue: bem(BLOCKS.EDIT_TASK_MODAL, 'prop-value'),
+		inlineDates: bem(BLOCKS.EDIT_TASK_MODAL, 'inline-dates'),
+		footerMeta: bem(BLOCKS.EDIT_TASK_MODAL, 'footer-meta'),
+		priorityName: bem(BLOCKS.EDIT_TASK_MODAL, 'priority-name'),
 
 		// 日期设置板块
 		datesContainer: bem(BLOCKS.EDIT_TASK_MODAL, 'dates-container'),
@@ -1018,6 +1042,12 @@ export const SidebarClasses = {
 		tabBtn: bem(BLOCKS.SIDEBAR, 'tab-btn'),
 		tabBtnActive: bem(BLOCKS.SIDEBAR, 'tab-btn', 'active'),
 		content: bem(BLOCKS.SIDEBAR, 'content'),
+		/** 面板（flex 列：固定头部 + 可滚动主体） */
+		panel: bem(BLOCKS.SIDEBAR, 'panel'),
+		/** 面板固定头部（搜索/筛选栏、日期导航 + 全天区） */
+		panelHeader: bem(BLOCKS.SIDEBAR, 'panel-header'),
+		/** 面板滚动主体（任务列表 / 时间画布） */
+		panelBody: bem(BLOCKS.SIDEBAR, 'panel-body'),
 		// 任务列表
 		searchInput: bem(BLOCKS.SIDEBAR, 'search-input'),
 		filterBar: bem(BLOCKS.SIDEBAR, 'filter-bar'),
@@ -1320,4 +1350,150 @@ export function setCssProps(el: HTMLElement, props: Record<string, string | numb
 		el.style.setProperty(toKebabCase(key), String(value));
 	}
 }
+
+
+/**
+ * 标签选择器：层级逐级展开相关类名（补充 TagSelectorClasses）
+ */
+export const TagSelectorTreeClasses = {
+	elements: {
+		/** 展开路径面包屑（全部 › #a › #a/b） */
+		breadcrumb: bem(BLOCKS.TAG_SELECTOR, 'breadcrumb'),
+		crumb: bem(BLOCKS.TAG_SELECTOR, 'crumb'),
+		crumbSeparator: bem(BLOCKS.TAG_SELECTOR, 'crumb-separator'),
+		/** 逐级行容器 */
+		rows: bem(BLOCKS.TAG_SELECTOR, 'rows'),
+		/** 胶囊上的展开子标签按钮 */
+		pillExpand: bem(BLOCKS.TAG_SELECTOR, 'pill-expand'),
+		/** 已选胶囊上的移除按钮 */
+		pillRemove: bem(BLOCKS.TAG_SELECTOR, 'pill-remove'),
+		/** 提示文字（无匹配 / 回车创建） */
+		hint: bem(BLOCKS.TAG_SELECTOR, 'hint'),
+	},
+	modifiers: {
+		/** 已被选中的子标签涵盖 */
+		pillImplied: bem(BLOCKS.TAG_SELECTOR, 'pill', 'implied'),
+		/** 第 2 级及以下的子标签行（左侧缩进竖线） */
+		pillsNested: bem(BLOCKS.TAG_SELECTOR, 'pills', 'nested'),
+		/** 当前已展开的胶囊 */
+		pillExpanded: bem(BLOCKS.TAG_SELECTOR, 'pill', 'expanded'),
+		crumbCurrent: bem(BLOCKS.TAG_SELECTOR, 'crumb', 'current'),
+	},
+};
+
+/** 时间段任务的内联月历（MonthRangeCalendar） */
+export const MonthRangeCalendarClasses = {
+	block: bem(BLOCKS.MONTH_RANGE),
+	elements: {
+		header: bem(BLOCKS.MONTH_RANGE, 'header'),
+		nav: bem(BLOCKS.MONTH_RANGE, 'nav'),
+		title: bem(BLOCKS.MONTH_RANGE, 'title'),
+		grid: bem(BLOCKS.MONTH_RANGE, 'grid'),
+		weekday: bem(BLOCKS.MONTH_RANGE, 'weekday'),
+		day: bem(BLOCKS.MONTH_RANGE, 'day'),
+		hint: bem(BLOCKS.MONTH_RANGE, 'hint'),
+	},
+	modifiers: {
+		outside: bem(BLOCKS.MONTH_RANGE, 'day', 'outside'),
+		inRange: bem(BLOCKS.MONTH_RANGE, 'day', 'in-range'),
+		rangeStart: bem(BLOCKS.MONTH_RANGE, 'day', 'range-start'),
+		rangeEnd: bem(BLOCKS.MONTH_RANGE, 'day', 'range-end'),
+		today: bem(BLOCKS.MONTH_RANGE, 'day', 'today'),
+	},
+} as const;
+
+/** 任务弹窗的「时间段 / 当日」切换与当日时刻输入 */
+export const TaskKindClasses = {
+	block: bem(BLOCKS.TASK_KIND),
+	elements: {
+		summary: bem(BLOCKS.TASK_KIND, 'summary'),
+		summaryText: bem(BLOCKS.TASK_KIND, 'summary-text'),
+		summaryBadge: bem(BLOCKS.TASK_KIND, 'summary-badge'),
+	},
+	modifiers: {
+		summaryOpen: bem(BLOCKS.TASK_KIND, 'summary', 'open'),
+	},
+} as const;
+
+
+/**
+ * 筛选面板查询框（补全弹窗 / 示例 / 状态行）类名常量
+ */
+export const QueryEditorClasses = {
+	wrap: bem(BLOCKS.FILTER_PANEL, 'query'),
+	mirror: bem(BLOCKS.FILTER_PANEL, 'query-mirror'),
+	caret: bem(BLOCKS.FILTER_PANEL, 'query-caret'),
+	status: bem(BLOCKS.FILTER_PANEL, 'status'),
+	statusOk: bem(BLOCKS.FILTER_PANEL, 'status', 'ok'),
+	statusError: bem(BLOCKS.FILTER_PANEL, 'status', 'error'),
+	statusPending: bem(BLOCKS.FILTER_PANEL, 'status', 'pending'),
+	engine: bem(BLOCKS.FILTER_PANEL, 'engine'),
+	examples: bem(BLOCKS.FILTER_PANEL, 'examples'),
+	examplesSummary: bem(BLOCKS.FILTER_PANEL, 'examples-summary'),
+	exampleGroup: bem(BLOCKS.FILTER_PANEL, 'example-group'),
+	exampleGroupTitle: bem(BLOCKS.FILTER_PANEL, 'example-group-title'),
+	example: bem(BLOCKS.FILTER_PANEL, 'example'),
+	suggest: bem(BLOCKS.FILTER_PANEL, 'suggest'),
+	suggestKind: bem(BLOCKS.FILTER_PANEL, 'suggest-kind'),
+	suggestHint: bem(BLOCKS.FILTER_PANEL, 'suggest-hint'),
+};
+
+/**
+ * Obsidian 原生补全弹窗类名（与编辑器 [[ 补全同款外观）
+ */
+export const NativeSuggestClasses = {
+	container: 'suggestion-container',
+	list: 'suggestion',
+	item: 'suggestion-item',
+	selected: 'is-selected',
+	content: 'suggestion-content',
+	title: 'suggestion-title',
+	aux: 'suggestion-aux',
+	flair: 'suggestion-flair',
+};
+
+/** 锚定弹层（Popover） */
+export const PopoverClasses = {
+	block: bem(BLOCKS.POPOVER),
+} as const;
+
+/** 任务弹窗「时间」面板（WhenPicker / TimeField / HourStrip） */
+export const WhenPickerClasses = {
+	block: bem(BLOCKS.WHEN_PICKER),
+	elements: {
+		quick: bem(BLOCKS.WHEN_PICKER, 'quick'),
+		row: bem(BLOCKS.WHEN_PICKER, 'row'),
+		kind: bem(BLOCKS.WHEN_PICKER, 'kind'),
+		kindBtn: bem(BLOCKS.WHEN_PICKER, 'kind-btn'),
+		chips: bem(BLOCKS.WHEN_PICKER, 'chips'),
+		chip: bem(BLOCKS.WHEN_PICKER, 'chip'),
+		cells: bem(BLOCKS.WHEN_PICKER, 'cells'),
+		cell: bem(BLOCKS.WHEN_PICKER, 'cell'),
+		cellLabel: bem(BLOCKS.WHEN_PICKER, 'cell-label'),
+		cellValue: bem(BLOCKS.WHEN_PICKER, 'cell-value'),
+		cellClear: bem(BLOCKS.WHEN_PICKER, 'cell-clear'),
+		hint: bem(BLOCKS.WHEN_PICKER, 'hint'),
+		time: bem(BLOCKS.WHEN_PICKER, 'time'),
+		timeRow: bem(BLOCKS.WHEN_PICKER, 'time-row'),
+		timeInput: bem(BLOCKS.WHEN_PICKER, 'time-input'),
+		timeDash: bem(BLOCKS.WHEN_PICKER, 'time-dash'),
+		durations: bem(BLOCKS.WHEN_PICKER, 'durations'),
+		caption: bem(BLOCKS.WHEN_PICKER, 'caption'),
+		strip: bem(BLOCKS.WHEN_PICKER, 'strip'),
+		stripNight: bem(BLOCKS.WHEN_PICKER, 'strip-night'),
+		stripTick: bem(BLOCKS.WHEN_PICKER, 'strip-tick'),
+		stripBlock: bem(BLOCKS.WHEN_PICKER, 'strip-block'),
+	},
+	modifiers: {
+		quickShake: bem(BLOCKS.WHEN_PICKER, 'quick', 'shake'),
+		kindActive: bem(BLOCKS.WHEN_PICKER, 'kind-btn', 'active'),
+		chipActive: bem(BLOCKS.WHEN_PICKER, 'chip', 'active'),
+		cellArmed: bem(BLOCKS.WHEN_PICKER, 'cell', 'armed'),
+		cellWide: bem(BLOCKS.WHEN_PICKER, 'cell', 'wide'),
+		cellClearHidden: bem(BLOCKS.WHEN_PICKER, 'cell-clear', 'hidden'),
+		hintBad: bem(BLOCKS.WHEN_PICKER, 'hint', 'bad'),
+		timeMuted: bem(BLOCKS.WHEN_PICKER, 'time', 'muted'),
+		stripDisabled: bem(BLOCKS.WHEN_PICKER, 'strip', 'disabled'),
+	},
+} as const;
 

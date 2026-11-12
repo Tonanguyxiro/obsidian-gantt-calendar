@@ -149,7 +149,7 @@
 	content: '';
 	position: absolute;
 	inset: 1px;
-	border: 2px solid var(--gc-accent);
+	border: 2px solid var(--gc-today);
 	border-radius: inherit;
 	pointer-events: none;
 	z-index: 1;
@@ -163,12 +163,12 @@
 
 /* 年视图今天的阳历和农历日期用 accent 强调 */
 .gc-year-view__day.today .gc-year-view__day-number {
-	color: var(--gc-accent);
-	font-weight: 600;
+	color: var(--gc-today);
+	font-weight: 700;
 }
 
 .gc-year-view__day.today .gc-year-view__lunar-text {
-	color: var(--gc-accent);
+	color: var(--gc-today);
 }
 
 /* 月视图今天样式已收编至 views/month-view.css */
@@ -178,7 +178,17 @@
 }
 
 .gc-week-view__header-cell--today .gc-week-view__day-number {
-	color: var(--gc-danger, #ff6b6b);
+	flex: 0 0 auto;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 28px;
+	height: 28px;
+	padding: 0 6px;
+	border-radius: 999px;
+	background-color: var(--gc-today);
+	color: var(--gc-on-today);
+	font-weight: 700;
 }
 
 .gc-week-view__day-col--today {

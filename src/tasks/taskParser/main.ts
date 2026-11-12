@@ -1,3 +1,4 @@
+import { i18n } from '../../i18n/i18n';
 /**
  * 主解析函数
  *
@@ -153,7 +154,7 @@ export function parseTasksFromListItems(
         // ==================== 警告检查 ====================
         // 混合格式警告
         if (detectedFormat === 'mixed') {
-            task.warning = '混用任务格式，请修改';
+            task.warning = i18n.t('taskWarnings.mixedFormat');
         }
         // 未规划时间警告
         else if (
@@ -165,7 +166,7 @@ export function parseTasksFromListItems(
             !task.cancelledDate &&
             !task.completionDate
         ) {
-            task.warning = '未规划任务时间，请设置';
+            task.warning = i18n.t('taskWarnings.unscheduled');
         }
 
         tasks.push(task);
@@ -347,7 +348,7 @@ export function parseSingleTaskLine(
     }
 
     if (detectedFormat === 'mixed') {
-        task.warning = '混用任务格式，请修改';
+        task.warning = i18n.t('taskWarnings.mixedFormat');
     }
 
     return task;

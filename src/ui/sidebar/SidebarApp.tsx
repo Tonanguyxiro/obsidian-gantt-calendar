@@ -49,10 +49,10 @@ export function SidebarApp(): JSX.Element {
 			<div className={SidebarClasses.elements.content}>
 				{tasksReady ? (
 					<>
-						<div style={{ display: tab === 'taskList' ? undefined : 'none' }}>
+						<div className={SidebarClasses.elements.panel} style={{ display: tab === 'taskList' ? undefined : 'none' }}>
 							<TaskListPanel />
 						</div>
-						<div style={{ display: tab === 'dailyTimeline' ? undefined : 'none' }}>
+						<div className={SidebarClasses.elements.panel} style={{ display: tab === 'dailyTimeline' ? undefined : 'none' }}>
 							<DailyTimelinePanel />
 						</div>
 					</>

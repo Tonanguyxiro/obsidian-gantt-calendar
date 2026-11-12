@@ -55,6 +55,9 @@ Author: sugar
 	--gc-accent-soft: color-mix(in srgb, var(--interactive-accent) 8%, transparent);
 	--gc-accent-wash: color-mix(in srgb, var(--interactive-accent) 14%, transparent);
 	--gc-on-accent: var(--text-on-accent);
+	/* 今天：固定红色，不随主题 accent（灰色 accent 主题下也醒目） */
+	--gc-today: var(--color-red, #e5484d);
+	--gc-on-today: #fff;
 	--gc-status-done: var(--color-green);
 	--gc-status-canceled: var(--color-orange);
 	--gc-status-overdue: var(--color-red);

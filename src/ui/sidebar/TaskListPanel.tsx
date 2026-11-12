@@ -246,106 +246,111 @@ export function TaskListPanel(): JSX.Element {
 
 	return (
 		<>
-			<div className={SidebarClasses.elements.searchInput}>
-				<input
-					type="text"
-					placeholder={i18n.t('sidebar.taskList.searchPlaceholder')}
-					value={searchQuery}
-					onChange={(e) => setSearchQuery(e.target.value)}
-				/>
-			</div>
+			{/* 固定头部：搜索 + 筛选栏不随列表滚动（拖拽任务到日历时保持可见） */}
+			<div className={SidebarClasses.elements.panelHeader}>
+				<div className={SidebarClasses.elements.searchInput}>
+					<input
+						type="text"
+						placeholder={i18n.t('sidebar.taskList.searchPlaceholder')}
+						value={searchQuery}
+						onChange={(e) => setSearchQuery(e.target.value)}
+					/>
+				</div>
 
-			<div className={SidebarClasses.elements.filterBar}>
-				<DropdownMenu sections={statusSections} align="left" className="gc-u-pointer" panelStyle={{ width: '160px' }}>
-					{({ onClick }) => (
-						<button
-							className={`clickable-icon${hasStatusFilter ? ' has-active-filter' : ''}`}
-							title={i18n.t('sidebar.taskList.filterBar.statusFilter')}
-							onClick={onClick}
-						>
-							<Icon icon="filter" />
-						</button>
-					)}
-				</DropdownMenu>
-
-				<DropdownMenu sections={prioritySections} align="left" className="gc-u-pointer">
-					{({ onClick }) => (
-						<button
-							className={`clickable-icon${priorityFilter !== 'all' ? ' has-active-filter' : ''}`}
-							title={i18n.t('sidebar.taskList.filterBar.priorityFilter')}
-							onClick={onClick}
-						>
-							<Icon icon="flame" />
-						</button>
-					)}
-				</DropdownMenu>
-
-				<DropdownMenu
-						content={() => (
-							<TagTreeFilter
-								allTags={Array.from(tagCounts.keys())}
-								selectedTags={selectedTags}
-								onToggle={(fp) => {
-									setSelectedTags(prev =>
-										prev.includes(fp) ? prev.filter(t => t !== fp) : [...prev, fp]
-									);
-								}}
-								operator={tagOperator}
-								onOperatorChange={setTagOperator}
-								taskCounts={tagCounts}
-							/>
+				<div className={SidebarClasses.elements.filterBar}>
+					<DropdownMenu sections={statusSections} align="left" className="gc-u-pointer" panelStyle={{ width: '160px' }}>
+						{({ onClick }) => (
+							<button
+								className={`clickable-icon${hasStatusFilter ? ' has-active-filter' : ''}`}
+								title={i18n.t('sidebar.taskList.filterBar.statusFilter')}
+								onClick={onClick}
+							>
+								<Icon icon="filter" />
+							</button>
 						)}
-						align="left" className="gc-u-pointer" panelStyle={{ width: '220px', maxHeight: '320px', overflowY: 'auto' }}>
-					{({ onClick }) => (
-						<button
-							className={`clickable-icon${hasTagFilter ? ' has-active-filter' : ''}`}
-							title={i18n.t('sidebar.taskList.filterBar.tagFilter')}
-							onClick={onClick}
-						>
-							<Icon icon="tags" />
-						</button>
-					)}
-				</DropdownMenu>
+					</DropdownMenu>
 
-				<DropdownMenu sections={sortSections} align="left" className="gc-u-pointer" panelStyle={{ width: '180px' }}>
-					{({ onClick }) => (
-						<button
-							className="clickable-icon"
-							title={i18n.t('sidebar.taskList.filterBar.sort')}
-							onClick={onClick}
-						>
-							<Icon icon="arrow-up-down" />
-						</button>
-					)}
-				</DropdownMenu>
+					<DropdownMenu sections={prioritySections} align="left" className="gc-u-pointer">
+						{({ onClick }) => (
+							<button
+								className={`clickable-icon${priorityFilter !== 'all' ? ' has-active-filter' : ''}`}
+								title={i18n.t('sidebar.taskList.filterBar.priorityFilter')}
+								onClick={onClick}
+							>
+								<Icon icon="flame" />
+							</button>
+						)}
+					</DropdownMenu>
 
-				<DropdownMenu sections={dateSections} align="left" className="gc-u-pointer">
-					{({ onClick }) => (
-						<button
-							className={`clickable-icon${hasDateFilter ? ' has-active-filter' : ''}`}
-							title={i18n.t('sidebar.taskList.filterBar.dateFilter')}
-							onClick={onClick}
-						>
-							<Icon icon="calendar" />
-						</button>
-					)}
-				</DropdownMenu>
+					<DropdownMenu
+							content={() => (
+								<TagTreeFilter
+									allTags={Array.from(tagCounts.keys())}
+									selectedTags={selectedTags}
+									onToggle={(fp) => {
+										setSelectedTags(prev =>
+											prev.includes(fp) ? prev.filter(t => t !== fp) : [...prev, fp]
+										);
+									}}
+									operator={tagOperator}
+									onOperatorChange={setTagOperator}
+									taskCounts={tagCounts}
+								/>
+							)}
+							align="left" className="gc-u-pointer" panelStyle={{ width: '220px', maxHeight: '320px', overflowY: 'auto' }}>
+						{({ onClick }) => (
+							<button
+								className={`clickable-icon${hasTagFilter ? ' has-active-filter' : ''}`}
+								title={i18n.t('sidebar.taskList.filterBar.tagFilter')}
+								onClick={onClick}
+							>
+								<Icon icon="tags" />
+							</button>
+						)}
+					</DropdownMenu>
+
+					<DropdownMenu sections={sortSections} align="left" className="gc-u-pointer" panelStyle={{ width: '180px' }}>
+						{({ onClick }) => (
+							<button
+								className="clickable-icon"
+								title={i18n.t('sidebar.taskList.filterBar.sort')}
+								onClick={onClick}
+							>
+								<Icon icon="arrow-up-down" />
+							</button>
+						)}
+					</DropdownMenu>
+
+					<DropdownMenu sections={dateSections} align="left" className="gc-u-pointer">
+						{({ onClick }) => (
+							<button
+								className={`clickable-icon${hasDateFilter ? ' has-active-filter' : ''}`}
+								title={i18n.t('sidebar.taskList.filterBar.dateFilter')}
+								onClick={onClick}
+							>
+								<Icon icon="calendar" />
+							</button>
+						)}
+					</DropdownMenu>
+				</div>
 			</div>
 
-			<div className={SidebarClasses.elements.taskList}>
-				{sortedTasks.length === 0 ? (
-					<div className={SidebarClasses.elements.emptyState}>
-						{debouncedQuery ? i18n.t('sidebar.taskList.noMatchingTasks') : i18n.t('sidebar.taskList.noTasks')}
-					</div>
-				) : (
-					sortedTasks.map((task) => (
-						<TaskCard
-							key={`${task.filePath}:${task.lineNumber}`}
-							task={task}
-							config={config}
-						/>
-					))
-				)}
+			<div className={SidebarClasses.elements.panelBody}>
+				<div className={SidebarClasses.elements.taskList}>
+					{sortedTasks.length === 0 ? (
+						<div className={SidebarClasses.elements.emptyState}>
+							{debouncedQuery ? i18n.t('sidebar.taskList.noMatchingTasks') : i18n.t('sidebar.taskList.noTasks')}
+						</div>
+					) : (
+						sortedTasks.map((task) => (
+							<TaskCard
+								key={`${task.filePath}:${task.lineNumber}`}
+								task={task}
+								config={config}
+							/>
+						))
+					)}
+				</div>
 			</div>
 		</>
 	);

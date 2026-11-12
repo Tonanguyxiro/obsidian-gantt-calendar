@@ -134,13 +134,13 @@
 }
 
 .gc-month-view__day-cell--today .gc-month-view__day-number {
-	background-color: var(--gc-accent);
-	color: var(--gc-on-accent);
+	background-color: var(--gc-today);
+	color: var(--gc-on-today);
 	font-weight: 700;
 }
 
 .gc-month-view__day-cell--today .gc-month-view__lunar-text {
-	color: var(--gc-accent);
+	color: var(--gc-today);
 }
 
 /* 非当月日期：整格弱化，不用透明度砸内容 */
@@ -241,6 +241,33 @@ body.gc-is-phone .gc-view--month {
 	}
 
 	.gc-month-view__span-bar-time {
+		display: none;
+	}
+}
+
+/* 单日条目单行显示：ICS 地点让给标题 */
+.gc-month-view__span-bar .gc-ics-event__location {
+	display: none;
+}
+
+/* 分屏等窄视图（视图宽度 ≤ 760px，每列约 100px）：时刻角标与次要元素让位给标题 */
+@container gc-app (max-width: 760px) {
+	.gc-month-view__span-bar-time {
+		display: none;
+	}
+
+	.gc-month-view__span-bar :is(.gc-task-card__priority, .gc-task-card__tags, .gc-tag-pill) {
+		display: none;
+	}
+
+	.gc-month-view__span-bar .gc-ics-event {
+		padding: 2px 3px;
+	}
+}
+
+/* 约 400px：农历只剩 1 个字时没有意义，整体隐藏（节日/节气同样让位给日期数字） */
+@container gc-app (max-width: 480px) {
+	.gc-month-view__day-cell .gc-month-view__lunar-text {
 		display: none;
 	}
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type JSX } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type JSX, type RefObject } from 'react';
 import type { DragEvent as ReactDragEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { Notice } from 'obsidian';
 import type { GCTask } from '../../../types';
@@ -34,6 +34,7 @@ import { useCanvasTouchDrag } from './useCanvasTouchDrag';
 import { findTaskById } from '../../utils/taskId';
 import { asSlotTarget, SLOT_DEFAULT_MIN } from '../../../tasks/scheduledFallback';
 import { taskKey } from '../../utils/taskKey';
+import { createDragFeedbackStore, useDragFeedback, DropIndicatorLayer, rafThrottle, type DragFeedbackStore } from './dragFeedback';
 
 /**
  * 创建手势的像素位移阈值（与周视图一致）：超过才视为拖拽选区
@@ -90,10 +91,9 @@ export function DayTimelineCanvas({ day, model, config, tasks, refresh }: DayTim
 	/** pointercancel 清理经 ref 桥接，避免与 finishCreate 形成循环推断 */
 	const cancelCreateRef = useRef<() => void>(() => {});
 
-	// ===== 拖放 UI 状态 =====
-	const [dropLine, setDropLine] = useState<number | null>(null);
-	const [dropPreview, setDropPreview] = useState<{ startMin: number; endMin: number } | null>(null);
-	const [dragOver, setDragOver] = useState(false);
+	// ===== 拖放瞬时反馈（独立小 store：dragover 只重渲染指示层，不重渲染整张画布） =====
+	const [feedback] = useState(createDragFeedbackStore);
+	const dragOver = useDragFeedback(feedback, (s) => s.overCol === 0);
 
 	/** 当日 00:00 + 分钟偏移（可超 1440 = 次日 00:00） */
 	const atMinutes = useCallback((min: number): Date => {
@@ -220,7 +220,7 @@ export function DayTimelineCanvas({ day, model, config, tasks, refresh }: DayTim
 	// 触屏整块拖动（长按 500ms 起拖；单日画布 dayIndex 恒为 0）
 	const beginBlockTouchPress = useCanvasTouchDrag({
 		onCommit: (task, _dayIndex, minutes) => commitBlockMove(task, minutes),
-		setPreview: (prev) => setDropPreview(prev && { startMin: prev.startMin, endMin: prev.endMin }),
+		setPreview: (prev) => feedback.patch({ indicator: prev && { dayIndex: 0, kind: 'preview', startMin: prev.startMin, endMin: prev.endMin } }),
 		columnSelector: `.${DayCanvasClasses.elements.canvas}`,
 	});
 
@@ -375,37 +375,40 @@ export function DayTimelineCanvas({ day, model, config, tasks, refresh }: DayTim
 	}, [minutesFromEvent, showGhost, finishCreate, quickCreateEnd]);
 
 	// ===== HTML5 拖放（块拖动按块边缘落点 + 预览块；外部拖入按指针 + 指示线） =====
+	// dragover 约 50ms 一次（指针不动也触发）：布局读取与反馈写入按帧合并
+	const dragOverFrame = useMemo(() => rafThrottle((clientY: number) => {
+		const canvas = canvasRef.current;
+		if (!canvas) return;
+		const top = canvas.getBoundingClientRect().top;
+		const meta = getBlockDragMeta();
+		if (meta) {
+			const topMin = snapMinutes(pxToMinutes(clientY - meta.offsetPx - top), false);
+			const endMin = Math.min(topMin + meta.durationMin, MINUTES_PER_DAY);
+			feedback.patch({ overCol: 0, indicator: { dayIndex: 0, kind: 'preview', startMin: topMin, endMin } });
+			return;
+		}
+		const min = snapMinutes(pxToMinutes(clientY - top), false);
+		feedback.patch({ overCol: 0, indicator: { dayIndex: 0, kind: 'line', startMin: min, endMin: min } });
+	}), [feedback]);
+	useEffect(() => () => dragOverFrame.cancel(), [dragOverFrame]);
+
 	const handleDragOver = useCallback((e: ReactDragEvent) => {
 		e.preventDefault();
 		if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
-		setDragOver(true);
-		const meta = getBlockDragMeta();
-		if (meta) {
-			setDropLine(null);
-			const canvas = canvasRef.current;
-			if (!canvas) return;
-			const topMin = snapMinutes(pxToMinutes(e.clientY - meta.offsetPx - canvas.getBoundingClientRect().top), false);
-			const endMin = Math.min(topMin + meta.durationMin, MINUTES_PER_DAY);
-			setDropPreview((prev) => (prev && prev.startMin === topMin ? prev : { startMin: topMin, endMin }));
-			return;
-		}
-		setDropPreview(null);
-		setDropLine(minutesFromEvent(e.clientY));
-	}, [minutesFromEvent, setDropLine, setDropPreview]);
+		dragOverFrame(e.clientY);
+	}, [dragOverFrame]);
 
 	const handleDragLeave = useCallback((e: ReactDragEvent) => {
 		const related = e.relatedTarget as Node | null;
 		if (related && e.currentTarget.contains(related)) return;
-		setDropLine(null);
-		setDropPreview(null);
-		setDragOver(false);
-	}, [setDropLine, setDropPreview]);
+		dragOverFrame.cancel();
+		feedback.reset();
+	}, [feedback, dragOverFrame]);
 
 	const handleDrop = useCallback((e: ReactDragEvent) => {
 		e.preventDefault();
-		setDropLine(null);
-		setDropPreview(null);
-		setDragOver(false);
+		dragOverFrame.cancel();
+		feedback.reset();
 		const taskId = e.dataTransfer?.getData('taskId');
 		if (!taskId) return;
 		const task = findTaskById(tasks, taskId);
@@ -416,7 +419,7 @@ export function DayTimelineCanvas({ day, model, config, tasks, refresh }: DayTim
 		const meta = getBlockDragMeta();
 		const topEdgeClientY = meta ? e.clientY - meta.offsetPx : e.clientY;
 		commitBlockMove(task, minutesFromEvent(topEdgeClientY));
-	}, [tasks, minutesFromEvent, commitBlockMove]);
+	}, [tasks, minutesFromEvent, commitBlockMove, feedback, dragOverFrame]);
 
 	// ===== 当前时间指示线（仅画布日为今天时显示；30s 刷新） =====
 	const isToday = useMemo(() => {
@@ -468,86 +471,26 @@ export function DayTimelineCanvas({ day, model, config, tasks, refresh }: DayTim
 				onDragLeave={handleDragLeave}
 				onDrop={handleDrop}
 			>
-				{model.blocks.map(({ block, seg }) => {
-					const durationMin = seg.endMin - seg.startMin;
-					const resizable = !isVirtualTask(block.task) && !block.task.icsEvent;
-					const cls = [
-						DayCanvasClasses.elements.block,
-						seg.continuesBefore ? DayCanvasClasses.modifiers.blockContinuesBefore : '',
-						seg.continuesAfter ? DayCanvasClasses.modifiers.blockContinuesAfter : '',
-						seg.stackedIndex > 0 ? DayCanvasClasses.modifiers.blockStacked : '',
-					].filter(Boolean).join(' ');
-					const style: CSSProperties = {
-						top: `${minutesToPx(seg.startMin)}px`,
-						height: `${minutesToPx(durationMin)}px`,
-						left: `calc(${(seg.lane / seg.laneCount) * 100}% + ${(seg.stackedIndex > 0 ? seg.stackedIndex * 3 : 0) + 1}px)`,
-						width: `calc(${100 / seg.laneCount}% - 2px)`,
-						zIndex: seg.lane + (seg.stackedIndex > 0 ? 4 : 1),
-					};
-					return (
-						<div
-							key={taskKey(block.task)}
-							className={cls}
-							style={style}
-							onPointerDown={(e) => beginBlockTouchPress(e, block, e.currentTarget)}
-							onDragStart={(e) => {
-								const rect = e.currentTarget.getBoundingClientRect();
-								setBlockDragMeta({
-									offsetPx: e.clientY - rect.top,
-									durationMin: Math.round((block.end.getTime() - block.start.getTime()) / 60000),
-								});
-							}}
-							onDragEnd={() => {
-								clearBlockDragMeta();
-								setDropPreview(null);
-							}}
-						>
-							{durationMin >= 30 ? (
-								<span className={DayCanvasClasses.elements.blockTime}>
-									{`${formatMinutes(seg.startMin)} – ${formatMinutes(seg.endMin)}`}
-								</span>
-							) : null}
-							<CalendarItemCard task={block.task} config={config} disableLongPressMenu />
-							{!seg.continuesBefore && resizable ? (
-								<div
-									className={`${DayCanvasClasses.elements.handle} ${DayCanvasClasses.modifiers.handleTop}`}
-									onPointerDown={(e) => {
-										const canvas = canvasRef.current;
-										if (canvas && e.currentTarget.parentElement) {
-											beginResize(e, block, seg, 'top', canvas, e.currentTarget.parentElement);
-										}
-									}}
-								/>
-							) : null}
-							{!seg.continuesAfter && resizable ? (
-								<div
-									className={`${DayCanvasClasses.elements.handle} ${DayCanvasClasses.modifiers.handleBottom}`}
-									onPointerDown={(e) => {
-										const canvas = canvasRef.current;
-										if (canvas && e.currentTarget.parentElement) {
-											beginResize(e, block, seg, 'bottom', canvas, e.currentTarget.parentElement);
-										}
-									}}
-								/>
-							) : null}
-						</div>
-					);
-				})}
-				{/* 拖放吸附指示线（外部来源） */}
-				{dropLine !== null ? (
-					<div className={DayCanvasClasses.elements.dropLine} style={{ top: `${minutesToPx(dropLine)}px` }} />
-				) : null}
-				{/* 整块拖动落点预览 */}
-				{dropPreview ? (
-					<div
-						className={DayCanvasClasses.elements.dropPreview}
-						style={{ top: `${minutesToPx(dropPreview.startMin)}px`, height: `${minutesToPx(dropPreview.endMin - dropPreview.startMin)}px` }}
-					>
-						<span className={DayCanvasClasses.elements.ghostLabel}>
-							{`${formatMinutes(dropPreview.startMin)} – ${formatMinutes(dropPreview.endMin)}`}
-						</span>
-					</div>
-				) : null}
+				{model.blocks.map(({ block, seg }) => (
+					<CanvasTimeBlock
+						key={taskKey(block.task)}
+						block={block}
+						seg={seg}
+						config={config}
+						canvasRef={canvasRef}
+						feedback={feedback}
+						beginResize={beginResize}
+						beginTouchPress={beginBlockTouchPress}
+					/>
+				))}
+				{/* 拖放吸附指示线（外部来源）/ 整块拖动落点预览 */}
+				<DropIndicatorLayer
+					store={feedback}
+					dayIndex={0}
+					lineClass={DayCanvasClasses.elements.dropLine}
+					previewClass={DayCanvasClasses.elements.dropPreview}
+					labelClass={DayCanvasClasses.elements.ghostLabel}
+				/>
 				{/* 当前时间指示线 */}
 				{nowTop !== null ? (
 					<div className={DayCanvasClasses.elements.currentTime} style={{ top: nowTop }} />
@@ -561,3 +504,88 @@ export function DayTimelineCanvas({ day, model, config, tasks, refresh }: DayTim
 		</div>
 	);
 }
+
+// ===== 时间块（memo：画布因悬停高亮等重渲染时，props 未变的块直接跳过） =====
+
+interface CanvasTimeBlockProps {
+	block: TimeBlock;
+	seg: TimeBlockSegment;
+	config: TaskCardConfig;
+	canvasRef: RefObject<HTMLDivElement | null>;
+	feedback: DragFeedbackStore;
+	beginResize: ReturnType<typeof useBlockResize>;
+	beginTouchPress: ReturnType<typeof useCanvasTouchDrag>;
+}
+
+const CanvasTimeBlock = memo(function CanvasTimeBlock({
+	block,
+	seg,
+	config,
+	canvasRef,
+	feedback,
+	beginResize,
+	beginTouchPress,
+}: CanvasTimeBlockProps): JSX.Element {
+	const durationMin = seg.endMin - seg.startMin;
+	const resizable = !isVirtualTask(block.task) && !block.task.icsEvent;
+	const cls = [
+		DayCanvasClasses.elements.block,
+		seg.continuesBefore ? DayCanvasClasses.modifiers.blockContinuesBefore : '',
+		seg.continuesAfter ? DayCanvasClasses.modifiers.blockContinuesAfter : '',
+		seg.stackedIndex > 0 ? DayCanvasClasses.modifiers.blockStacked : '',
+	].filter(Boolean).join(' ');
+	const style: CSSProperties = {
+		top: `${minutesToPx(seg.startMin)}px`,
+		height: `${minutesToPx(durationMin)}px`,
+		left: `calc(${(seg.lane / seg.laneCount) * 100}% + ${(seg.stackedIndex > 0 ? seg.stackedIndex * 3 : 0) + 1}px)`,
+		width: `calc(${100 / seg.laneCount}% - 2px)`,
+		zIndex: seg.lane + (seg.stackedIndex > 0 ? 4 : 1),
+	};
+	return (
+		<div
+			className={cls}
+			style={style}
+			onPointerDown={(e) => beginTouchPress(e, block, e.currentTarget)}
+			onDragStart={(e) => {
+				const rect = e.currentTarget.getBoundingClientRect();
+				setBlockDragMeta({
+					offsetPx: e.clientY - rect.top,
+					durationMin: Math.round((block.end.getTime() - block.start.getTime()) / 60000),
+				});
+			}}
+			onDragEnd={() => {
+				clearBlockDragMeta();
+				feedback.reset();
+			}}
+		>
+			{durationMin >= 30 ? (
+				<span className={DayCanvasClasses.elements.blockTime}>
+					{`${formatMinutes(seg.startMin)} – ${formatMinutes(seg.endMin)}`}
+				</span>
+			) : null}
+			<CalendarItemCard task={block.task} config={config} disableLongPressMenu />
+			{!seg.continuesBefore && resizable ? (
+				<div
+					className={`${DayCanvasClasses.elements.handle} ${DayCanvasClasses.modifiers.handleTop}`}
+					onPointerDown={(e) => {
+						const canvas = canvasRef.current;
+						if (canvas && e.currentTarget.parentElement) {
+							beginResize(e, block, seg, 'top', canvas, e.currentTarget.parentElement);
+						}
+					}}
+				/>
+			) : null}
+			{!seg.continuesAfter && resizable ? (
+				<div
+					className={`${DayCanvasClasses.elements.handle} ${DayCanvasClasses.modifiers.handleBottom}`}
+					onPointerDown={(e) => {
+						const canvas = canvasRef.current;
+						if (canvas && e.currentTarget.parentElement) {
+							beginResize(e, block, seg, 'bottom', canvas, e.currentTarget.parentElement);
+						}
+					}}
+				/>
+			) : null}
+		</div>
+	);
+});

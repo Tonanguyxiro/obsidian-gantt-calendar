@@ -98,11 +98,12 @@ export class MarkdownDataSource implements IDataSource {
 	private readonly MAX_WAIT_MS = 500;
 	/** 各文件防抖窗口首次事件时间（maxWait 用） */
 	private debounceFirstAt: Map<string, number> = new Map();
-	// 防止并发处理同一文件
-	private processingFiles: Set<string> = new Set();
-	// 待处理文件队列：当文件正在处理时，新的修改请求会被加入此队列
-	// 处理完成后会重新检查这些文件，避免遗漏快速连续的修改
-	private pendingFileChecks: Set<string> = new Set();
+	// 同一文件的处理严格串行：modify/create/rename/补扫与写回后的 refreshFile
+	// 都经 processFileModification 排队。并发的两轮会拿同一份旧 L3 缓存做 diff、
+	// 读到不同版本（中间有插行）→ 仓库同时留下两个版本的 `路径:行号` key（任务重复）
+	private runningRuns: Map<string, Promise<void>> = new Map();
+	// 已排队、尚未开始的一轮：再来的请求直接复用（它开始时会读到最新内容）
+	private queuedRuns: Map<string, Promise<void>> = new Map();
 	// 防止重复注册事件监听器
 	private fileWatchersRegistered: boolean = false;
 	// 保存事件监听器引用，用于清理
@@ -280,22 +281,64 @@ export class MarkdownDataSource implements IDataSource {
 	private rescanSkippedFile(path: string): void {
 		this.scanSkippedPaths.delete(path);
 		this.scheduleFileDebounce(path, () => {
-			if (this.processingFiles.has(path)) {
-				this.pendingFileChecks.add(path);
-				return;
-			}
 			void this.processFileModification(path);
 		});
 	}
 
-	private async processFileModification(filePath: string): Promise<void> {
-		this.processingFiles.add(filePath);
+	/**
+	 * 重解析文件并把变化通知仓库（同一文件串行排队）。
+	 * 供 modify/create/rename/补扫与 TaskStore.refreshFile 共用；
+	 * 返回的 Promise 在“覆盖到调用时文件内容”的那一轮完成后结算。
+	 */
+	private processFileModification(filePath: string): Promise<void> {
+		const queued = this.queuedRuns.get(filePath);
+		if (queued) return queued;
+
+		const running = this.runningRuns.get(filePath);
+		if (!running) return this.startFileRun(filePath);
+
+		Logger.debug('MarkdownDataSource', `File queued behind running pass: ${filePath}`);
+		const next = running.then(() => {
+			this.queuedRuns.delete(filePath);
+			return this.startFileRun(filePath);
+		});
+		this.queuedRuns.set(filePath, next);
+		return next;
+	}
+
+	private startFileRun(filePath: string): Promise<void> {
+		const run = this.runFileModification(filePath).finally(() => {
+			if (this.runningRuns.get(filePath) === run) this.runningRuns.delete(filePath);
+		});
+		this.runningRuns.set(filePath, run);
+		return run;
+	}
+
+	private async runFileModification(filePath: string): Promise<void> {
 		Logger.debug('MarkdownDataSource', `Processing file modification: ${filePath}`);
 
 		try {
 			const oldCache = this.cache.get(filePath);
 
 			const parseResult = await this.parseFileFromContent(filePath);
+
+			// 读文件期间被删除/重命名：读到的是旧内容（任务路径可能已是新路径），
+			// 不能写回；按文件清掉旧路径，新路径由 rename 排队的那一轮负责
+			const current = this.app.vault.getAbstractFileByPath(filePath);
+			const moved = !(current instanceof TFile) ||
+				(parseResult?.tasks.some(t => t.filePath !== filePath) ?? false);
+			if (moved) {
+				this.cache.delete(filePath);
+				await this.changeHandler?.({
+					sourceId: this.sourceId,
+					created: [],
+					updated: [],
+					deleted: [],
+					deletedFilePaths: [filePath]
+				});
+				return;
+			}
+
 			if (parseResult) {
 				this.cache.set(filePath, parseResult.cache);
 			} else {
@@ -313,6 +356,9 @@ export class MarkdownDataSource implements IDataSource {
 						updated: changes.updated.length,
 						deleted: changes.deleted.length
 					});
+					// 附带该文件的权威 ID 快照：仓库据此清掉 L3 不知道的残留 key（自愈）。
+					// diff 为空时不通知（避免事件风暴），残留在下一次真实变化时清掉
+					changes.fileSnapshots = [{ filePath, taskIds: parseResult?.cache.taskIds ?? [] }];
 					await this.changeHandler(changes);
 				} else {
 					Logger.debug('MarkdownDataSource', `No actual changes detected for ${filePath}`);
@@ -320,17 +366,6 @@ export class MarkdownDataSource implements IDataSource {
 			}
 		} catch (error) {
 			Logger.error('MarkdownDataSource', `Error processing file modification: ${filePath}`, error);
-		} finally {
-			this.processingFiles.delete(filePath);
-
-			// 处理完成后，检查是否有待处理的重新检查
-			// 【修复Bug 2】这是关键：快速连续的修改不会丢失
-			if (this.pendingFileChecks.has(filePath)) {
-				this.pendingFileChecks.delete(filePath);
-				Logger.debug('MarkdownDataSource', `Rechecking pending file: ${filePath}`);
-				// 重新处理该文件
-				await this.processFileModification(filePath);
-			}
 		}
 	}
 
@@ -353,8 +388,8 @@ export class MarkdownDataSource implements IDataSource {
 		this.debounceTimers.forEach((timer) => window.clearTimeout(timer));
 		this.debounceTimers.clear();
 		this.debounceFirstAt.clear();
-		this.processingFiles.clear();
-		this.pendingFileChecks.clear();  // 清理待处理队列
+		this.runningRuns.clear();
+		this.queuedRuns.clear();
 		this.cache.clear();
 	}
 
@@ -534,13 +569,8 @@ export class MarkdownDataSource implements IDataSource {
 			if (file instanceof TFile && file.extension === 'md') {
 				Logger.debug('MarkdownDataSource', `File modify event received: ${file.path}`);
 
+				// 正在处理时由 processFileModification 排到其后，快速连续的修改不会丢失
 				this.scheduleFileDebounce(file.path, () => {
-					// 【修复Bug 2】如果文件正在处理，标记为待处理而非跳过
-					if (this.processingFiles.has(file.path)) {
-						this.pendingFileChecks.add(file.path);
-						Logger.debug('MarkdownDataSource', `File pending for recheck: ${file.path}`);
-						return;
-					}
 					void this.processFileModification(file.path);
 				});
 			}
@@ -553,23 +583,11 @@ export class MarkdownDataSource implements IDataSource {
 			if (file instanceof TFile && file.extension === 'md') {
 				Logger.debug('MarkdownDataSource', `File create event: ${file.path}`);
 
+				// create 事件常在 metadataCache 索引完成前触发，走 modify 同款的
+				// 直接读内容解析；且必须与随后（模板插件写入等）的 modify 同队列串行，
+				// 否则两轮各自按“无旧缓存”发 created，版本不同就留下两份任务
 				this.scheduleFileDebounce(file.path, () => {
-					// create 事件常在 metadataCache 索引完成前触发，走
-					// parseFileForScan 会拿到空 listItems 导致任务静默丢失。
-					// 改用直接读文件内容解析（modify 路径同款）
-					void this.parseFileFromContent(file.path).then((parseResult) => {
-						if (parseResult && this.changeHandler) {
-							// 新文件的所有任务都是新增的
-							Logger.debug('MarkdownDataSource', `New file created with ${parseResult.tasks.length} tasks: ${file.path}`);
-							void this.changeHandler({
-								sourceId: this.sourceId,
-								created: parseResult.tasks,
-								updated: [],
-								deleted: []
-							});
-							this.cache.set(file.path, parseResult.cache);
-						}
-					});
+					void this.processFileModification(file.path);
 				});
 			}
 		});
@@ -602,33 +620,15 @@ export class MarkdownDataSource implements IDataSource {
 		// 仅换 cache key 会让 L2 缓存永久指向旧路径（P0 缓存脏数据）
 		const renameRef = this.app.vault.on('rename', (file, oldPath) => {
 			if (file instanceof TFile && file.extension === 'md') {
-				const oldCache = this.cache.get(oldPath);
-				if (oldCache) {
-					this.cache.delete(oldPath);
-					void (async () => {
-						const parsed = await this.parseFileForScan(file.path).catch(() => null);
-						if (parsed) {
-							this.cache.set(file.path, parsed.cache);
-							await this.changeHandler?.({
-								sourceId: this.sourceId,
-								created: parsed.tasks,
-								updated: [],
-								deleted: [],
-								deletedFilePaths: [oldPath]
-							});
-						} else {
-							// 解析失败（如 metadataCache 未就绪）退化为仅清缓存，
-							// 文件下次被编辑时会走正常 modify 路径补齐
-							this.cache.delete(file.path);
-							await this.changeHandler?.({
-								sourceId: this.sourceId,
-								created: [],
-								updated: [],
-								deleted: [],
-								deletedFilePaths: [oldPath]
-							});
-						}
-					})();
+				// 有缓存，或该文件正在处理（首轮尚未写缓存）时才需要搬迁
+				const tracked = this.cache.has(oldPath) ||
+					this.runningRuns.has(oldPath) || this.queuedRuns.has(oldPath);
+				if (tracked) {
+					// 旧路径排在其进行中的处理之后：文件已不在旧路径 → 按文件清掉；
+					// 新路径按新文件解析。两者都走串行队列，进行中的旧路径处理
+					// 读完旧内容后不会再把任务写回仓库
+					void this.processFileModification(oldPath);
+					void this.processFileModification(file.path);
 				}
 			}
 		});
@@ -660,11 +660,6 @@ export class MarkdownDataSource implements IDataSource {
 
 					// 使用相同的防抖机制
 					this.scheduleFileDebounce(file.path, () => {
-						// 如果文件正在处理，标记为待处理
-						if (this.processingFiles.has(file.path)) {
-							this.pendingFileChecks.add(file.path);
-							return;
-						}
 						void this.processFileModification(file.path);
 					});
 				}
@@ -760,10 +755,12 @@ export class MarkdownDataSource implements IDataSource {
 			if (!newIdMap.has(id)) {
 				// 删除的任务没有完整对象，只能返回ID
 				// 这里我们需要返回一个占位任务对象
-				const [filePath, lineNumber] = id.split(':');
+				// 按最后一个 ':' 拆：路径本身可能含 ':'
+				const sep = id.lastIndexOf(':');
+				const filePath = id.slice(0, sep);
 				changes.deleted.push({
 					filePath,
-					lineNumber: parseInt(lineNumber),
+					lineNumber: parseInt(id.slice(sep + 1)),
 					fileName: filePath.split('/').pop() || '',
 					content: '',
 					description: '',

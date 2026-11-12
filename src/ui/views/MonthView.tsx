@@ -55,7 +55,7 @@ export function MonthView(): JSX.Element {
 
 	// ===== 滚轮切月：悬停月视图滚动即切换月份（累计阈值 + 冷却防惯性连跳） =====
 	// 原生监听（passive: false）而非 React onWheel：后者在根容器注册为 passive，
-	// preventDefault 可能失效；月视图内容不溢出，滚轮原本无滚动目标，无冲突。
+	// preventDefault 可能失效。内容溢出时先滚动内容，到边缘才切月。
 	const viewRef = useRef<HTMLDivElement>(null);
 	const stepWheelRef = useRef(createMonthWheelStep());
 
@@ -63,6 +63,12 @@ export function MonthView(): JSX.Element {
 		const el = viewRef.current;
 		if (!el) return;
 		const onWheel = (e: WheelEvent) => {
+			// 行高随内容增长后月网格可能溢出：能往该方向滚就先滚内容，滚到顶 / 底再切月
+			// （此前滚轮一律切月，想看下方行时会意外跳到别的月份）
+			const canScroll = e.deltaY > 0
+				? el.scrollTop + el.clientHeight < el.scrollHeight - 1
+				: el.scrollTop > 0;
+			if (canScroll && e.deltaY !== 0) return;
 			const dir = stepWheelRef.current(e.deltaY, e.deltaMode, Date.now());
 			if (dir === 0) return;
 			e.preventDefault();
@@ -321,7 +327,10 @@ export function MonthView(): JSX.Element {
 									onDragOver={(e) => {
 										e.preventDefault();
 										e.dataTransfer.dropEffect = 'move';
-										setCssProps(e.currentTarget, { backgroundColor: 'var(--background-modifier-hover)' });
+										// dragover 约 50ms 一次：已高亮则不再写样式（避免每次触发样式失效）
+										if (!e.currentTarget.style.backgroundColor) {
+											setCssProps(e.currentTarget, { backgroundColor: 'var(--background-modifier-hover)' });
+										}
 									}}
 									onDragLeave={(e) => {
 										setCssProps(e.currentTarget, { backgroundColor: '' });

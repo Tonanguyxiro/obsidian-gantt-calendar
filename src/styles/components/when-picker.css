@@ -1,0 +1,295 @@
+/* ==================== 任务弹窗「时间」面板（BEM: gc-when-picker） ====================
+   每一段固定高度、始终渲染：切换时间段 / 当日、选日期、设时刻都不会让控件移动 */
+.gc-when-picker {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+/* 1. 快速输入 */
+.gc-when-picker input.gc-when-picker__quick {
+	width: 100%;
+	height: 30px;
+	padding: 0 10px;
+	font-size: var(--font-ui-small);
+}
+
+.gc-when-picker__quick--shake {
+	animation: gc-when-shake 0.3s ease;
+	border-color: var(--text-error) !important;
+}
+
+@keyframes gc-when-shake {
+	0%, 100% { transform: translateX(0); }
+	25% { transform: translateX(-4px); }
+	75% { transform: translateX(4px); }
+}
+
+/* 2. 类型 + 常用日期（一行，放不下的常用日期被裁掉而不是换行） */
+.gc-when-picker__row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	height: 26px;
+	min-width: 0;
+}
+
+.gc-when-picker__kind {
+	display: inline-flex;
+	flex: 0 0 auto;
+	padding: 2px;
+	border-radius: var(--radius-m, 8px);
+	background: var(--background-modifier-hover);
+}
+
+.gc-when-picker__kind button.gc-when-picker__kind-btn {
+	width: 52px;
+	height: 22px;
+	padding: 0;
+	border: none;
+	border-radius: var(--radius-s, 6px);
+	background: transparent;
+	box-shadow: none;
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	font-weight: 500;
+	justify-content: center;
+	cursor: pointer;
+}
+
+.gc-when-picker__kind button.gc-when-picker__kind-btn--active {
+	background: var(--background-primary);
+	color: var(--text-normal);
+	box-shadow: var(--shadow-s);
+}
+
+.gc-when-picker__chips,
+.gc-when-picker__durations {
+	display: flex;
+	gap: 4px;
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+}
+
+.gc-when-picker button.gc-when-picker__chip {
+	flex: 0 0 auto;
+	height: 22px;
+	padding: 0 7px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 999px;
+	background: transparent;
+	box-shadow: none;
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	font-weight: 500;
+	cursor: pointer;
+}
+
+.gc-when-picker button.gc-when-picker__chip:hover {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+.gc-when-picker button.gc-when-picker__chip--active {
+	border-color: transparent;
+	background: color-mix(in srgb, var(--text-normal) 12%, transparent);
+	color: var(--text-normal);
+}
+
+/* 3. 日期格：两格（开始 | 截止）或一格（计划日），高度固定 */
+.gc-when-picker__cells {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	height: 46px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m, 8px);
+	overflow: hidden;
+}
+
+.gc-when-picker__cell {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	gap: 1px;
+	min-width: 0;
+	padding: 0 28px 0 10px;
+	cursor: pointer;
+	background: var(--background-secondary);
+}
+
+.gc-when-picker__cell + .gc-when-picker__cell {
+	border-left: 1px solid var(--background-modifier-border);
+}
+
+.gc-when-picker__cell--wide {
+	grid-column: 1 / -1;
+	cursor: default;
+}
+
+/* 选中格：白底 + 底部粗线（不改变尺寸） */
+.gc-when-picker__cell--armed {
+	background: var(--background-primary);
+	box-shadow: inset 0 -2px 0 var(--text-normal);
+}
+
+.gc-when-picker__cell-label {
+	font-size: 11px;
+	color: var(--text-muted);
+	white-space: nowrap;
+}
+
+.gc-when-picker__cell-value {
+	font-size: var(--font-ui-small);
+	font-weight: 600;
+	color: var(--text-normal);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	font-variant-numeric: tabular-nums;
+}
+
+.gc-when-picker__cell button.gc-when-picker__cell-clear {
+	position: absolute;
+	top: 50%;
+	right: 4px;
+	transform: translateY(-50%);
+	width: 22px;
+	height: 22px;
+	padding: 0;
+	color: var(--text-faint);
+}
+
+/* 没有值时只隐藏不移除：占位不变 */
+.gc-when-picker__cell button.gc-when-picker__cell-clear--hidden {
+	visibility: hidden;
+}
+
+/* 4. 月历：去掉外框，融进面板 */
+.gc-when-picker .gc-month-range {
+	max-width: none;
+	padding: 0;
+	border: none;
+	background: transparent;
+}
+
+/* 5. 提示 / 快速输入预览：固定一行 */
+.gc-when-picker__hint {
+	height: 16px;
+	line-height: 16px;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.gc-when-picker__hint--bad {
+	color: var(--text-error);
+}
+
+/* 6. 时刻 */
+.gc-when-picker__time {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding-top: 8px;
+	border-top: 1px solid var(--background-modifier-border);
+	transition: opacity 0.15s ease;
+}
+
+/* 时间段任务：时刻区变淡但仍可用（设置时刻即切到当日） */
+.gc-when-picker__time--muted {
+	opacity: 0.45;
+}
+
+.gc-when-picker__time--muted:hover,
+.gc-when-picker__time--muted:focus-within {
+	opacity: 0.8;
+}
+
+.gc-when-picker__time-row {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	height: 28px;
+	min-width: 0;
+}
+
+.gc-when-picker input.gc-when-picker__time-input {
+	flex: 0 0 64px;
+	width: 64px;
+	height: 28px;
+	padding: 0 6px;
+	text-align: center;
+	font-variant-numeric: tabular-nums;
+	font-size: var(--font-ui-small);
+}
+
+.gc-when-picker__time-dash {
+	color: var(--text-faint);
+}
+
+.gc-when-picker__durations {
+	margin-left: auto;
+}
+
+/* 小时条 */
+.gc-when-picker__strip {
+	position: relative;
+	height: 26px;
+	border-radius: var(--radius-s, 6px);
+	background: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+	cursor: crosshair;
+	touch-action: none;
+	user-select: none;
+	overflow: hidden;
+}
+
+.gc-when-picker__strip--disabled {
+	cursor: default;
+}
+
+.gc-when-picker__strip-night {
+	position: absolute;
+	inset: 0 75% 0 0;
+	background: color-mix(in srgb, var(--text-normal) 5%, transparent);
+	pointer-events: none;
+}
+
+.gc-when-picker__strip-tick {
+	position: absolute;
+	bottom: 2px;
+	padding-left: 3px;
+	border-left: 1px solid var(--background-modifier-border);
+	height: 100%;
+	display: flex;
+	align-items: flex-end;
+	font-size: 9px;
+	line-height: 1;
+	color: var(--text-faint);
+	pointer-events: none;
+}
+
+.gc-when-picker__strip-block {
+	position: absolute;
+	top: 3px;
+	bottom: 3px;
+	min-width: 4px;
+	border-radius: 4px;
+	background: color-mix(in srgb, var(--interactive-accent) 70%, var(--text-normal) 10%);
+	box-shadow: inset 4px 0 0 rgba(0, 0, 0, 0.15), inset -4px 0 0 rgba(0, 0, 0, 0.15);
+	cursor: grab;
+}
+
+.gc-when-picker__caption {
+	height: 16px;
+	line-height: 16px;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-faint);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}

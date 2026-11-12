@@ -2,7 +2,7 @@ import { Notice, type App } from 'obsidian';
 import { RegularExpressions } from './RegularExpressions';
 import { i18n } from '../i18n/i18n';
 import { openFileInExistingLeaf } from './fileOpener';
-import { resolveLinkTarget, wikilinkDisplayText } from './linkText';
+import { classifyMarkdownHref, resolveLinkTarget, wikilinkDisplayText } from './linkText';
 import { tokenizeInlineRich } from './inlineMarkdown';
 
 /**
@@ -82,7 +82,7 @@ export class LinkRenderer {
 		}
 	}
 
-	/** 渲染一个链接元素；不安全协议的 Markdown 链接整段丢弃 */
+	/** 渲染一个链接元素；脚本类协议的 Markdown 链接只保留文字 */
 	private static appendLink(
 		container: HTMLElement,
 		m: { type: 'obsidian' | 'markdown' | 'url'; groups: RegExpExecArray },
@@ -94,7 +94,7 @@ export class LinkRenderer {
 			const displayText = wikilinkDisplayText(notePath, m.groups[2]); // 别名优先，#标题显示为 "Note > 标题"
 			const link = container.createEl('a', { text: displayText, cls: 'gc-link gc-link--obsidian' });
 			link.setAttr('data-href', notePath);
-			link.setAttr('title', `打开：${notePath}`);
+			link.setAttr('title', i18n.t('common.openTarget', { path: notePath }));
 			link.href = 'javascript:void(0)';
 			link.addEventListener('click', (e) => {
 				e.preventDefault();
@@ -110,25 +110,26 @@ export class LinkRenderer {
 			});
 		} else if (m.type === 'markdown') {
 			const displayText = m.groups[1]; // [text]
-			const url = m.groups[2]; // (url)
-			const link = container.createEl('a', { text: displayText, cls: 'gc-link gc-link--markdown' });
-			const safeSchemes = ['http:', 'https:', 'mailto:', 'tel:', 'app:'];
-			try {
-				const parsed = new URL(url);
-				if (!safeSchemes.includes(parsed.protocol)) {
-					link.remove();
-					return;
-				}
-			} catch {
-				link.remove();
+			const href = classifyMarkdownHref(m.groups[2]); // (url)
+			if (href.kind === 'blocked') {
+				container.appendText(displayText);
 				return;
 			}
-			link.href = url;
+			if (href.kind === 'internal') {
+				// 库内路径的 Markdown 链接按双链处理（[x](Note.md)）
+				const fakeGroups = [m.groups[0], href.target, displayText] as unknown as RegExpExecArray;
+				LinkRenderer.appendLink(container, { type: 'obsidian', groups: fakeGroups }, app, sourcePath);
+				return;
+			}
+			const link = container.createEl('a', { text: displayText, cls: 'gc-link gc-link--markdown' });
+			link.href = href.href;
 			link.setAttr('target', '_blank');
 			link.setAttr('rel', 'noopener noreferrer');
-			link.setAttr('title', url);
+			link.setAttr('title', href.href);
 			link.addEventListener('click', (e) => {
+				e.preventDefault();
 				e.stopPropagation();
+				window.open(href.href, '_blank');
 			});
 		} else if (m.type === 'url') {
 			const url = m.groups[1]; // 完整URL

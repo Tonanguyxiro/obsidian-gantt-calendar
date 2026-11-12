@@ -1,3 +1,4 @@
+import { i18n } from '../../i18n/i18n';
 /**
  * 任务数据适配器
  * 将插件的 GCTask 格式转换为 甘特图格式
@@ -70,7 +71,7 @@ export class TaskDataAdapter {
 
 		return {
 			id: id ?? this.generateTaskId(task),
-			name: taskDisplayText(task.description) || '无标题任务',
+			name: taskDisplayText(task.description) || i18n.t('common.untitledTask'),
 			timeLabel: buildIntervalTimeLabel(
 				startDate, normalizedEndDate,
 				task.datePrecision?.[startField] === 'time',

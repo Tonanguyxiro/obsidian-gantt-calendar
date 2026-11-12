@@ -28,7 +28,7 @@ function startOfDay(d: Date): Date {
 }
 
 /** 以周一为首日，构建覆盖显示月份的 6×7 日期网格 */
-function buildMonthGrid(year: number, month: number): Date[] {
+export function buildMonthGrid(year: number, month: number): Date[] {
 	const first = new Date(year, month - 1, 1);
 	const offset = (first.getDay() + WEEKDAY_OFFSET) % 7;
 	const start = new Date(year, month - 1, 1 - offset);

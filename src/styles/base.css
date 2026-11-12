@@ -26,6 +26,8 @@
 .gantt-calendar-app {
 	display: flex;
 	flex-direction: column;
+	/* 分屏/窄侧栏按视图自身宽度自适应（媒体查询只看窗口宽度，分屏时不生效） */
+	container: gc-app / inline-size;
 }
 
 /* Main Container */
@@ -305,3 +307,80 @@
 }
 
 /* 手机端：行模板与桌面一致（auto 自适应 + 纵向滚动），格子 min-height 见 month-view.css */
+
+/* ==================== 固定表头：工具栏与各视图的表头不随内容滚动 ====================
+   应用根撑满视图高度、自身不滚动；只有各视图的主体滚动：
+   - 年 / 任务视图：.calendar-content 滚动（工具栏在其外，固定）
+   - 周视图：时间网格滚动，星期标题行与全天行钉在顶部
+   - 日视图：时间画布滚动，标题与全天区固定（全天区过多时自身滚动）
+   - 月视图：月网格自身滚动，星期标题行钉在顶部
+   - 甘特图：沿用 .gantt-mode 自身的滚动 */
+.gantt-calendar-app {
+	height: 100%;
+	overflow: hidden;
+}
+
+.calendar-content {
+	scrollbar-gutter: stable;
+}
+
+/* 周视图：网格是唯一的滚动容器 */
+.gc-view.gc-view--week {
+	min-height: 0;
+	overflow: hidden;
+}
+
+.gc-week-view__tasks-grid {
+	min-height: 0;
+	scrollbar-gutter: stable;
+}
+
+/* 全天行钉在星期标题（52px）下方，时间块滚到其下 */
+.gc-week-view__tasks-grid > .gc-week-view__allday-gutter,
+.gc-week-view__tasks-grid > .gc-week-view__allday-row {
+	position: sticky;
+	top: 52px;
+	z-index: 6;
+}
+
+/* 星期标题行在全天行之上；高于时间块里的 ghost / 手柄（z-index ≤ 5） */
+.gc-week-view__tasks-grid > .gc-week-view__header-cell,
+.gc-week-view__tasks-grid > .gc-week-view__header-spacer {
+	z-index: 7;
+}
+
+/* 日视图：视图撑满内容区，只有时间画布滚动 */
+.gc-view.gc-view--day {
+	min-height: 0;
+	overflow: hidden;
+}
+
+.gc-day-view__section--tasks > .gc-day-view__title,
+.gc-day-view__section--tasks > .gc-day-view__allday {
+	flex-shrink: 0;
+}
+
+.gc-day-view__section--tasks > .gc-day-view__allday {
+	max-height: 30%;
+	overflow-y: auto;
+	scrollbar-gutter: stable;
+}
+
+.gc-day-view__section--tasks > .gc-day-canvas__body {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	scrollbar-gutter: stable;
+}
+
+/* 月视图：星期标题行钉在月网格顶部 */
+.gc-month-view__weekday {
+	position: sticky;
+	top: 0;
+	z-index: 3;
+	background-color: var(--background-primary);
+}
+
+.gc-view.gc-view--month {
+	scrollbar-gutter: stable;
+}

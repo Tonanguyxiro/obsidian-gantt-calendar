@@ -55,7 +55,8 @@ export function App(): JSX.Element {
 	const viewType: CalendarViewType = isPhone && viewTypeRaw === 'gantt' ? 'week' : viewTypeRaw;
 
 	const isGantt = viewType === 'gantt';
-	const isWaterfall = viewType === 'day' || viewType === 'week' || viewType === 'task' || viewType === 'year';
+	// 瀑布流（整页滚动）只留给手机：桌面上工具栏与各视图表头固定，只有视图主体滚动（见 base.css「固定表头」）
+	const isWaterfall = isPhone && (viewType === 'day' || viewType === 'week' || viewType === 'task' || viewType === 'year');
 
 	return (
 		<ModalProvider>

@@ -5,7 +5,7 @@ import { RegularExpressions } from '../../utils/RegularExpressions';
 import { LinkClasses } from '../../utils/bem';
 import { i18n } from '../../i18n/i18n';
 import { openFileInExistingLeaf } from '../../utils/fileOpener';
-import { resolveLinkTarget, wikilinkDisplayText } from '../../utils/linkText';
+import { classifyMarkdownHref, resolveLinkTarget, wikilinkDisplayText } from '../../utils/linkText';
 import { tokenizeInlineRich, type InlineMarkdownKind } from '../../utils/inlineMarkdown';
 
 export interface LinkSegment {
@@ -51,7 +51,6 @@ export function parseDescriptionSegments(text: string): DescriptionSegment[] {
 
 	const segments: DescriptionSegment[] = [];
 	let lastIndex = 0;
-	const safeSchemes = ['http:', 'https:', 'mailto:', 'tel:', 'app:'];
 
 	for (const m of unique) {
 		if (m.start > lastIndex) {
@@ -69,18 +68,20 @@ export function parseDescriptionSegments(text: string): DescriptionSegment[] {
 			});
 		} else if (m.type === 'markdown') {
 			const displayText = m.groups[1];
-			const url = m.groups[2];
-			try {
-				const parsed = new URL(url);
-				if (!safeSchemes.includes(parsed.protocol)) {
-					lastIndex = m.end;
-					continue;
-				}
-			} catch {
-				lastIndex = m.end;
-				continue;
+			const href = classifyMarkdownHref(m.groups[2]);
+			if (href.kind === 'internal') {
+				segments.push({
+					type: 'obsidian',
+					text: displayText,
+					href: href.target,
+					title: i18n.t('common.openTarget', { path: href.target }),
+				});
+			} else if (href.kind === 'external') {
+				segments.push({ type: 'markdown', text: displayText, href: href.href, title: href.href });
+			} else {
+				// 脚本类协议：只保留文字
+				segments.push({ text: displayText });
 			}
-			segments.push({ type: 'markdown', text: displayText, href: url, title: url });
 		} else if (m.type === 'url') {
 			const url = m.groups[1];
 			segments.push({ type: 'url', text: url, href: url, title: url });
@@ -135,7 +136,12 @@ function renderLink(link: LinkSegment, key: number, app: App, sourcePath: string
 			target="_blank"
 			rel="noopener noreferrer"
 			title={link.title}
-			onClick={(e) => e.stopPropagation()}
+			onClick={(e) => {
+				// 交给 Obsidian 的窗口打开处理（http 进浏览器，zotero:// 等应用协议交给系统）
+				e.preventDefault();
+				e.stopPropagation();
+				window.open(link.href, '_blank');
+			}}
 		>
 			{link.text}
 		</a>

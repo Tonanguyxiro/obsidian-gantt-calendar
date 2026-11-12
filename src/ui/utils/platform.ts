@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type RefObject } from 'react';
 import { Platform } from 'obsidian';
 
 /**
@@ -40,4 +40,24 @@ export function useIsNarrow(): boolean {
 		return () => mql.removeEventListener('change', onChange);
 	}, []);
 	return isNarrow;
+}
+
+/**
+ * 元素宽度是否不超过阈值（ResizeObserver）：分屏 / 窄侧栏按视图自身宽度收缩，
+ * 窗口宽度断点在分屏时不生效
+ */
+export function useElementNarrow(ref: RefObject<HTMLElement | null>, maxWidth: number, observeParent = false): boolean {
+	const [narrow, setNarrow] = useState(false);
+	useEffect(() => {
+		const el = observeParent ? ref.current?.parentElement : ref.current;
+		if (!el || typeof ResizeObserver === 'undefined') return;
+		const update = (w: number) => setNarrow(w > 0 && w <= maxWidth);
+		update(el.getBoundingClientRect().width);
+		const ro = new ResizeObserver((entries) => {
+			for (const entry of entries) update(entry.contentRect.width);
+		});
+		ro.observe(el);
+		return () => ro.disconnect();
+	}, [ref, maxWidth, observeParent]);
+	return narrow;
 }

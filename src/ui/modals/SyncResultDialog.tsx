@@ -42,7 +42,7 @@ export function SyncResultDialog({ title, result, onClose }: SyncResultDialogPro
 					? i18n.t('modals.syncResult.noChange')
 					: activeStats.map(stat => (
 							<span key={stat.label} className={C.elements.summaryItem}>
-								{`${stat.label} ${stat.count} 个`}
+								{i18n.t('modals.syncResult.countItem', { label: stat.label, count: stat.count })}
 							</span>
 					  ))}
 			</div>

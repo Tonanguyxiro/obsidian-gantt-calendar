@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef, type PointerEvent as ReactPointerEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, type PointerEvent as ReactPointerEvent } from 'react';
 import type { GCTask } from '../../../types';
 import type { TimeBlock } from './timelineModel';
 import { pxToMinutes, snapMinutes } from './timelineModel';
 import { setCssProps } from '../../../utils/bem';
 import { linksToPlainText, taskDisplayText } from '../../../utils/linkText';
+import { rafThrottle } from './dragFeedback';
 
 /**
  * 时间画布的触屏整块拖动（HTML5 DnD 在触屏不可用的替代）：
@@ -45,7 +46,35 @@ export function useCanvasTouchDrag(deps: CanvasTouchDragDeps) {
 	const depsRef = useRef(deps);
 	depsRef.current = deps;
 
+	/**
+	 * 拖动中的落点命中（elementFromPoint + getBoundingClientRect + 预览写入）按帧合并：
+	 * 高刷屏 pointermove 可达 120Hz+，每次都做强制布局 + 状态写入会掉帧
+	 */
+	const trackFrame = useMemo(() => rafThrottle((clientX: number, clientY: number) => {
+		const p = pressRef.current;
+		if (!p || !p.dragging) return;
+		// 悬浮标签跟随指针
+		if (p.chipEl) {
+			p.chipEl.style.left = `${clientX}px`;
+			p.chipEl.style.top = `${clientY - 28}px`;
+		}
+		// 命中目标日列 → 计算落点预览
+		const hit = document.elementFromPoint(clientX, clientY)?.closest(depsRef.current.columnSelector) as HTMLElement | null;
+		if (!hit) {
+			p.landing = null;
+			depsRef.current.setPreview(null);
+			return;
+		}
+		const dayIndex = Number(hit.dataset.dayIdx);
+		if (Number.isNaN(dayIndex)) { p.landing = null; return; }
+		const rect = hit.getBoundingClientRect();
+		const topMin = snapMinutes(pxToMinutes(clientY - p.offsetPx - rect.top), false);
+		p.landing = { dayIndex, topMin };
+		depsRef.current.setPreview({ dayIndex, startMin: topMin, endMin: Math.min(topMin + p.durationMin, 24 * 60) });
+	}), []);
+
 	const cleanup = useCallback(() => {
+		trackFrame.cancel();
 		const p = pressRef.current;
 		pressRef.current = null;
 		document.removeEventListener('pointermove', onPointerMove);
@@ -56,7 +85,7 @@ export function useCanvasTouchDrag(deps: CanvasTouchDragDeps) {
 		p.chipEl?.remove();
 		setCssProps(p.blockEl, { opacity: '' });
 		depsRef.current.setPreview(null);
-	}, []);
+	}, [trackFrame]);
 
 	// document 级处理器（经 ref 引用保持稳定）
 	const onPointerMove = useCallback((ev: PointerEvent) => {
@@ -68,27 +97,12 @@ export function useCanvasTouchDrag(deps: CanvasTouchDragDeps) {
 			return;
 		}
 		p.moved = true;
-		// 悬浮标签跟随指针
-		if (p.chipEl) {
-			p.chipEl.style.left = `${ev.clientX}px`;
-			p.chipEl.style.top = `${ev.clientY - 28}px`;
-		}
-		// 命中目标日列 → 计算落点预览
-		const hit = document.elementFromPoint(ev.clientX, ev.clientY)?.closest(depsRef.current.columnSelector) as HTMLElement | null;
-		if (!hit) {
-			p.landing = null;
-			depsRef.current.setPreview(null);
-			return;
-		}
-		const dayIndex = Number(hit.dataset.dayIdx);
-		if (Number.isNaN(dayIndex)) { p.landing = null; return; }
-		const rect = hit.getBoundingClientRect();
-		const topMin = snapMinutes(pxToMinutes(ev.clientY - p.offsetPx - rect.top), false);
-		p.landing = { dayIndex, topMin };
-		depsRef.current.setPreview({ dayIndex, startMin: topMin, endMin: Math.min(topMin + p.durationMin, 24 * 60) });
-	}, [cleanup]);
+		trackFrame(ev.clientX, ev.clientY);
+	}, [cleanup, trackFrame]);
 
-	const onPointerUp = useCallback((ev: PointerEvent) => {
+	const onPointerUp = useCallback(() => {
+		// 松手前把挂起的最后一次位置落实到 landing（提交与预览所见一致）
+		trackFrame.flush();
 		const p = pressRef.current;
 		cleanup();
 		if (!p) return;
@@ -100,7 +114,7 @@ export function useCanvasTouchDrag(deps: CanvasTouchDragDeps) {
 			// 长按后未移动：打开长按菜单（合成 contextmenu 复用 ContextMenuTrigger 的打开逻辑）
 			p.blockEl.dispatchEvent(new MouseEvent('contextmenu', { clientX: p.x, clientY: p.y, bubbles: true, cancelable: true }));
 		}
-	}, [cleanup]);
+	}, [cleanup, trackFrame]);
 
 	const onPointerCancel = useCallback(() => cleanup(), [cleanup]);
 

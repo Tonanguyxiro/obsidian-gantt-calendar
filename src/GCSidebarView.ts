@@ -1,3 +1,4 @@
+import { i18n } from './i18n/i18n';
 import { ItemView, WorkspaceLeaf } from 'obsidian';
 import { createElement } from 'react';
 import type { IPluginContext } from './types';
@@ -33,7 +34,7 @@ export class GCSidebarView extends ItemView {
 	}
 
 	getDisplayText(): string {
-		return 'Gantt calendar';
+		return i18n.t('plugin.name');
 	}
 
 	getIcon(): string {

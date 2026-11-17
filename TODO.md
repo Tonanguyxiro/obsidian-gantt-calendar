@@ -13,7 +13,8 @@
 ### 2026-11-17（1.8.6）
 
 - [x] 发布 1.8.6（Task 编辑器 / 右键打开场景修复的正式版）：`package.json`、`manifest.json`、`versions.json` 已 bump；`npm run build`、653 项单测、`npx eslint .`（0 errors）通过；两个测试库均加载 1.8.6 且 `dev:errors` 无错误。
-- [ ] GitHub Release / tag / SHA-256 核对：待推送完成后补记。
+- [x] 提交 `8090a86`（release: Gantt Calendar 1.8.6）+ tag `1.8.6` 已 push 到 origin/master。
+- [x] 创建 GitHub Release：https://github.com/Tonanguyxiro/obsidian-gantt-calendar/releases/tag/1.8.6 （标题 v1.8.6，英文说明）。三个资产 main.js / manifest.json / styles.css 已上传，本地与下载后的 SHA-256 均核对一致（main.js `4cb92000…`, manifest.json `a0026526…`, styles.css `f2a3cdaa…`）。
 
 ### 2026-11-16（Task 编辑器 / 右键打开场景 "Fix all"）
 

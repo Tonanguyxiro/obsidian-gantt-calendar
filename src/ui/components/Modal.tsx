@@ -1,9 +1,21 @@
 import { useEffect, useRef, type JSX, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
-import { ModalClasses } from '../../utils/bem';
+import { ModalClasses, setCssProps } from '../../utils/bem';
 import { Icon } from './Icon';
 import { MOTION, modalVariants, overlayVariants, easeOutTransition } from '../motion';
+
+/**
+ * 兜底：motion 的 rAF 在后台标签页 / 无头环境可能不触发，进场动画停在 initial
+ * （opacity: 0），弹窗"打开了但看不见"。这里把仍为 0 的遮罩与面板强制写成可见；
+ * 只在 open 后调用，关闭动画照常由 AnimatePresence 驱动。
+ */
+export function ensureModalVisible(overlay: HTMLElement | null, panel: HTMLElement | null): void {
+	for (const el of [overlay, panel]) {
+		if (!el) continue;
+		if (window.getComputedStyle(el).opacity === '0') setCssProps(el, { opacity: '1' });
+	}
+}
 
 export interface ModalProps {
 	open: boolean;
@@ -60,6 +72,22 @@ export function Modal({
 		return () => window.clearTimeout(timer);
 	}, [open]);
 
+	// 进场兜底：rAF 被打断时 motion 可能永远停在 opacity:0（弹窗不可见但遮罩还在）。
+	// 300ms 后若计算样式仍为 0，直接写 inline opacity 让内容可见。
+	useEffect(() => {
+		if (!open) return;
+		const timer = window.setTimeout(() => {
+			ensureModalVisible(overlayRef.current, panelRef.current);
+		}, 300);
+		return () => window.clearTimeout(timer);
+	}, [open]);
+
+	// 卸载兜底：无论因何种路径消失（退出动画被打断 / 被父级直接 filter 掉），
+	// 都保证遮罩不再拦截点击；finishExit 本身幂等，重复调用安全。
+	useEffect(() => () => {
+		overlayRef.current?.classList.add(ModalClasses.overlayClosing);
+	}, []);
+
 	useEffect(() => {
 		if (!open) return;
 		// 焦点管理：打开时记录来源并聚焦面板（键盘用户可直接 Tab 操作），
@@ -72,7 +100,11 @@ export function Modal({
 		document.addEventListener('keydown', handleKeydown);
 		return () => {
 			document.removeEventListener('keydown', handleKeydown);
-			previouslyFocused?.focus?.();
+			// 触发元素可能已被卸载（右键菜单项打开弹窗时菜单先 close），
+			// 归还焦点到已脱离 DOM 的节点无效且会让焦点落到 body
+			if (previouslyFocused?.isConnected && document.contains(previouslyFocused)) {
+				previouslyFocused.focus?.();
+			}
 		};
 	}, [open, closeOnEsc, onClose]);
 

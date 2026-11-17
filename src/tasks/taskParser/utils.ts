@@ -9,6 +9,7 @@
  */
 
 import { RegularExpressions } from '../../utils/RegularExpressions';
+import { hmToMin } from '../../utils/timeOfDay';
 import { createDate, isValidDate } from '../../dateUtils/timezone';
 import type { MetadataField, PlannerTime } from '../../types';
 import { buildTagHierarchy } from '../tags/TagHierarchyBuilder';
@@ -481,7 +482,10 @@ export function removeTags(description: string): string {
 // ==================== Day Planner 时间前缀 ====================
 
 /**
- * 解析任务文本开头的 Day Planner 时间前缀（"09:00 - 10:00 任务" / "9:30 任务"）
+ * 解析任务文本开头的 Day Planner 时间前缀
+ * （"09:00 - 10:00 任务" / "9:30 任务" / "1:00 PM - 2:00 PM Review"）
+ *
+ * 数值合法性交给 hmToMin，正则只负责切分；因此 "25:00" 这类非法值不会被识别。
  *
  * @param description - 已清理的任务描述
  * @returns 分钟偏移；无前缀或时间非法时返回 undefined
@@ -489,20 +493,14 @@ export function removeTags(description: string): string {
 export function parsePlannerTime(description: string): PlannerTime | undefined {
     const m = description.match(RegularExpressions.DayPlanner.timePrefix);
     if (!m) return undefined;
-    const toMin = (h: string, mm: string): number | undefined => {
-        const hour = Number(h);
-        const minute = Number(mm);
-        if (hour > 24 || minute > 59 || (hour === 24 && minute > 0)) return undefined;
-        return hour * 60 + minute;
-    };
-    const startMin = toMin(m[1], m[2]);
-    if (startMin === undefined) return undefined;
-    if (m[3] === undefined) return { startMin };
-    const endMin = toMin(m[3], m[4]);
-    return endMin !== undefined && endMin > startMin ? { startMin, endMin } : { startMin };
+    const startMin = hmToMin(`${m[1]}:${m[2]}${m[3] ?? ''}`);
+    if (startMin === null) return undefined;
+    if (m[4] === undefined) return { startMin };
+    const endMin = hmToMin(`${m[4]}:${m[5]}${m[6] ?? ''}`);
+    return endMin !== null && endMin > startMin ? { startMin, endMin } : { startMin };
 }
 
-/** 去掉任务文本开头的 Day Planner 时间前缀（显示用） */
+/** 去掉任务文本开头的 Day Planner 时间前缀（含可选的 AM/PM，显示用） */
 export function stripPlannerTime(description: string): string {
     return description.replace(RegularExpressions.DayPlanner.timePrefix, '');
 }

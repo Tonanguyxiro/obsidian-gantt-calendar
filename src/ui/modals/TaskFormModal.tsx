@@ -17,7 +17,7 @@ import { DateTimePicker } from '../components/DateTimePicker';
 import { DescriptionEditor } from '../components/DescriptionEditor';
 import { Popover } from '../components/Popover';
 import { WhenPicker, type WhenValue } from '../components/WhenPicker';
-import { formatDuration, formatHm, hmToMin, type TimeFormat } from '../../utils/timeOfDay';
+import { formatDuration, formatHm, hmToMin, minToHm, type TimeFormat } from '../../utils/timeOfDay';
 import { Icon } from '../components/Icon';
 import { statusTransitionUpdates, getConfiguredStatuses, getPickerStatuses } from '../../tasks/statusTransition';
 import { legacyDaySlot, rewritePlannerPrefix } from '../../tasks/scheduledFallback';
@@ -101,12 +101,6 @@ function isDueBeforeStart(
 
 /** 弹窗内联样式（原 BaseTaskModal.addStyles 的内容） */
 
-/** 时间片的时刻输入值（HH:mm） */
-function minutesToHm(min: number): string {
-	const m = Math.min(min, 24 * 60);
-	return `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
-}
-
 function dateToHm(d: Date): string {
 	return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
@@ -117,10 +111,26 @@ function dayStartOf(d: Date): Date {
 	return r;
 }
 
+/**
+ * 时间片起止顺序的数值判定（保存前校验 / 前缀拼接共用）。
+ * - 用 hmToMin 转分钟比较，避免 "9:00"/"10:00" 这类非补零字符串的字典序误判；
+ * - 终点 "00:00" 视为次日零点（1440），支持 21:00 → 00:00 跨午夜；"24:00" 经 hmToMin 已是 1440；
+ * - 起点 0 不特殊化；任一端非法（hmToMin 返回 null）一律判为不合法，维持原有拒绝行为。
+ */
+export function isSlotOrderValid(start: string, end: string): boolean {
+	const startMin = hmToMin(start);
+	if (startMin === null) return false;
+	// "24:00" 是合法终点（=1440）；即便 hmToMin 的上界校验在别处收紧也保留它
+	let endMin = end === '24:00' ? 1440 : hmToMin(end);
+	if (endMin === null) return false;
+	if (endMin === 0) endMin = 1440; // "00:00" = 次日零点
+	return endMin > startMin;
+}
+
 /** 时间片前缀文本："09:00 - 10:30" / "09:00" / 无时刻 → null */
-function slotPrefixOf(start: string, end: string): string | null {
+export function slotPrefixOf(start: string, end: string): string | null {
 	if (!start) return null;
-	return end && end > start ? `${start} - ${end}` : start;
+	return end && isSlotOrderValid(start, end) ? `${start} - ${end}` : start;
 }
 
 /**
@@ -160,11 +170,11 @@ export function TaskFormModal({
 	const initialSlot = useMemo(() => {
 		if (mode === 'edit' && task) {
 			if (task.plannerTime) {
-				return { start: minutesToHm(task.plannerTime.startMin), end: task.plannerTime.endMin !== undefined ? minutesToHm(task.plannerTime.endMin) : '', day: null as Date | null, legacy: false };
+				return { start: minToHm(task.plannerTime.startMin), end: task.plannerTime.endMin !== undefined ? minToHm(task.plannerTime.endMin) : '', day: null as Date | null, legacy: false };
 			}
 			const legacy = legacyDaySlot(task, 'startDate', 'dueDate');
 			if (legacy) {
-				return { start: minutesToHm(legacy.startMin), end: legacy.endMin !== undefined ? minutesToHm(legacy.endMin) : '', day: legacy.day, legacy: true };
+				return { start: minToHm(legacy.startMin), end: legacy.endMin !== undefined ? minToHm(legacy.endMin) : '', day: legacy.day, legacy: true };
 			}
 			if (task.scheduledDate && task.datePrecision?.scheduledDate === 'time') {
 				return { start: dateToHm(task.scheduledDate), end: '', day: dayStartOf(task.scheduledDate), legacy: true };
@@ -172,7 +182,7 @@ export function TaskFormModal({
 			return { start: '', end: '', day: null as Date | null, legacy: false };
 		}
 		if (targetRange) return { start: dateToHm(targetRange.start), end: dateToHm(targetRange.end), day: dayStartOf(targetRange.start), legacy: false };
-		if (targetHour !== undefined) return { start: minutesToHm(targetHour * 60 + (targetMinute ?? 0)), end: '', day: dayStartOf(targetDate || new Date()), legacy: false };
+		if (targetHour !== undefined) return { start: minToHm(targetHour * 60 + (targetMinute ?? 0)), end: '', day: dayStartOf(targetDate || new Date()), legacy: false };
 		return { start: '', end: '', day: null as Date | null, legacy: false };
 	}, [mode, task, targetDate, targetHour, targetMinute, targetRange]);
 
@@ -338,7 +348,7 @@ export function TaskFormModal({
 				new Notice(i18n.t('modals.createTask.errorStartDueOrder'));
 				return;
 			}
-			if (kind === 'day' && slotStart && slotEnd && slotEnd <= slotStart) {
+			if (kind === 'day' && slotStart && slotEnd && !isSlotOrderValid(slotStart, slotEnd)) {
 				new Notice(i18n.t('modals.task.errorSlotOrder'));
 				return;
 			}
@@ -401,7 +411,7 @@ export function TaskFormModal({
 			new Notice(i18n.t('modals.editTask.errorStartDueOrder'));
 			return;
 		}
-		if (kind === 'day' && slotStart && slotEnd && slotEnd <= slotStart) {
+		if (kind === 'day' && slotStart && slotEnd && !isSlotOrderValid(slotStart, slotEnd)) {
 			new Notice(i18n.t('modals.task.errorSlotOrder'));
 			return;
 		}
@@ -472,7 +482,9 @@ export function TaskFormModal({
 			new Notice(i18n.t('modals.editTask.success'));
 		} catch (err) {
 			Logger.error('editTask', 'Failed to update task', err);
-			new Notice(i18n.t('modals.editTask.error'));
+			// modals.editTask.error 无 {{error}} 占位符：把底层错误（如陈旧任务 line-drift 写回失败）直接附在文案后
+			const detail = (err as Error | null)?.message;
+			new Notice(detail ? `${i18n.t('modals.editTask.error')}: ${detail}` : i18n.t('modals.editTask.error'));
 		}
 	};
 

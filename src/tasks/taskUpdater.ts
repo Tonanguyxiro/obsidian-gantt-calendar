@@ -1,4 +1,4 @@
-import { App, TFile } from 'obsidian';
+import { App, MarkdownView, TFile } from 'obsidian';
 import { GCTask } from '../types';
 import { serializeTask, TaskUpdates } from './taskSerializer';
 import { parseSingleTaskLine } from './taskParser/main';
@@ -113,6 +113,8 @@ export function determineTaskFormat(
 	taskLine: string,
 	enabledFormats: string[]
 ): 'dataview' | 'tasks' {
+	// 用户关闭全部格式时兜底为两种都支持，避免把 dataview 行按 tasks 重建而丢字段
+	const formats = enabledFormats.length > 0 ? enabledFormats : ['tasks', 'dataview'];
 	// 优先使用任务本身的格式
 	let formatToUse: 'dataview' | 'tasks' | undefined = task.format;
 	if (!formatToUse) {
@@ -120,10 +122,10 @@ export function determineTaskFormat(
 			formatToUse = 'dataview';
 		} else if (/([➕🛫⏳📅❌✅])\s*\d{4}-\d{2}-\d{2}/u.test(taskLine)) {
 			formatToUse = 'tasks';
-		} else if (enabledFormats.includes('dataview') && enabledFormats.includes('tasks')) {
+		} else if (formats.includes('dataview') && formats.includes('tasks')) {
 			// 两者都支持时：如果行中已有方括号则 dataview，否则 tasks
 			formatToUse = taskLine.includes('[') ? 'dataview' : 'tasks';
-		} else if (enabledFormats.includes('dataview')) {
+		} else if (formats.includes('dataview')) {
 			formatToUse = 'dataview';
 		} else {
 			formatToUse = 'tasks';
@@ -218,6 +220,90 @@ export async function updateTaskDateField(
 	await updateTaskProperties(app, task, updates, enabledFormats);
 }
 
+// ==================== 写回后光标 / 滚动位置保持 ====================
+// vault.modify 会让当前 Markdown 编辑器重排文本，光标与滚动位置可能跳动。
+// 全程可选链 + duck typing，Jest 的 mock App 没有 workspace 时直接跳过。
+
+interface EditorSnapshotTarget {
+	getCursor: () => { line: number; ch: number };
+	setCursor: (pos: { line: number; ch: number }) => void;
+	getScrollInfo?: () => { top: number; left: number };
+	scrollTo?: (x: number, y: number) => void;
+	lineCount?: () => number;
+}
+
+interface MarkdownViewLike {
+	file?: { path?: string } | null;
+	editor?: EditorSnapshotTarget | null;
+}
+
+interface EditorSnapshot {
+	editor: EditorSnapshotTarget;
+	filePath: string;
+	cursor: { line: number; ch: number };
+	scroll: { top: number; left: number } | null;
+}
+
+function activeMarkdownView(app: App): MarkdownViewLike | null {
+	const workspace = (app as App & {
+		workspace?: {
+			// Obsidian 真实 API：按类型取活动视图（本插件其它地方也用这个）
+			getActiveViewOfType?: <T>(type: new (...args: never[]) => T) => T | null;
+			// 兼容只模拟 getActiveView 的测试 App
+			getActiveView?: () => unknown;
+		};
+	}).workspace;
+	const view = (
+		workspace?.getActiveViewOfType?.(MarkdownView)
+		?? workspace?.getActiveView?.()
+	) as MarkdownViewLike | null | undefined;
+	if (!view?.file || !view.editor) return null;
+	if (typeof view.editor.getCursor !== 'function' || typeof view.editor.setCursor !== 'function') return null;
+	return view;
+}
+
+function snapshotEditorView(app: App, filePath: string): EditorSnapshot | null {
+	const view = activeMarkdownView(app);
+	if (!view || view.file?.path !== filePath) return null;
+	const editor = view.editor!;
+	try {
+		return {
+			editor,
+			filePath,
+			cursor: editor.getCursor(),
+			scroll: typeof editor.getScrollInfo === 'function' ? editor.getScrollInfo() : null,
+		};
+	} catch {
+		return null;
+	}
+}
+
+function restoreEditorView(app: App, snapshot: EditorSnapshot): void {
+	const restore = () => {
+		try {
+			const view = activeMarkdownView(app);
+			// 编辑器已关闭 / 被替换 / 切到别的文件 → 静默跳过
+			if (!view || view.editor !== snapshot.editor || view.file?.path !== snapshot.filePath) return;
+			const editor = snapshot.editor;
+			const lineCount = typeof editor.lineCount === 'function' ? editor.lineCount() : snapshot.cursor.line + 1;
+			const line = Math.max(0, Math.min(snapshot.cursor.line, Math.max(0, lineCount - 1)));
+			editor.setCursor({ line, ch: snapshot.cursor.ch });
+			if (snapshot.scroll && typeof editor.scrollTo === 'function') {
+				editor.scrollTo(snapshot.scroll.left, snapshot.scroll.top);
+			}
+		} catch {
+			// 编辑器在写回过程中被销毁，忽略
+		}
+	};
+	// 真机用 setTimeout(0)：等 vault.modify 触发的编辑器刷新完成后再恢复；
+	// queueMicrotask 太快，会被随后的刷新覆盖。Jest/node 环境回落到全局 setTimeout。
+	if (typeof window !== 'undefined' && typeof window.setTimeout === 'function') {
+		window.setTimeout(restore, 0);
+	} else {
+		setTimeout(restore, 0);
+	}
+}
+
 /**
  * 批量更新任务属性（优先级、完成状态、各日期字段）
  * 未提供的字段不做更改；传入 null 的日期字段表示清除该字段。
@@ -257,8 +343,8 @@ export async function updateTaskProperties(
 			const found = lines.findIndex(line => lineMatchesTask(line, task, globalFilter));
 			if (found === -1) {
 				throw new Error(
-					`Task not found in file (line drift): ${task.filePath}:${task.lineNumber} — ` +
-					`"${task.description || task.content}". File changed externally; task cache will refresh.`
+					`Task not found in file ${task.filePath}:${task.lineNumber}. ` +
+					`File changed externally; task cache will refresh.`
 				);
 			}
 			taskLineIndex = found;
@@ -309,9 +395,13 @@ export async function updateTaskProperties(
 		lines[taskLineIndex] = finalTaskLine;
 		const newContent = lines.join('\n');
 
+		// 写回前快照当前编辑器位置（仅当活动编辑器正是目标文件时）
+		const editorSnapshot = snapshotEditorView(app, task.filePath);
+
 		const writeStart = performance.now();
 		await app.vault.modify(file, newContent);
 		const writeElapsed = performance.now() - writeStart;
+		if (editorSnapshot) restoreEditorView(app, editorSnapshot);
 
 		const totalElapsed = performance.now() - startTime;
 		Logger.debug('taskUpdater', `Task updated in ${totalElapsed.toFixed(2)}ms (write: ${writeElapsed.toFixed(2)}ms)`);

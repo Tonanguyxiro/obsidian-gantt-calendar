@@ -10,6 +10,18 @@
 
 ## ✅ 已完成（按日期倒序）
 
+### 2026-11-17（1.8.6）
+
+- [x] 发布 1.8.6（Task 编辑器 / 右键打开场景修复的正式版）：`package.json`、`manifest.json`、`versions.json` 已 bump；`npm run build`、653 项单测、`npx eslint .`（0 errors）通过；两个测试库均加载 1.8.6 且 `dev:errors` 无错误。
+- [ ] GitHub Release / tag / SHA-256 核对：待推送完成后补记。
+
+### 2026-11-16（Task 编辑器 / 右键打开场景 "Fix all"）
+
+- [x] 用户反馈「某些行打不开」→ 排查 + corner case 矩阵 + 右键场景头脑风暴 + 全量修复（用户明确 "Fix all"）。
+  - 确诊：示例行 21:00–24:00 **能打开**，但本地 `minutesToHm(1440)` 把 24:00 显示成 00:00，保存校验拒绝跨午夜；空行/普通行走创建弹窗属既有设计；「有时打不开、刷新又好了」首因是 `modalHost` 宿主异步注册前 `openReactModal` 直接 throw 被 React 事件吞掉。
+  - 修复（文件）：`TaskFormModal.tsx`（改用 `minToHm`、数值比较 `isSlotOrderValid`、catch 附错误详情）；`timeOfDay.ts`（`hmToMin` 严格校验 + 12h、`formatHm` 24:00 固定显示）；`RegularExpressions.ts`（时间前缀支持 AM/PM + `hmValue`）；`taskParser/utils.ts`、`taskParser/main.ts`、`taskUpdater.ts`（空 enabledFormats 兜底避免 `[due::]` 丢失、写回后恢复光标/滚动、line-drift 文案可读、真实 Obsidian `getActiveViewOfType(MarkdownView)` 路径）；`modalHost.ts`（pending 队列 + 惰性 init + 幂等关闭）；`Modal.tsx`（300ms 可见性兜底、卸载清遮罩、焦点归还校验 isConnected）。
+  - 验证：`npm run build` 通过；`npx jest` 53 suites / 653 tests 全过；`npx eslint .` 0 errors；两个测试库部署重载后 `dev:errors` 无错误。真机：24:00 行显示 `21:00–24:00 · 3 h` 且 Save 成功；9:00–10:00 非补零、`1:00 PM - 2:00 PM` 12h、空 enabledFormats 下 `[due::]` 保留均验证；保存后光标 line 55 / scroll 543 原样恢复；空行仍打开 Create New Task、标题行正确拒绝；截图确认弹窗可见（CLI 无头 rAF 假象由兜底消除）；`check-modal-overflow` 0 issues、card layout 无 mixed/duplicate。临时探针 `tests/zz-probe.test.ts` 与三个 scratch note 已清理。未 commit/push。
+
 ### 2026-11-13（1.8.5）
 
 - [x] 发布 GitHub Release（标签 `1.8.5`，提交 `8ca7dc6`），已核对三个安装文件的 SHA-256。

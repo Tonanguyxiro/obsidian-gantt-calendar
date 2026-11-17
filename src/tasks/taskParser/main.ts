@@ -35,6 +35,15 @@ import { extractTaskDescription, extractTags, extractTicktick, findMetadataValue
 // ==================== 主解析函数 ====================
 
 /**
+ * 用户把所有任务格式都关掉时（enabledFormats = []），解析入口兜底为两种都识别。
+ * 否则 detectFormat 返回 undefined，属性不解析，写回时 [due:: …] 等字段会被静默删除。
+ * 显式只启用一种格式时原样返回，行为不变。
+ */
+function effectiveFormats(enabledFormats: TaskFormatType[]): TaskFormatType[] {
+    return enabledFormats.length > 0 ? enabledFormats : ['tasks', 'dataview'];
+}
+
+/**
  * 从列表项缓存中解析任务
  *
  * 实现完整的四步解析流程：
@@ -69,6 +78,7 @@ export function parseTasksFromListItems(
     globalTaskFilter?: string
 ): GCTask[] {
     const tasks: GCTask[] = [];
+    const formats = effectiveFormats(enabledFormats);
 
     for (const item of listItems) {
         const lineNumber = item.position.start.line;
@@ -92,7 +102,7 @@ export function parseTasksFromListItems(
         const { completed, cancelled, status } = parseCheckboxStatus(checkboxStatus);
 
         // ==================== 第三步：判断格式 ====================
-        const detectedFormat = detectFormat(contentWithoutFilter, enabledFormats);
+        const detectedFormat = detectFormat(contentWithoutFilter, formats);
         // 混合格式默认使用 tasks 格式进行解析
         const format = detectedFormat === 'mixed' ? 'tasks' : detectedFormat;
 
@@ -128,7 +138,7 @@ export function parseTasksFromListItems(
         }
 
         // 如果检测到有效格式，解析任务属性
-        if (format && enabledFormats.includes(format)) {
+        if (format && formats.includes(format)) {
             const { priority, dates, datePrecisions, hasCancelledDate, repeat } = parseTaskAttributes(
                 contentWithoutFilter,
                 format
@@ -287,6 +297,7 @@ export function parseSingleTaskLine(
     enabledFormats: TaskFormatType[] = ['tasks', 'dataview'],
     globalTaskFilter?: string
 ): GCTask | null {
+    const formats = effectiveFormats(enabledFormats);
     const taskMatch = parseTaskLine(line);
     if (!taskMatch) return null;
 
@@ -299,7 +310,7 @@ export function parseSingleTaskLine(
     const contentWithoutFilter = removeGlobalFilter(rawContent, globalTaskFilter);
     const { completed, cancelled, status } = parseCheckboxStatus(checkboxStatus);
 
-    const detectedFormat = detectFormat(contentWithoutFilter, enabledFormats);
+    const detectedFormat = detectFormat(contentWithoutFilter, formats);
     const format = detectedFormat === 'mixed' ? 'tasks' : detectedFormat;
 
     // 统一提取所有 %%[key::value]%% 内联元数据
@@ -330,7 +341,7 @@ export function parseSingleTaskLine(
         task.plannerTime = plannerTime;
     }
 
-    if (format && enabledFormats.includes(format)) {
+    if (format && formats.includes(format)) {
         const { priority, dates, datePrecisions, hasCancelledDate, repeat } = parseTaskAttributes(
             contentWithoutFilter,
             format

@@ -177,6 +177,6 @@ export const FileTaskCard = memo(function FileTaskCard({ task }: { task: GCTask 
 /** 日历视图条目：file-based task 占位任务渲染为文件卡片，ICS 事件为只读事件卡片，其余为普通任务卡片 */
 export function CalendarItemCard(props: ReactTaskCardProps): JSX.Element {
 	if (props.task.fileTask) return <FileTaskCard task={props.task} />;
-	if (props.task.icsEvent) return <IcsEventCard task={props.task} />;
+	if (props.task.icsEvent) return <IcsEventCard task={props.task} timeLabel={props.timeLabel} />;
 	return <TaskCard {...props} />;
 }

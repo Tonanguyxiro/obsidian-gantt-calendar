@@ -191,12 +191,10 @@
 	font-weight: 700;
 }
 
-.gc-week-view__day-col--today {
-	background-color: rgba(255, 107, 107, 0.08);
-}
-
+/* 今天列：淡强调色，不与橙色任务块抢色 */
+.gc-week-view__day-col--today,
 .gc-week-view__allday-cell--today {
-	background-color: rgba(255, 107, 107, 0.08);
+	background-color: color-mix(in srgb, var(--interactive-accent) 5%, transparent);
 }
 
 /* 7.6 Text Decoration (已完成任务) */

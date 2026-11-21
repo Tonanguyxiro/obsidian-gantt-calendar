@@ -7,7 +7,7 @@ import { DayViewClasses, EmbeddedEditorClasses, withModifiers } from '../../util
 import { DayViewConfig } from '../../components/TaskCard';
 import { usePlugin, useApp } from '../pluginContext';
 import { useCalendarStore, selectViewFilter } from '../store/calendarStore';
-import { isPhoneNow, useIsNarrow } from '../utils/platform';
+import { isPhoneNow, useElementNarrow, useIsNarrow } from '../utils/platform';
 import { applyStatusFilter, applyTagFilter, applySort } from '../utils/taskFilters';
 import { CalendarItemCard, FileTaskLayerProvider } from '../components/FileTaskCard';
 import { useFileTaskLayer } from '../utils/useFileTaskLayer';
@@ -46,7 +46,9 @@ export function DayView(): JSX.Element {
 
 	const enableDailyNote = plugin.settings.enableDailyNote !== false;
 	// 手机端与桌面窄窗口都强制上下分屏：这是空间适配，左右分屏在两侧各 ~160px 时不可用
-	const isNarrow = useIsNarrow();
+	const viewRef = useRef<HTMLDivElement>(null);
+	const isPaneNarrow = useElementNarrow(viewRef, 520);
+	const isNarrow = useIsNarrow() || isPaneNarrow;
 	const layout = isPhoneNow() || isNarrow ? 'vertical' : (plugin.settings.dayViewLayout || 'horizontal');
 	const dateField = plugin.settings.dateFilterField || 'dueDate';
 	const startField = plugin.settings.ganttStartField || 'startDate';
@@ -253,7 +255,7 @@ export function DayView(): JSX.Element {
 	// ===== 仅任务模式（不显示 Daily Note） =====
 	if (!enableDailyNote) {
 		return (
-			<div className="gc-view gc-view--day">
+			<div ref={viewRef} className="gc-view gc-view--day">
 				<div className={withModifiers(DayViewClasses.block, DayViewClasses.modifiers.tasksOnly)}>
 					<h3 className={DayViewClasses.elements.title}>{i18n.t('views.dayView.todayTasks')}</h3>
 					{renderTaskList()}
@@ -264,7 +266,7 @@ export function DayView(): JSX.Element {
 
 	// ===== 分屏布局（水平 / 垂直） =====
 	return (
-		<div className="gc-view gc-view--day">
+		<div ref={viewRef} className="gc-view gc-view--day">
 			<div
 				className={layout === 'horizontal' ? DayViewClasses.modifiers.horizontal : DayViewClasses.modifiers.vertical}
 			>

@@ -16,6 +16,8 @@ import {
 	getEffectiveDailyNoteSource,
 	getNotebookNavigatorDailyNoteSettings,
 	getNotebookNavigatorDailyNotePath,
+	getWeeklyNoteConfig,
+	getWeeklyNotePath,
 } from './dailyNoteSettingsBridge';
 import { getDailyNote as getDailyNoteFromIndex, createDailyNote } from 'obsidian-daily-notes-interface';
 import { showConfirmDialog } from '../ui/modals/ConfirmDialog';
@@ -109,31 +111,33 @@ export interface CreateTaskData {
  * @param taskData 任务数据
  * @param settings 插件设置
  * @param dailyNoteIndex 日记索引缓存（Obsidian 模式时使用）
+ * @param date 写入哪一天的日记（缺省今天）
  * @returns 任务写入的目标文件路径；用户取消或写入失败时返回 null
  */
 export async function createTaskInDailyNote(
 	app: App,
 	taskData: CreateTaskData,
 	settings: GanttCalendarSettings,
-	dailyNoteIndex?: DailyNoteIndex
+	dailyNoteIndex?: DailyNoteIndex,
+	date: Date = new Date()
 ): Promise<string | null> {
 	const source = getEffectiveDailyNoteSource(app, settings);
 	if (source === 'notebook-navigator') {
 		// Notebook Navigator 模式：根文件夹 + Moment 路径模式定位，缺失时按其模板创建
 		const nn = getNotebookNavigatorDailyNoteSettings(app)!;
-		const filePath = getNotebookNavigatorDailyNotePath(nn, new Date());
+		const filePath = getNotebookNavigatorDailyNotePath(nn, date);
 		const existing = app.vault.getFileByPath(filePath);
 		if (existing) {
 			await insertTaskToFile(app, existing, taskData, settings.newTaskHeading);
 			new Notice(i18n.t('dailyNote.taskAdded'));
 			return existing.path;
 		}
-		return await handleMissingDailyNote(app, filePath, taskData, settings, nn.template);
+		return await handleMissingDailyNote(app, filePath, taskData, settings, nn.template, date);
 	}
 
 	if (source === 'obsidian' && dailyNoteIndex) {
 		// Obsidian 模式：使用 obsidian-daily-notes-interface
-		const momentDate = window.moment();
+		const momentDate = window.moment(date);
 		const dailyNotes = dailyNoteIndex.getIndex();
 		let file = getDailyNoteFromIndex(momentDate, dailyNotes);
 
@@ -163,7 +167,7 @@ export async function createTaskInDailyNote(
 	const { dailyNotePath, dailyNoteNameFormat, newTaskHeading } = settings;
 
 	// 修复嵌套文件夹格式 bug：提取纯文件名用于搜索
-	const fullFormatResult = formatDate(new Date(), dailyNoteNameFormat);
+	const fullFormatResult = formatDate(date, dailyNoteNameFormat);
 	const fileName = fullFormatResult.split('/').pop()! + '.md';
 
 	const searchResult = findDailyNoteRecursive(app, dailyNotePath, fileName);
@@ -174,8 +178,32 @@ export async function createTaskInDailyNote(
 	} else {
 		// 创建新文件时使用完整格式路径（支持嵌套文件夹）
 		const filePath = `${dailyNotePath}/${fullFormatResult}.md`;
-		return await handleMissingDailyNote(app, filePath, taskData, settings, settings.dailyNoteTemplatePath);
+		return await handleMissingDailyNote(app, filePath, taskData, settings, settings.dailyNoteTemplatePath, date);
 	}
+}
+
+/**
+ * 在某日所在周的周记中创建任务（Notebook Navigator / Periodic Notes 的周记设置）；
+ * 周记不存在时确认后按周记模板创建。
+ *
+ * @returns 任务写入的目标文件路径；无周记配置、用户取消或写入失败时返回 null
+ */
+export async function createTaskInWeeklyNote(
+	app: App,
+	taskData: CreateTaskData,
+	settings: GanttCalendarSettings,
+	date: Date = new Date()
+): Promise<string | null> {
+	const config = getWeeklyNoteConfig(app, settings);
+	if (!config) return null;
+	const filePath = getWeeklyNotePath(config, date);
+	const existing = app.vault.getFileByPath(filePath);
+	if (existing) {
+		await insertTaskToFile(app, existing, taskData, settings.newTaskHeading);
+		new Notice(i18n.t('modals.createTask.addedToFile', { name: existing.basename }));
+		return existing.path;
+	}
+	return await handleMissingDailyNote(app, filePath, taskData, settings, config.template, date, 'weekly');
 }
 
 /**
@@ -187,13 +215,21 @@ async function handleMissingDailyNote(
 	filePath: string,
 	taskData: CreateTaskData,
 	settings: GanttCalendarSettings,
-	templatePath: string
+	templatePath: string,
+	date: Date,
+	period: 'daily' | 'weekly' = 'daily'
 ): Promise<string | null> {
+	const name = filePath.split('/').pop()!.slice(0, -'.md'.length);
 	// 弹出确认对话框
-	const confirmed = await showConfirmDialog(
-		app, i18n.t('dailyNote.missingTitle'), i18n.t('dailyNote.missingMessage'),
-		{ confirmText: i18n.t('dailyNote.create'), cancelText: i18n.t('common.cancel') }
-	);
+	const confirmed = period === 'weekly'
+		? await showConfirmDialog(
+			app, i18n.t('dailyNote.weeklyMissingTitle'), i18n.t('dailyNote.weeklyMissingMessage', { name }),
+			{ confirmText: i18n.t('dailyNote.create'), cancelText: i18n.t('common.cancel') }
+		)
+		: await showConfirmDialog(
+			app, i18n.t('dailyNote.missingTitle'), i18n.t('dailyNote.missingMessage'),
+			{ confirmText: i18n.t('dailyNote.create'), cancelText: i18n.t('common.cancel') }
+		);
 
 	if (!confirmed) {
 		new Notice(i18n.t('dailyNote.createCancelled'));
@@ -201,13 +237,15 @@ async function handleMissingDailyNote(
 	}
 
 	try {
-		await createDailyNoteFromTemplate(app, filePath, templatePath);
+		await createDailyNoteFromTemplate(app, filePath, templatePath, date);
 
 		// 创建后插入任务
 		const abstractFile = app.vault.getAbstractFileByPath(filePath);
 		if (abstractFile instanceof TFile) {
 			await insertTaskToFile(app, abstractFile, taskData, settings.newTaskHeading);
-			new Notice(i18n.t('dailyNote.createdAndAdded'));
+			new Notice(period === 'weekly'
+				? i18n.t('modals.createTask.addedToFile', { name })
+				: i18n.t('dailyNote.createdAndAdded'));
 			return filePath;
 		}
 		return null;
@@ -224,7 +262,8 @@ async function handleMissingDailyNote(
 async function createDailyNoteFromTemplate(
 	app: App,
 	filePath: string,
-	templatePath: string
+	templatePath: string,
+	date: Date
 ): Promise<void> {
 	// 确保文件夹存在
 	const folderPath = filePath.split('/').slice(0, -1).join('/');
@@ -241,7 +280,7 @@ async function createDailyNoteFromTemplate(
 		const templateFile = app.vault.getAbstractFileByPath(templatePath);
 		if (templateFile instanceof TFile) {
 			content = await app.vault.read(templateFile);
-			content = replaceTemplateVariables(content, filePath);
+			content = replaceTemplateVariables(content, filePath, date);
 		} else {
 			throw new Error(i18n.t('dailyNote.templateNotFound', { path: templatePath }));
 		}
@@ -254,9 +293,10 @@ async function createDailyNoteFromTemplate(
  * 替换模板变量
  * 支持 {{date}}、{{time}}、{{title}}、{{date:FORMAT}}、{{yesterday}}、{{tomorrow}}
  */
-function replaceTemplateVariables(content: string, filePath: string): string {
+function replaceTemplateVariables(content: string, filePath: string, noteDate: Date): string {
 	const moment = window.moment;
-	const date = moment();
+	// 日期类变量以笔记所属日期为准（给其他日子 / 周建笔记时不应写成今天）
+	const date = moment(noteDate);
 	const filename = filePath.split('/').pop()!.replace(/\.md$/, '');
 
 	// 先处理带格式和偏移的复杂模式 {{date:FORMAT}}、{{date+1d:FORMAT}}
@@ -331,8 +371,10 @@ export async function createTaskInFile(
 	filePath: string,
 	taskData: CreateTaskData
 ): Promise<string | null> {
-	const file = app.vault.getFileByPath(filePath);
-	if (!file) return null;
+	if (!filePath) return null;
+	// 手输时允许省略 .md 或只写笔记名（按链接解析）
+	const file = app.vault.getFileByPath(filePath) ?? app.metadataCache.getFirstLinkpathDest(filePath, '');
+	if (!file || file.extension !== 'md') return null;
 	const lines = (await app.vault.read(file)).split('\n');
 	const taskLine = serializeNewTask(taskData, app);
 

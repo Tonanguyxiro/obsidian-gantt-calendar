@@ -147,12 +147,12 @@
 
 /* 小屏幕适配 */
 @container gc-app (max-width: 768px) {
-	.gc-tag {
+	.gc-view--year .gc-tag {
 		font-size: 10px;
 		padding: 1px 6px;
 	}
 
-	.gc-task-card__tags {
+	.gc-view--year .gc-task-card__tags {
 		gap: 3px;
 	}
 }

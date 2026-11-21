@@ -4,6 +4,8 @@ export class FileSuggest extends AbstractInputSuggest<TFile> {
 	constructor(
 		app: App,
 		public inputEl: HTMLInputElement,
+		/** 选中后的回调：React 受控输入框靠它同步状态（原生赋值 + input 事件不会触发 React onChange） */
+		private onPick?: (file: TFile) => void,
 	) {
 		super(app, inputEl);
 	}
@@ -33,6 +35,7 @@ export class FileSuggest extends AbstractInputSuggest<TFile> {
 	selectSuggestion(file: TFile): void {
 		this.setValue(file.path);
 		this.inputEl.trigger('input');
+		this.onPick?.(file);
 		this.close();
 	}
 }

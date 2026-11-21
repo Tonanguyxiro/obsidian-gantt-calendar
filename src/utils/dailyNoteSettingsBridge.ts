@@ -59,6 +59,8 @@ interface NotebookNavigatorRawSettings {
 	calendarIntegrationMode?: string;
 	calendarCustomFilePattern?: string;
 	calendarCustomFileTemplate?: string | null;
+	calendarCustomWeekPattern?: string;
+	calendarCustomWeekTemplate?: string | null;
 	vaultProfile?: string;
 	vaultProfiles?: Array<{ id?: string; periodicNotesFolder?: string }>;
 }
@@ -110,6 +112,75 @@ export function getEffectiveDailyNoteSource(app: App, settings: GanttCalendarSet
 	const nn = getNotebookNavigatorDailyNoteSettings(app);
 	if (!nn) return 'manual';
 	return nn.integrationMode === 'daily-notes' ? 'obsidian' : 'notebook-navigator';
+}
+
+// ========== 周记 ==========
+
+/** Notebook Navigator 默认周记路径模式（与其内置默认值一致） */
+const NN_DEFAULT_WEEK_PATTERN = 'gggg/[W]ww';
+/** Periodic Notes 默认周记文件名格式 */
+const PERIODIC_DEFAULT_WEEK_FORMAT = 'gggg-[W]ww';
+
+/** 周记配置：路径 = folder + moment(date).format(pattern) + '.md' */
+export interface WeeklyNoteConfig {
+	folder: string;
+	/** Moment.js 路径模式，可含子文件夹 */
+	pattern: string;
+	template: string;
+}
+
+interface PeriodicNotesRawSettings {
+	weekly?: { enabled?: boolean; folder?: string; format?: string; template?: string };
+}
+
+/**
+ * 读取周记配置，按日记来源取：
+ * - Notebook Navigator：其日历的周记路径模式 + 周记模板
+ * - Obsidian（核心日记 / Periodic Notes）：Periodic Notes 插件启用了 weekly 时取其设置
+ * - 手动 / 无周记来源：返回 null（不提供「周记」创建位置）
+ */
+export function getWeeklyNoteConfig(app: App, settings: GanttCalendarSettings): WeeklyNoteConfig | null {
+	const source = getEffectiveDailyNoteSource(app, settings);
+	const plugins = (app as App & {
+		plugins?: { getPlugin?: (id: string) => { settings?: unknown } | null };
+	}).plugins;
+	if (source === 'notebook-navigator') {
+		const raw = plugins?.getPlugin?.(NOTEBOOK_NAVIGATOR_PLUGIN_ID)?.settings as NotebookNavigatorRawSettings | undefined;
+		const nn = getNotebookNavigatorDailyNoteSettings(app);
+		if (!raw || !nn) return null;
+		return {
+			folder: nn.rootFolder,
+			pattern: (raw.calendarCustomWeekPattern || NN_DEFAULT_WEEK_PATTERN).trim(),
+			template: raw.calendarCustomWeekTemplate || '',
+		};
+	}
+	if (source === 'obsidian') {
+		const weekly = (plugins?.getPlugin?.('periodic-notes')?.settings as PeriodicNotesRawSettings | undefined)?.weekly;
+		if (!weekly?.enabled) return null;
+		return {
+			folder: normalizeFolder(weekly.folder),
+			pattern: (weekly.format || PERIODIC_DEFAULT_WEEK_FORMAT).trim(),
+			template: weekly.template ? normalizePath(weekly.template.endsWith('.md') ? weekly.template : `${weekly.template}.md`) : '',
+		};
+	}
+	return null;
+}
+
+/** 某日所在周的周记文件路径 */
+export function getWeeklyNotePath(config: WeeklyNoteConfig, date: Date): string {
+	const relative = window.moment(date).format(config.pattern);
+	return normalizePath(`${config.folder ? `${config.folder}/` : ''}${relative}.md`);
+}
+
+/** 某日的日记文件路径（用于显示与定位；Obsidian 模式按其格式推算，实际查找仍走索引） */
+export function getDailyNotePathForDate(app: App, settings: GanttCalendarSettings, date: Date): string {
+	const source = getEffectiveDailyNoteSource(app, settings);
+	if (source === 'notebook-navigator') {
+		return getNotebookNavigatorDailyNotePath(getNotebookNavigatorDailyNoteSettings(app)!, date);
+	}
+	const resolved = getResolvedDailyNoteSettings(app, settings);
+	const relative = source === 'obsidian' ? window.moment(date).format(resolved.momentFormat) : formatDate(date, resolved.format);
+	return normalizePath(`${resolved.folder ? `${resolved.folder}/` : ''}${relative}.md`);
 }
 
 // ========== 解析配置 ==========

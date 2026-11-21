@@ -6,7 +6,7 @@ import { formatDate } from '../../dateUtils/dateUtilsIndex';
 /**
  * ICS 订阅事件卡片：只读（无勾选、拖动、右键菜单、编辑），颜色取自订阅设置
  */
-export const IcsEventCard = memo(function IcsEventCard({ task }: { task: GCTask }): JSX.Element | null {
+export const IcsEventCard = memo(function IcsEventCard({ task, timeLabel }: { task: GCTask; timeLabel?: string }): JSX.Element | null {
 	const info = task.icsEvent;
 	if (!info) return null;
 
@@ -25,6 +25,7 @@ export const IcsEventCard = memo(function IcsEventCard({ task }: { task: GCTask 
 			data-ics-event={task.filePath}
 		>
 			<span className={IcsEventClasses.elements.title}>{task.description}</span>
+			{timeLabel ? <span className={IcsEventClasses.elements.blockTime}>{timeLabel}</span> : null}
 			{info.location ? <span className={IcsEventClasses.elements.location}>{info.location}</span> : null}
 		</div>
 	);

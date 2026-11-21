@@ -1048,7 +1048,8 @@
         "impliedBy": "已由选中的子标签包含——点击浏览其子标签"
       },
       "createIn": "创建位置",
-      "createInDaily": "当日日记",
+      "createInDaily": "Daily Note（{{name}}）",
+      "createInWeekly": "Weekly Note（{{name}}）",
       "createInOther": "其他笔记…",
       "createInOtherPlaceholder": "搜索笔记…",
       "addedToFile": "任务已添加到 {{name}}",
@@ -1461,7 +1462,9 @@
     "createdAndAdded": "已创建 Daily Note 并添加任务",
     "createFailed": "创建 Daily Note 失败: {{error}}",
     "missingTitle": "Daily Note 不存在",
-    "missingMessage": "当天的 Daily Note 尚未创建，是否现在创建？",
+    "missingMessage": "该日的 Daily Note 尚未创建，是否现在创建？",
+    "weeklyMissingTitle": "Weekly Note 不存在",
+    "weeklyMissingMessage": "周记「{{name}}」尚未创建，是否现在创建？",
     "create": "创建",
     "templateNotFound": "模板文件未找到: {{path}}"
   },

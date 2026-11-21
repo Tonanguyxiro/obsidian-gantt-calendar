@@ -4,7 +4,8 @@ import { Notice } from 'obsidian';
 import type { App } from 'obsidian';
 import type { GCTask, IPluginContext } from '../../types';
 import type { CreateTaskData } from '../../utils/dailyNoteHelper';
-import { createTaskInDailyNote, createTaskInFile, createTaskAtLine, type CreateAtLine } from '../../utils/dailyNoteHelper';
+import { createTaskInDailyNote, createTaskInWeeklyNote, createTaskInFile, createTaskAtLine, type CreateAtLine } from '../../utils/dailyNoteHelper';
+import { getDailyNotePathForDate, getWeeklyNoteConfig, getWeeklyNotePath } from '../../utils/dailyNoteSettingsBridge';
 import type { TaskUpdates } from '../../tasks/taskSerializer';
 import { updateTaskProperties } from '../../tasks/taskUpdater';
 import { Logger } from '../../utils/logger';
@@ -216,7 +217,7 @@ export function TaskFormModal({
 	const datePrecision = useMemo<Record<string, 'day' | 'time'>>(() => ({
 		createdDate: 'day', startDate: 'day', scheduledDate: 'day', dueDate: 'day', completionDate: 'day', cancelledDate: 'day',
 	}), []);
-	// 创建位置（仅创建模式）：'daily' = 当日日记；其余为文件路径（当日 file task 或手选的笔记）；'other' = 手选笔记
+	// 创建位置（仅创建模式）：'daily' / 'weekly' = 目标日期的日记 / 所在周的周记；'other' = 手选笔记；其余为当日 file task 的文件路径
 	const [createTarget, setCreateTarget] = useState<string>('daily');
 	const [otherPath, setOtherPath] = useState('');
 	const otherInputRef = useRef<HTMLInputElement>(null);
@@ -225,13 +226,25 @@ export function TaskFormModal({
 		const day = dayStartOf(targetDate ?? new Date()).getTime();
 		return fileTasks.filter((ft) => dayStartOf(ft.start).getTime() <= day && day <= dayStartOf(ft.end).getTime());
 	}, [fileTasks, targetDate]);
+	// 日记 / 周记选项标签里显示具体笔记名，让用户知道写到哪一篇；没有周记来源时不提供周记选项
+	const periodicNoteNames = useMemo(() => {
+		const settings = plugin?.settings;
+		if (!settings) return { daily: '', weekly: null };
+		const day = dayStartOf(targetDate ?? new Date());
+		const baseName = (path: string) => path.split('/').pop()!.slice(0, -'.md'.length);
+		const weekly = getWeeklyNoteConfig(app, settings);
+		return {
+			daily: baseName(getDailyNotePathForDate(app, settings, day)),
+			weekly: weekly ? baseName(getWeeklyNotePath(weekly, day)) : null,
+		};
+	}, [app, plugin?.settings, targetDate]);
 	useEffect(() => {
 		if (createTarget !== 'other' || !otherInputRef.current) return;
 		const input = otherInputRef.current;
 		let close = (): void => {};
 		// 动态加载：AbstractInputSuggest 只在真实 Obsidian 里存在
 		void import('../../settings/components/FileSuggest').then(({ FileSuggest }) => {
-			const suggest = new FileSuggest(app, input);
+			const suggest = new FileSuggest(app, input, (file) => setOtherPath(file.path));
 			close = () => suggest.close();
 		});
 		return () => close();
@@ -378,7 +391,9 @@ export function TaskFormModal({
 						return;
 					}
 				} else if (createTarget === 'daily') {
-					targetFilePath = await createTaskInDailyNote(app, taskData, plugin.settings, plugin.dailyNoteIndex);
+					targetFilePath = await createTaskInDailyNote(app, taskData, plugin.settings, plugin.dailyNoteIndex, dayStartOf(targetDate ?? new Date()));
+				} else if (createTarget === 'weekly') {
+					targetFilePath = await createTaskInWeeklyNote(app, taskData, plugin.settings, dayStartOf(targetDate ?? new Date()));
 				} else {
 					const path = createTarget === 'other' ? otherPath.trim() : createTarget;
 					targetFilePath = await createTaskInFile(app, path, taskData);
@@ -387,8 +402,10 @@ export function TaskFormModal({
 						return;
 					}
 				}
+				// 日记 / 周记：用户取消创建或写入失败（已有提示）→ 保留弹窗，不报成功
+				if (!targetFilePath) return;
 				// 写回后立即刷新缓存并推送数据，跳过文件事件防抖回流
-				if (targetFilePath && plugin.taskCache) {
+				if (plugin.taskCache) {
 					await plugin.taskCache.refreshFile(targetFilePath);
 					const { useCalendarStore } = await import('../store/calendarStore');
 					useCalendarStore.getState().notifyTasksUpdated(
@@ -705,7 +722,10 @@ export function TaskFormModal({
 							<PropRow icon="file-plus" label={i18n.t('modals.createTask.createIn')}>
 								<div className={EditTaskModalClasses.elements.createTarget}>
 									<select className="dropdown" value={createTarget} onChange={(e) => setCreateTarget(e.target.value)}>
-										<option value="daily">{i18n.t('modals.createTask.createInDaily')}</option>
+										<option value="daily">{i18n.t('modals.createTask.createInDaily', { name: periodicNoteNames.daily })}</option>
+										{periodicNoteNames.weekly && (
+											<option value="weekly">{i18n.t('modals.createTask.createInWeekly', { name: periodicNoteNames.weekly })}</option>
+										)}
 										{targetFileOptions.map((ft) => (
 											<option key={ft.filePath} value={ft.filePath}>{ft.title}</option>
 										))}

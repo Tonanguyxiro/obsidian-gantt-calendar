@@ -8,7 +8,42 @@
 
 ---
 
+## 📌 进行中
+
+- [ ] 周视图极窄重叠列的长标题仍触发宽度告警（368px 分栏，最窄列 38px）；需进一步验证密集日程的可读性。
+
 ## ✅ 已完成（按日期倒序）
+
+### 2026-11-21（1.8.7）
+
+- [x] 发布 1.8.7（纳入 2026-11-17/18 时间块视觉重做与排版优化、`useTodayKey` 跨午夜刷新修复、日视图时间轴对齐修复、年视图窄屏样式隔离修复，以及创建任务位置增强——支持 Weekly Note、显示具体日记/周记文件名、`FileSuggest` 选中同步、允许省略 `.md`）：`package.json`、`package-lock.json`、`manifest.json`、`versions.json` 已 bump；`npm run build`、653 项单测（53 suites）、`npx eslint .`（0 errors）通过；两个测试库均加载 1.8.7 且 `dev:errors` 无错误。
+
+### 2026-11-18（时间块排版，已纳入 1.8.7）
+
+- [x] 时间块视觉重做（设计细节咨询 Fable）：状态色浅底 + 左侧 3px 色条、6px 圆角，内容左对齐自上而下（复选框｜标题｜重复/优先级 → 时段 → 标签）；时段从块外浮标移入卡片（`gc-task-card__block-time` / `gc-ics-event__block-time`，仅文件任务卡保留块角标）；按块高分档 <18 / <25 / 25–43 / ≥44 / ≥60 / ≥84（标签）/ ≥150 / ≥220，窄列 <100px 只留复选框+标题、<60px 去复选框；优先级去圆底改小字形；ICS 卡同一外观加右侧虚线表示只读；今天列粉色改淡强调色。非 todo 状态色经 `--gc-status-accent` 作色条。
+- [x] 修复：视图挂过午夜仍高亮昨天（周/月/年网格与日画布只在导航时重算 `isToday`）→ 新增 `useTodayKey`（每分钟 + focus/visibility 检查）入各 useMemo 依赖；真机模拟 +1 天验证 Wed18→Thu19。
+- [x] 修复：日视图滚动容器定高时左侧刻度 `flex-shrink` 被压到 42px，与画布整点错位 → `gc-day-canvas__time-label { flex-shrink: 0 }`。
+- [x] 验证：653 单测、ESLint 0 errors、两库部署；示例库 15/30/45/60/90/180 分钟、四列重叠窄 lane、已完成/进行中/重要状态、亮/暗主题、2493px 与 1100px 窗宽（日视图分栏）截图检查；real vault 周视图含 ICS；三个检查脚本 overlaps/squeezed/mixed 均为空，`dev:errors` 无本插件错误。
+
+- [x] 两测试库已保存并重载周视图与侧栏的优先级开关，新安装默认开启。示例库日、周、侧栏均实测带优先级的时间块显示徽标，与同排标签中心差 0px。653 项测试通过。
+
+- [x] 标签复核：两库周视图与侧栏保存开启标签，新安装也默认开启。时间块标题居中，普通列高 50px、窄列高 72px 起显示底部标签；修正年视图窄屏规则影响其他视图字号。示例库日视图宽窗、窄窗和 368px 分栏的标签与优先级中心线差值均为 0px。真机局部截图 `docs/images/qa-timeline-block-relayout/day-task-footer.png`。
+
+- [x] 日、周、侧栏时间线保留原字号与复选框尺寸。时段浮标外置，统一标题起点与完整行裁剪，有底部标签或优先级时才预留空间。日视图按分栏宽度自适应：368px 分栏中两个并排时段从各 32px 增到 109px。
+- [x] 已构建并部署两测试库，653 项单测通过，ESLint 0 errors / 16 warnings。示例库 1600、1100 窗宽及 368px 分栏检查，覆盖 15/30/60/180 分钟样例；两库时刻与块内标题交叠 0，运行时错误 0。截图见 `docs/images/qa-timeline-block-relayout/day-task-spacing.png`。
+
+### 2026-11-17（时间块卡片 V2 版式美化，已纳入 1.8.7）
+
+- [x] 美化周/日视图时间块卡片 V2 版式（用户反馈「那个按钮和右上角全部挤在一起了」，对象非任务编辑器弹窗）。用户明确选「先出方案再实现」、方案确认前未动产品代码；`plan_choice` 拍板「方案 A · 轻角标+控件归正文」后实现，`qa_decision` 授权提权全自动真机验收。未 commit/push。
+  - 根因：V2 把 ✓/优先级徽标用 `position:absolute` 钉到块左上 22px 顶带（`day-canvas.css:148-169`/`week-view.css:526-546`），与右上时刻标签共带；`padding-top:22px` 把标题压到下方窄条逐字换行，窄 lane(<112px) 文字竖排。时刻标签是卡片外兄弟元素（`DayTimelineCanvas.tsx:561`/`WeekTimelineGrid.tsx:945`），纯 CSS 可改。
+  - 方案阶段产物（仅示意非真机）：`proposal/baseline-v2-4sizes.png`、`proposal/_before_block.png`（真机裁剪）、`proposal/compare-final.png`（现状 V2 / A / B′ × 4 尺寸）。C（改 DOM/TSX）未做。
+  - 落地（方案 A，纯 CSS 仅 2 文件）：`day-canvas.css` 44px 档重写四条（card `padding-top:16px`/`align-content:flex-start`；text `flex:0 0 100%`+`padding-left:40px`+nowrap/ellipsis；checkbox `top:18px;left:3px`；priority `top:16px;left:21px`）、删两个 112px 顶带档、76px 档 text `calc(100% - 24px)`、tags `padding-left` 24→40px、新增 `@container (max-width:111px) and (min-height:44px)` 窄 lane 档（集成复核补 min-height 守卫避免 15/30min 极矮窄块回归）；`week-view.css` 删 58 行 V2 重复块仅留标签降权重。未改 DOM/TSX/BEM/ICS/editor/tools/tests，未引入 `:has()`。
+  - **真机验收发现并修复 1 处回归**：方案 A 把标签 `font-size:10px`→`var(--gc-font-xxs)`（算出 11px）使盒高 13→14px，撑破 ICS 卡 `padding-top:14px` 让位，`check-timeblock-overlap` 在 real vault 报 2 条 `gc-ics-event__title` 重叠。A/B 变量分离（逐条注入仅 `font-size:10px` 即归零）确认唯一变量是字号；两处标签 `font-size` 改回 `10px`（保留 `padding:0 2px`/`opacity:.8`），重新 build+部署+reload 后 `overlaps:[]`。
+  - 验证：`npm run build` ×2 均 exit 0（根 `styles.css` 重生成 141984 B、13 项方案 A 声明全落地、V2 废弃值全清）；`npx jest` 53 suites/653 tests 全过；`npx eslint .` 0 errors（16 warnings 均既有、与 CSS 无关）；两库 `dev:errors` 均 "No errors captured."。
+  - 真机（提权自启 Obsidian 1.15.1 + `--no-sandbox --disable-gpu`，cp 三件产物到两 vault + `plugin:reload`）：CSSOM 两库 `has16/has18/has111=true`、`has22=false` 确认方案 A 生效；DOM-rect 客观证据 `label_text/label_checkbox/label_priority` 全不相交（仅 checkbox/priority 叠进 text `padding-left:40px` 让槽，为设计意图）。
+  - tools 四脚本（两库 × 1600×1000 / 900×1000 / 1024×800 / W42 / W16 多尺寸 25–100px / Day / 六视图巡检 / 弹窗打开后 `roots:1`）：`overlaps:[]` 全空、`card-layout` 无 mixed/duplicate、`modal-overflow` 0 issues。`squeezed` 命中 3 类既有硬阈值告警（900px 窄 lane 长标题、real vault 3 条 ICS 标题、W16 3 条长标题），经注入**完整 V2 基线 CSS** A/B 对照输出完全相同 → 既有告警、非方案 A 回归。
+  - 真机截图 `docs/images/qa-timeline-block-relayout/`：`qa-week-example-W42-1600-FINAL.png`、`-900-FINAL.png`、`qa-week-example-W16-multisize-FINAL.png`、`qa-day-example-wide-FINAL.png`、`-1024-FINAL.png`、`qa-week-real-W42-ICS-FINAL.png`（含 ICS 块与侧栏每日时间线）、`qa-modal-create-task-planA.png`；真机前后对比 `proposal/before-after-real.png`。
+  - 已知限制（如实）：`align-content:flex-start`+nowrap 让 ≥76px 高块正文只占顶部约 32px、下方留白（`day-canvas.css` 留一行开关可改回 normal 恢复多行）；窄 lane 档标签 `padding:0` 被同特异性后续 `padding:0 2px` 覆盖（仅 2px 差异）；<84px 超窄 lane + 长标题仍命中 `check-squeezed-text` 70px/12 字硬阈值（既有、方案阶段已预告）。
 
 ### 2026-11-17（1.8.6）
 
@@ -208,5 +243,9 @@
 
 ## 💡 新需求（会话中提出，待排期）
 
+- [x] 周/日视图时间块卡片重排（2026-11-17，未发布）：复选框 + 优先级徽标移到块左上角，任务文字占满块宽不再竖排单字，标签保留底部且阈值仍为 76px。
+  - 纯 CSS：`day-canvas.css` + `week-view.css` 两处重复规则同步。V1 徽标独占一行被用户否（"太难看了"）；V2 改为宽块（≥112px）时复选框/优先级 `position:absolute` 锚到块左上、与右上时刻标签共享同一顶带（`top:5/3px;left:3/21px`），padding-top 14→22px、文字满宽紧跟其下；标签阈值仍 76px、窄 lane(<112px) 回退两行避免碰撞。未改 DOM/TSX/BEM。
+  - 验证：653 单测 + eslint 0 error + build 通过；两库 `dev:errors` 无错误；tools/ 四脚本两库 × Day/Week 1600×1000 全空（900px 窄视口命中均为既有 ICS/全天条/70px 硬阈值，非回归）。真机多尺寸截图 + 亲眼看图确认符合预期，最终 4 张在 `docs/images/qa-timeline-block-relayout/`（V1 否决稿已删）。未 commit/push。
+  - 限制：15/180 分钟块无现成夹具未测；`check-modal-overflow` 因弹窗关闭未做有意义检查。
 - [ ] 仅 ⏳ 无时间前缀的任务在甘特图中显示为单日条（当前与仅 📅 的任务一致，不显示）
 - [ ] 评估任务索引改用 Dataview（`api.pages().file.tasks` + `dataview:metadata-change`）为主、自建 `MarkdownDataSource` 兜底（工作区 AGENTS.md §3.3）：需核对 Dataview 对 Tasks emoji 字段（🛫/⏳/📅/✅/优先级/🔁）与 Day Planner 时间前缀、全局筛选符的覆盖度，以及首扫性能

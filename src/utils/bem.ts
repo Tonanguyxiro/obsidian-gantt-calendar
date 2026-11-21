@@ -163,6 +163,8 @@ export const IcsEventClasses = {
 	elements: {
 		title: bem(BLOCKS.ICS_EVENT, 'title'),
 		location: bem(BLOCKS.ICS_EVENT, 'location'),
+		/** 时间块内的时段文字（标题下方） */
+		blockTime: bem(BLOCKS.ICS_EVENT, 'block-time'),
 	},
 };
 
@@ -180,6 +182,8 @@ export const TaskCardClasses = {
 		tags: bem(BLOCKS.TASK_CARD, 'tags'),
 		priority: bem(BLOCKS.TASK_CARD, 'priority'),
 		priorityBadge: bem(BLOCKS.TASK_CARD, 'priority-badge'),
+		/** 时间块内的时段文字（标题下方，仅日/周/侧栏时间线） */
+		blockTime: bem(BLOCKS.TASK_CARD, 'block-time'),
 		times: bem(BLOCKS.TASK_CARD, 'times'),
 		timeBadge: bem(BLOCKS.TASK_CARD, 'time-badge'),
 		file: bem(BLOCKS.TASK_CARD, 'file'),

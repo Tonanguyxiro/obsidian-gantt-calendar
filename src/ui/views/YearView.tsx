@@ -10,6 +10,7 @@ import { useAdvancedFilters } from '../utils/useAdvancedFilters';
 import { generateVirtualInstances } from '../../tasks/virtualTaskGenerator';
 import { i18n } from '../../i18n/i18n';
 import { useViewTasks } from '../utils/useViewTasks';
+import { useTodayKey } from '../utils/useTodayKey';
 
 /**
  * React 年视图（热力图）
@@ -50,6 +51,8 @@ export function YearView(): JSX.Element {
 		return counts;
 	}, [tasks, filter, advanced, year, dateField]);
 
+	// todayKey 入依赖：跨午夜后重算各月格子的 isToday
+	const todayKey = useTodayKey();
 	const months = useMemo(() => {
 		const palette = plugin.settings.yearHeatmapPalette || 'blue';
 		const heatEnabled = plugin.settings.yearHeatmapEnabled;
@@ -73,7 +76,7 @@ export function YearView(): JSX.Element {
 		}
 
 		return { palette, heatEnabled, heat3D, lunarFontSize, monthCards };
-	}, [year, startOnMonday, plugin.settings]);
+	}, [year, startOnMonday, plugin.settings, todayKey]);
 
 	const modClass = (count: number) => modCountClass(count, months.palette);
 

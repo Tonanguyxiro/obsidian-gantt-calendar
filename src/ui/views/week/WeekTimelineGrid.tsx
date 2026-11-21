@@ -909,6 +909,7 @@ const WeekTimeBlock = memo(function WeekTimeBlock({
 	onCardRefresh,
 }: WeekTimeBlockProps): JSX.Element {
 	const durationMin = seg.endMin - seg.startMin;
+	const timeLabel = `${formatMinutes(seg.startMin)} – ${formatMinutes(seg.endMin)}`;
 	const resizable = !isVirtualTask(block.task) && !block.task.icsEvent;
 	const cls = [
 		WeekViewClasses.elements.timeBlock,
@@ -942,12 +943,12 @@ const WeekTimeBlock = memo(function WeekTimeBlock({
 				feedback.patch({ indicator: null, overCol: null });
 			}}
 		>
-			{durationMin >= 30 ? (
-				<span className={WeekViewClasses.elements.timeBlockTime}>
-					{`${formatMinutes(seg.startMin)} – ${formatMinutes(seg.endMin)}`}
-				</span>
+			{/* 任务与订阅事件的时段在卡片内标题下方渲染；文件任务卡无该位置，仍用块角标 */}
+			{block.task.fileTask && durationMin >= 30 ? (
+				<span className={WeekViewClasses.elements.timeBlockTime}>{timeLabel}</span>
 			) : null}
 			<CalendarItemCard
+				timeLabel={timeLabel}
 				task={block.task}
 				config={config}
 				targetDate={date}

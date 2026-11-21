@@ -21,6 +21,7 @@ import { i18n } from '../../i18n/i18n';
 import { Logger } from '../../utils/logger';
 import type { DateFieldType } from '../../settings/types';
 import { useViewTasks } from '../utils/useViewTasks';
+import { useTodayKey } from '../utils/useTodayKey';
 import { useFileTaskLayer } from '../utils/useFileTaskLayer';
 import { useIcsLayer } from '../utils/useIcsLayer';
 import { useAdvancedFilters } from '../utils/useAdvancedFilters';
@@ -103,9 +104,11 @@ export function MonthView(): JSX.Element {
 		showTicktick: plugin.settings.monthViewShowTicktick,
 	}), [plugin.settings]);
 
+	// todayKey 入依赖：跨午夜后重算 isToday
+	const todayKey = useTodayKey();
 	const monthData = useMemo(() => {
 		return generateMonthCalendar(currentDate.getFullYear(), currentDate.getMonth() + 1, startOnMonday);
-	}, [currentDate, startOnMonday]);
+	}, [currentDate, startOnMonday, todayKey]);
 
 	// 全局筛选
 	const advanced = useAdvancedFilters('month');

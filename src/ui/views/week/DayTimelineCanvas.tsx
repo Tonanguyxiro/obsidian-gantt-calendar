@@ -34,6 +34,7 @@ import { useCanvasTouchDrag } from './useCanvasTouchDrag';
 import { findTaskById } from '../../utils/taskId';
 import { asSlotTarget, SLOT_DEFAULT_MIN } from '../../../tasks/scheduledFallback';
 import { taskKey } from '../../utils/taskKey';
+import { useTodayKey } from '../../utils/useTodayKey';
 import { createDragFeedbackStore, useDragFeedback, DropIndicatorLayer, rafThrottle, type DragFeedbackStore } from './dragFeedback';
 
 /**
@@ -422,11 +423,12 @@ export function DayTimelineCanvas({ day, model, config, tasks, refresh }: DayTim
 	}, [tasks, minutesFromEvent, commitBlockMove, feedback, dragOverFrame]);
 
 	// ===== 当前时间指示线（仅画布日为今天时显示；30s 刷新） =====
+	const todayKey = useTodayKey();
 	const isToday = useMemo(() => {
 		const now = new Date();
 		const d0 = new Date(day);
 		return now.getFullYear() === d0.getFullYear() && now.getMonth() === d0.getMonth() && now.getDate() === d0.getDate();
-	}, [day]);
+	}, [day, todayKey]);
 
 	const [nowTop, setNowTop] = useState<number | null>(null);
 	useEffect(() => {
@@ -527,6 +529,7 @@ const CanvasTimeBlock = memo(function CanvasTimeBlock({
 	beginTouchPress,
 }: CanvasTimeBlockProps): JSX.Element {
 	const durationMin = seg.endMin - seg.startMin;
+	const timeLabel = `${formatMinutes(seg.startMin)} – ${formatMinutes(seg.endMin)}`;
 	const resizable = !isVirtualTask(block.task) && !block.task.icsEvent;
 	const cls = [
 		DayCanvasClasses.elements.block,
@@ -558,12 +561,12 @@ const CanvasTimeBlock = memo(function CanvasTimeBlock({
 				feedback.reset();
 			}}
 		>
-			{durationMin >= 30 ? (
-				<span className={DayCanvasClasses.elements.blockTime}>
-					{`${formatMinutes(seg.startMin)} – ${formatMinutes(seg.endMin)}`}
-				</span>
+			{/* 任务与订阅事件的时段在卡片内标题下方渲染；文件任务卡无该位置，仍用块角标 */}
+			{block.task.fileTask && durationMin >= 30 ? (
+				<span className={DayCanvasClasses.elements.blockTime}>{timeLabel}</span>
 			) : null}
-			<CalendarItemCard task={block.task} config={config} disableLongPressMenu />
+			<CalendarItemCard
+				timeLabel={timeLabel} task={block.task} config={config} disableLongPressMenu />
 			{!seg.continuesBefore && resizable ? (
 				<div
 					className={`${DayCanvasClasses.elements.handle} ${DayCanvasClasses.modifiers.handleTop}`}

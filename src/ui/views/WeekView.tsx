@@ -16,6 +16,7 @@ import { FileTaskLayerProvider } from '../components/FileTaskCard';
 import { WeekTimelineGrid } from './week/WeekTimelineGrid';
 import { useIsPhone } from '../utils/platform';
 import { useViewTasks } from '../utils/useViewTasks';
+import { useTodayKey } from '../utils/useTodayKey';
 
 /**
  * React 周视图（常驻时间线模式）
@@ -48,9 +49,11 @@ export function WeekView(): JSX.Element {
 	// 时间块使用紧凑变体，高度由块容器按时长撑开
 	const timelineConfig = useMemo(() => ({ ...config, variant: 'timeline' as const }), [config]);
 
+	// todayKey 入依赖：跨午夜后重算 isToday，否则长时间挂着的视图仍高亮昨天
+	const todayKey = useTodayKey();
 	const weekData = useMemo(() => (
 		getWeekOfDate(currentDate, currentDate.getFullYear(), startOnMonday)
-	), [currentDate, startOnMonday]);
+	), [currentDate, startOnMonday, todayKey]);
 
 	const weekStart = useMemo(() => {
 		const d = new Date(weekData.days[0].date);

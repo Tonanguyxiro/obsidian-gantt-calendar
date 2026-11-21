@@ -1048,7 +1048,8 @@
         "impliedBy": "Already included by a selected sub-tag — click to browse its children"
       },
       "createIn": "Create in",
-      "createInDaily": "Daily note",
+      "createInDaily": "Daily note ({{name}})",
+      "createInWeekly": "Weekly note ({{name}})",
       "createInOther": "Other note…",
       "createInOtherPlaceholder": "Search for a note…",
       "addedToFile": "Task added to {{name}}",
@@ -1461,7 +1462,9 @@
     "createdAndAdded": "Daily Note created and task added",
     "createFailed": "Failed to create Daily Note: {{error}}",
     "missingTitle": "Daily note not found",
-    "missingMessage": "Today's daily note has not been created yet. Create it now?",
+    "missingMessage": "The daily note for this day has not been created yet. Create it now?",
+    "weeklyMissingTitle": "Weekly note not found",
+    "weeklyMissingMessage": "The weekly note \"{{name}}\" has not been created yet. Create it now?",
     "create": "Create",
     "templateNotFound": "Template file not found: {{path}}"
   },

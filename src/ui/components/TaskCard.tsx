@@ -45,6 +45,8 @@ export interface ReactTaskCardProps {
 	onRefresh?: () => void;
 	/** 容器自管触屏长按手势时，禁用卡片内置长按菜单（如时间画布拖动） */
 	disableLongPressMenu?: boolean;
+	/** 时间块时段文字（如 "07:00 – 09:15"），渲染在标题之后，由时间线 CSS 决定显隐 */
+	timeLabel?: string;
 }
 
 const PRIORITY_ICONS: Record<string, string> = {
@@ -77,7 +79,7 @@ function formatDateForDisplay(date: Date, precision?: 'day' | 'time'): string {
 // memo：tasks 数组引用每次刷新都会变化，但未变化的任务卡片
 //（props 中 task/config/回调均稳定）应跳过重渲染——
 // 调用方需用 useCallback 稳定 onRefresh，否则 memo 无效
-export const TaskCard = memo(function TaskCard({ task, config, targetDate, onClick, onRefresh, disableLongPressMenu }: ReactTaskCardProps): JSX.Element {
+export const TaskCard = memo(function TaskCard({ task, config, targetDate, onClick, onRefresh, disableLongPressMenu, timeLabel }: ReactTaskCardProps): JSX.Element {
 	const plugin = usePlugin();
 	const app = useApp();
 	const virtual = isVirtualTask(task);
@@ -108,6 +110,8 @@ export const TaskCard = memo(function TaskCard({ task, config, targetDate, onCli
 		return {
 			'--task-bg-color': colors.bg,
 			'--task-text-color': colors.text,
+			// 时间块色条/浅底用的状态色；todo 默认是白/深灰底色，作色条不可见，沿用 pending 橙
+			...(task.status === 'todo' ? {} : { '--gc-status-accent': colors.bg }),
 		} as CSSProperties;
 	}, [task.status, plugin.settings]);
 
@@ -486,6 +490,7 @@ export const TaskCard = memo(function TaskCard({ task, config, targetDate, onCli
 				/>
 			) : null}
 			{description}
+			{timeLabel ? <span className={TaskCardClasses.elements.blockTime}>{timeLabel}</span> : null}
 			{config.showTicktick ? (
 				<>
 					{task.ticktick ? <div className={TaskCardClasses.elements.ticktick}>{task.ticktick}</div> : null}

@@ -233,7 +233,7 @@
 /* 时间块：top/height/left/width 由组件按分钟与 lane 内联定位 */
 .gc-week-view__time-block {
 	position: absolute;
-	border-radius: var(--gc-radius-xs, 4px);
+	border-radius: 6px;
 	overflow: hidden;
 	min-width: 0;
 }
@@ -279,7 +279,7 @@
 
 /* 超出 lane 上限的叠加块：加阴影区分 */
 .gc-week-view__time-block--stacked {
-	box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
 }
 
 /* 块右上角时刻标签 */
@@ -288,15 +288,18 @@
 	top: 1px;
 	right: 3px;
 	z-index: 2;
+	/* 固定 10px：ICS 事件卡 padding-top:14px 按「标签 13px 盒高」让位，
+	   放大字号会撑高标签盒并与 ICS 标题相交（真机 check-timeblock-overlap 已复现） */
 	font-size: 10px;
 	line-height: 1.3;
-	padding: 0 3px;
+	padding: 0 2px;
 	border-radius: 3px;
 	background-color: color-mix(in srgb, var(--background-primary) 80%, transparent);
 	color: var(--text-muted);
 	font-variant-numeric: tabular-nums;
 	pointer-events: none;
 	white-space: nowrap;
+	opacity: 0.8;
 }
 
 /* resize 手柄（仅真实起止边缘渲染）：6px 命中区 + 悬停视觉条 */
@@ -476,30 +479,6 @@
 	.gc-week-view__handle--bottom {
 		bottom: 0;
 	}
-}
-
-/* 任务块内文本多行换行：块高度由时长决定（主），文本填充可用空间并随块裁剪（从）。
-   仅作用于时间块；全天条（固定 24px）与日视图槽位保持单行 */
-.gc-week-view__time-block .gc-task-card--timeline {
-	flex-wrap: wrap;
-	/* 垂直居中；safe 在内容溢出块高时回退为顶部对齐（避免上下两端同时被裁） */
-	align-content: safe center;
-	align-items: center;
-}
-
-.gc-week-view__time-block .gc-task-card--timeline .gc-task-card__text {
-	white-space: normal;
-	word-break: break-word;
-	text-overflow: clip;
-	flex: 1 1 0;
-	min-width: 0;
-	/* 高度钳制在卡片（=块）内：不再向 flex 行高贡献超出部分，
-	   复选框/标签的居中参考系回到块本身；文本超出仍由 overflow 裁剪 */
-	max-height: 100%;
-}
-
-.gc-week-view__time-block .gc-task-card--timeline .gc-task-card__tags {
-	max-width: 100%;
 }
 
 /* 全天行折叠/收起行（极端重叠时收进 "+N"） */

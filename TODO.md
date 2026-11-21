@@ -17,6 +17,8 @@
 ### 2026-11-21（1.8.7）
 
 - [x] 发布 1.8.7（纳入 2026-11-17/18 时间块视觉重做与排版优化、`useTodayKey` 跨午夜刷新修复、日视图时间轴对齐修复、年视图窄屏样式隔离修复，以及创建任务位置增强——支持 Weekly Note、显示具体日记/周记文件名、`FileSuggest` 选中同步、允许省略 `.md`）：`package.json`、`package-lock.json`、`manifest.json`、`versions.json` 已 bump；`npm run build`、653 项单测（53 suites）、`npx eslint .`（0 errors）通过；两个测试库均加载 1.8.7 且 `dev:errors` 无错误。
+- [x] 提交 `9a0f427`（release: Gantt Calendar 1.8.7）+ tag `1.8.7` 已 push 到 origin/master。
+- [x] 创建 GitHub Release：https://github.com/Tonanguyxiro/obsidian-gantt-calendar/releases/tag/1.8.7 （标题 v1.8.7，英文说明）。三个资产 main.js / manifest.json / styles.css 已上传，本地与下载后的 SHA-256 均核对一致（main.js `1cd10877…`, manifest.json `5a21871d…`, styles.css `e8ce046d…`）。
 
 ### 2026-11-18（时间块排版，已纳入 1.8.7）
 

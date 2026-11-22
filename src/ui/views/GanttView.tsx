@@ -19,17 +19,16 @@ import type { FileTask } from '../../types';
 import { useCalendarStore, selectViewFilter } from '../store/calendarStore';
 import { useAdvancedFilters } from '../utils/useAdvancedFilters';
 import { applyTagFilter } from '../utils/taskFilters';
-import { buildGanttRows, isFileTaskFeatureOn } from '../../fileTasks/fileTaskLayer';
+import { buildGanttRows } from '../../fileTasks/fileTaskLayer';
 import { writeFileTaskDates } from '../../fileTasks/fileTaskWriter';
 import { openEditTaskModal } from '../modals/TaskFormModal';
 import { openFileInExistingLeaf } from '../../utils/fileOpener';
 import { formatDate } from '../../dateUtils/dateUtilsIndex';
 import { useViewTasks } from '../utils/useViewTasks';
 
-const GANTT_CONFIG: Omit<GanttChartConfig, 'on_click' | 'on_date_change' | 'on_progress_change'> = {
+const GANTT_CONFIG: Omit<GanttChartConfig, 'on_click' | 'on_date_change' | 'on_progress_change' | 'language'> = {
 	view_mode: 'week',
 	granularity: TimeGranularity.DAY,
-	language: isChineseLanguage() ? 'zh' : 'en',
 	header_height: 50,
 	column_width: 40,
 	step: 24,
@@ -40,6 +39,8 @@ const GANTT_CONFIG: Omit<GanttChartConfig, 'on_click' | 'on_date_change' | 'on_p
 	date_format: 'YYYY-MM-DD',
 };
 
+const DEFAULT_ENABLED_FORMATS: string[] = ['tasks'];
+
 export function GanttView(): JSX.Element {
 	const plugin = usePlugin();
 	const app = useApp();
@@ -47,8 +48,16 @@ export function GanttView(): JSX.Element {
 	const ganttScroll = useCalendarStore((s) => s.ganttScroll);
 	const refreshTasks = useCalendarStore((s) => s.refreshTasks);
 
-	const startField = plugin.settings.ganttStartField;
-	const endField = plugin.settings.ganttEndField;
+	const startField = useCalendarStore((s) => s.settings.ganttStartField);
+	const endField = useCalendarStore((s) => s.settings.ganttEndField);
+	const recurringLimit = useCalendarStore((s) => s.settings.recurringTaskDisplayLimit) ?? 5;
+	const fileTaskIncludeDated = useCalendarStore((s) => !!s.settings.fileTaskIncludeDated);
+	const fileTaskIncludeTaskFiles = useCalendarStore((s) => !!s.settings.fileTaskIncludeTaskFiles);
+	const fileOptions = useCalendarStore((s) => s.settings.fileTaskViews?.gantt);
+	const storedCollapsedFiles = useCalendarStore((s) => s.settings.ganttCollapsedFileTasks);
+	const doubleClickAction = useCalendarStore((s) => s.settings.taskCardDoubleClickAction) ?? 'editModal';
+	const enabledTaskFormats = useCalendarStore((s) => s.settings.enabledTaskFormats) || DEFAULT_ENABLED_FORMATS;
+	const language = useCalendarStore((s) => s.settings.language);
 	const tasks = useViewTasks(startField, endField, endField);
 
 	const containerRef = useRef<HTMLDivElement | null>(null);
@@ -72,7 +81,6 @@ export function GanttView(): JSX.Element {
 
 	// 重复任务：为甘特图生成虚拟实例
 	const tasksWithVirtuals = useMemo(() => {
-		const recurringLimit = plugin.settings.recurringTaskDisplayLimit ?? 5;
 		const ref = new Date();
 		const rangeStart = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate());
 		const rangeEnd = new Date(ref.getFullYear() + 1, ref.getMonth(), ref.getDate());
@@ -81,33 +89,34 @@ export function GanttView(): JSX.Element {
 			startField, recurringLimit,
 		);
 		return [...filteredTasks, ...virtuals];
-	}, [filteredTasks, startField, plugin.settings.recurringTaskDisplayLimit]);
+	}, [filteredTasks, startField, recurringLimit]);
 
 	// file-based task 分区：上方文件时间轴（按项目分组，无项目在分区底部），下方任务时间轴；
 	// 归类开启时任务移到所属文件行下，下方只剩不属于 file-based task 的任务
 	const allFileTasks = useCalendarStore((s) => s.fileTasks);
-	const fileOptions = plugin.settings.fileTaskViews?.gantt;
+	const fileTaskFeatureOn = fileTaskIncludeDated || fileTaskIncludeTaskFiles;
 	const fileTasks = useMemo(
-		() => (isFileTaskFeatureOn(plugin.settings) && fileOptions?.show ? advanced.filterFileTasks(allFileTasks) : EMPTY_FILE_TASKS),
-		[plugin.settings, fileOptions?.show, advanced, allFileTasks],
+		() => (fileTaskFeatureOn && fileOptions?.show ? advanced.filterFileTasks(allFileTasks) : EMPTY_FILE_TASKS),
+		[fileTaskFeatureOn, fileOptions?.show, advanced, allFileTasks],
 	);
 	const groupTasks = !!fileOptions?.groupTasks;
 
 	// 文件行折叠状态（持久化到设置，重开视图后保持）
-	const [collapsedFiles, setCollapsedFiles] = useState<ReadonlySet<string>>(
-		() => new Set(plugin.settings.ganttCollapsedFileTasks ?? []),
+	const collapsedFiles = useMemo<ReadonlySet<string>>(
+		() => new Set(storedCollapsedFiles ?? []),
+		[storedCollapsedFiles],
 	);
 	const handleToggleCollapse = useCallback((ganttTask: GanttChartTask) => {
 		const path = ganttTask.fileTask?.filePath;
 		if (!path) return;
-		setCollapsedFiles((prev) => {
-			const next = new Set(prev);
-			if (next.has(path)) next.delete(path);
-			else next.add(path);
-			plugin.settings.ganttCollapsedFileTasks = Array.from(next);
-			void plugin.saveSettings();
-			return next;
-		});
+		const current = useCalendarStore.getState().settings.ganttCollapsedFileTasks ?? [];
+		const next = new Set(current);
+		if (next.has(path)) next.delete(path);
+		else next.add(path);
+		const nextList = Array.from(next);
+		plugin.settings.ganttCollapsedFileTasks = nextList;
+		useCalendarStore.getState().syncSettings(plugin.settings);
+		void plugin.saveSettings();
 	}, [plugin]);
 
 	const ganttTasks = useMemo(() => {
@@ -169,7 +178,7 @@ export function GanttView(): JSX.Element {
 		}
 		if (ganttTask.fileTask) {
 			// file 行：写回 frontmatter 起止属性
-			await writeFileTaskDates(app, ganttTask.fileTask, start, end, plugin.settings);
+			await writeFileTaskDates(app, ganttTask.fileTask, start, end, useCalendarStore.getState().settings);
 			return;
 		}
 		try {
@@ -199,7 +208,6 @@ export function GanttView(): JSX.Element {
 	}, [refreshTasks]);
 
 	// 双击：file 行打开文件；任务行按设置弹出编辑面板（默认）或跳转源文件
-	const doubleClickAction = plugin.settings.taskCardDoubleClickAction ?? 'editModal';
 	const handleTaskDoubleClick = useCallback((ganttTask: GanttChartTask) => {
 		if (!ganttTask.filePath) return;
 		if (ganttTask.rowKind === 'file' || doubleClickAction === 'openFile') {
@@ -208,17 +216,21 @@ export function GanttView(): JSX.Element {
 		}
 		const task = tasksRef.current.find((t) => t.filePath === ganttTask.filePath && t.lineNumber === ganttTask.lineNumber);
 		if (!task) return;
-		openEditTaskModal(app, task, plugin.settings.enabledTaskFormats || ['tasks'], () => refreshTasks(), true);
-	}, [app, plugin, doubleClickAction, refreshTasks]);
+		openEditTaskModal(app, task, enabledTaskFormats, () => refreshTasks(), true);
+	}, [app, doubleClickAction, enabledTaskFormats, refreshTasks]);
 
-	const config = useMemo<GanttChartConfig>(() => ({
-		...GANTT_CONFIG,
-		on_click: handleTaskClick,
-		on_dblclick: doubleClickAction === 'none' ? undefined : handleTaskDoubleClick,
-		on_toggle_collapse: handleToggleCollapse,
-		on_date_change: (task, start, end) => { void handleDateChange(task, start, end); },
-		on_progress_change: (task, progress) => { void handleProgressChange(task, progress); },
-	}), [handleTaskClick, handleTaskDoubleClick, handleToggleCollapse, doubleClickAction, handleDateChange, handleProgressChange]);
+	const config = useMemo<GanttChartConfig>(() => {
+		void language;
+		return {
+			...GANTT_CONFIG,
+			language: isChineseLanguage() ? 'zh' : 'en',
+			on_click: handleTaskClick,
+			on_dblclick: doubleClickAction === 'none' ? undefined : handleTaskDoubleClick,
+			on_toggle_collapse: handleToggleCollapse,
+			on_date_change: (task, start, end) => { void handleDateChange(task, start, end); },
+			on_progress_change: (task, progress) => { void handleProgressChange(task, progress); },
+		};
+	}, [language, handleTaskClick, handleTaskDoubleClick, handleToggleCollapse, doubleClickAction, handleDateChange, handleProgressChange]);
 
 	const destroyEngine = useCallback(() => {
 		engineRef.current?.destroy();

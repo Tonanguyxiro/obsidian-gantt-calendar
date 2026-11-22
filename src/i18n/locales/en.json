@@ -1045,7 +1045,8 @@
         "removeTag": "Remove tag",
         "noMatches": "No matching tags",
         "pressEnterToCreate": "Press Enter to create #{{tag}}",
-        "impliedBy": "Already included by a selected sub-tag — click to browse its children"
+        "impliedBy": "Already included by a selected sub-tag — click to browse its children",
+        "suggestHint": "↑↓ Navigate · Tab / Click to complete · Enter to confirm"
       },
       "createIn": "Create in",
       "createInDaily": "Daily note ({{name}})",
@@ -1746,5 +1747,23 @@
   "taskWarnings": {
     "mixedFormat": "Mixed task formats, please fix",
     "unscheduled": "No date planned, please set one"
+  },
+  "emptyGuide": {
+    "title": "Welcome to Gantt Calendar",
+    "description": "No tasks match your vault yet. Add a task in any Markdown note using Tasks or Dataview syntax, or create one directly below.",
+    "filterLabel": "Active global filter:",
+    "noFilterHint": "All Markdown checklist items (- [ ]) are indexed",
+    "examplesTitle": "Task Syntax Examples",
+    "copy": "Copy",
+    "copied": "Copied",
+    "createTaskCta": "Create First Task",
+    "examples": {
+      "rangeLabel": "Tasks · Date range & priority",
+      "rangeText": "Plan project sprint",
+      "slotLabel": "Tasks · Timed slot (Day Planner)",
+      "slotText": "Deep work session",
+      "dataviewLabel": "Dataview · Inline fields",
+      "dataviewText": "Review release checklist"
+    }
   }
 }

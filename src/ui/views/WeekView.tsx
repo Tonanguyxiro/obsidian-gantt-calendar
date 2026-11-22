@@ -1,20 +1,19 @@
-import { useCallback, useEffect, useMemo, useState, type JSX } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import { getWeekOfDate } from '../../dateUtils/dateUtilsIndex';
 import { WeekViewConfig } from '../../components/TaskCard';
 import { WeekViewClasses } from '../../utils/bem';
-import { usePlugin } from '../pluginContext';
 import { useCalendarStore, selectViewFilter } from '../store/calendarStore';
 import { applyStatusFilter, applyTagFilter, applySort } from '../utils/taskFilters';
 import { sortTasks } from '../../tasks/taskSorter';
 import { generateVirtualInstances } from '../../tasks/virtualTaskGenerator';
 import { i18n } from '../../i18n/i18n';
-import { buildWeekTimelineModel, isOnTimeAxis } from './week/timelineModel';
+import { buildWeekTimelineModel, computeMaxLanesForWidth, isOnTimeAxis } from './week/timelineModel';
 import { useFileTaskLayer } from '../utils/useFileTaskLayer';
 import { useIcsLayer } from '../utils/useIcsLayer';
 import { useAdvancedFilters } from '../utils/useAdvancedFilters';
 import { FileTaskLayerProvider } from '../components/FileTaskCard';
 import { WeekTimelineGrid } from './week/WeekTimelineGrid';
-import { useIsPhone } from '../utils/platform';
+import { useElementWidth, useIsPhone } from '../utils/platform';
 import { useViewTasks } from '../utils/useViewTasks';
 import { useTodayKey } from '../utils/useTodayKey';
 
@@ -23,29 +22,32 @@ import { useTodayKey } from '../utils/useTodayKey';
  * 数据编排：周数据 + 筛选/排序 + 虚拟周期实例 → 连续画布模型，渲染交给 WeekTimelineGrid
  */
 export function WeekView(): JSX.Element {
-	const plugin = usePlugin();
 	const currentDate = useCalendarStore((s) => s.currentDate);
 	const setCurrentDate = useCalendarStore((s) => s.setCurrentDate);
 	const filter = useCalendarStore((s) => selectViewFilter(s, 'week'));
 	const updateSeq = useCalendarStore((s) => s.updateSeq);
 	const refreshTasks = useCalendarStore((s) => s.refreshTasks);
 
-	const startOnMonday = !!plugin.settings.startOnMonday;
-	const dateField = plugin.settings.dateFilterField || 'dueDate';
-	const ganttStartField = plugin.settings.ganttStartField || 'startDate';
-	const ganttEndField = plugin.settings.ganttEndField || 'dueDate';
-	const tasks = useViewTasks(ganttStartField, ganttEndField, dateField, true);
-	const showLunar = !!plugin.settings.showLunar;
-	const recurringLimit = plugin.settings.recurringTaskDisplayLimit ?? 5;
+	const startOnMonday = useCalendarStore((s) => !!s.settings.startOnMonday);
+	const dateField = useCalendarStore((s) => s.settings.dateFilterField) || 'dueDate';
+	const ganttStartField = useCalendarStore((s) => s.settings.ganttStartField) || 'startDate';
+	const ganttEndField = useCalendarStore((s) => s.settings.ganttEndField) || 'dueDate';
+	const showLunar = useCalendarStore((s) => !!s.settings.showLunar);
+	const recurringLimit = useCalendarStore((s) => s.settings.recurringTaskDisplayLimit) ?? 5;
+	const weekViewShowCheckbox = useCalendarStore((s) => s.settings.weekViewShowCheckbox);
+	const weekViewShowTags = useCalendarStore((s) => s.settings.weekViewShowTags);
+	const weekViewShowPriority = useCalendarStore((s) => s.settings.weekViewShowPriority);
+	const weekViewShowTicktick = useCalendarStore((s) => s.settings.weekViewShowTicktick);
+	const language = useCalendarStore((s) => s.settings.language);
 
 	const config = useMemo(() => ({
 		...WeekViewConfig,
 		enableDrag: true,
-		showCheckbox: plugin.settings.weekViewShowCheckbox,
-		showTags: plugin.settings.weekViewShowTags,
-		showPriority: plugin.settings.weekViewShowPriority,
-		showTicktick: plugin.settings.weekViewShowTicktick,
-	}), [plugin.settings]);
+		showCheckbox: weekViewShowCheckbox,
+		showTags: weekViewShowTags,
+		showPriority: weekViewShowPriority,
+		showTicktick: weekViewShowTicktick,
+	}), [weekViewShowCheckbox, weekViewShowTags, weekViewShowPriority, weekViewShowTicktick]);
 	// 时间块使用紧凑变体，高度由块容器按时长撑开
 	const timelineConfig = useMemo(() => ({ ...config, variant: 'timeline' as const }), [config]);
 
@@ -67,6 +69,9 @@ export function WeekView(): JSX.Element {
 		return d;
 	}, [weekData]);
 
+	const weekRange = useMemo(() => ({ start: weekStart, end: weekEnd }), [weekStart, weekEnd]);
+	const tasks = useViewTasks(ganttStartField, ganttEndField, dateField, true, weekRange);
+
 	// 全局筛选 + 排序
 	const advanced = useAdvancedFilters('week');
 	const scoped = useMemo(() => (
@@ -87,21 +92,31 @@ export function WeekView(): JSX.Element {
 	const mergeIcs = useIcsLayer(ganttStartField, ganttEndField, dateField);
 	const fileLayer = useFileTaskLayer('week', scoped, ganttStartField, ganttEndField, dateField);
 
+	const viewRef = useRef<HTMLDivElement>(null);
+	const viewWidth = useElementWidth(viewRef);
+	const isPhone = useIsPhone();
+	const visibleCount = isPhone ? 3 : 7;
+	const maxLane = useMemo(
+		() => computeMaxLanesForWidth(viewWidth > 48 ? (viewWidth - 48) / visibleCount : 0),
+		[viewWidth, visibleCount],
+	);
+
 	// 连续画布模型：时间块分段 + lane 布局 + 全天横跨条
 	const model = useMemo(() => (
 		buildWeekTimelineModel(
 			mergeIcs(fileLayer.merge(combined, (t) => isOnTimeAxis(t, ganttStartField, ganttEndField, dateField))),
-			weekStart, ganttStartField, ganttEndField, dateField,
+			weekStart, ganttStartField, ganttEndField, dateField, maxLane,
 		)
-	), [combined, fileLayer, mergeIcs, weekStart, ganttStartField, ganttEndField, dateField]);
+	), [combined, fileLayer, mergeIcs, weekStart, ganttStartField, ganttEndField, dateField, maxLane]);
 
 	const handleRefresh = useCallback(() => refreshTasks(), [refreshTasks]);
 
-	const dayNames = i18n.t('views.weekView.weekdays') as unknown as string[];
+	const dayNames = useMemo(() => {
+		void language;
+		return i18n.t('views.weekView.weekdays') as unknown as string[];
+	}, [language]);
 
 	// ===== 手机端 3 日滑动窗口：可见日为周内连续窗口，swipe 翻页，跨周边界滚到相邻周 =====
-	const isPhone = useIsPhone();
-	const visibleCount = isPhone ? 3 : 7;
 	const [windowStart, setWindowStart] = useState(0);
 
 	// 切周后窗口定位到今天（若本周含今天）或周首日
@@ -138,7 +153,7 @@ export function WeekView(): JSX.Element {
 
 	return (
 		<FileTaskLayerProvider value={{ tasksByFile: fileLayer.tasksByFile, onRefresh: handleRefresh }}>
-		<div className="gc-view gc-view--week">
+		<div ref={viewRef} className="gc-view gc-view--week">
 			<div className={WeekViewClasses.elements.grid}>
 				<WeekTimelineGrid
 					days={weekData.days}

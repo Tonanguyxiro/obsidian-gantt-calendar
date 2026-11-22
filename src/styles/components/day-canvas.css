@@ -23,7 +23,7 @@
 	flex-shrink: 0;
 	height: var(--gc-tl-hour-h, 50px);
 	box-sizing: border-box;
-	font-size: 11px;
+	font-size: var(--gc-font-xxs);
 	color: var(--text-muted);
 	text-align: right;
 	padding: 2px 6px 0 0;
@@ -36,6 +36,7 @@
 	position: relative;
 	flex: 1;
 	min-width: 0;
+	isolation: isolate;
 	border-right: 1px solid var(--gc-border-hairline);
 	background-image:
 		repeating-linear-gradient(
@@ -64,13 +65,23 @@
 	border-radius: 6px;
 	overflow: hidden;
 	min-width: 0;
+	z-index: var(--gc-block-z, 1);
+	container: gc-block / inline-size;
+}
+
+.gc-day-canvas__block:hover,
+.gc-day-canvas__block:focus-within {
+	z-index: 20;
+	box-shadow: var(--gc-elev-3);
+	outline: 1px solid color-mix(in srgb, var(--interactive-accent) 45%, transparent);
+	outline-offset: -1px;
 }
 
 /* ===== 时间块卡片（日、周、侧栏时间线共用） =====
    版式：左对齐、自上而下 —— 复选框 | 标题 | 重复/优先级，下一行时段，再下一行标签。
    外观：按状态色调浅底 + 左侧 3px 色条；按块高（size 容器查询）逐档显示时段、标签与多行标题。 */
 :is(.gc-day-canvas__block, .gc-week-view__time-block) {
-	container: gc-time-block / size;
+	container: gc-block gc-time-block / size;
 }
 
 :is(.gc-day-canvas__block, .gc-week-view__time-block) .gc-task-card.gc-task-card--timeline {
@@ -156,7 +167,7 @@
 :is(.gc-day-canvas__block, .gc-week-view__time-block) .gc-task-card--timeline .gc-task-card__block-time {
 	grid-area: time;
 	display: none;
-	font-size: 10px;
+	font-size: var(--gc-font-2xs);
 	line-height: 13px;
 	color: var(--text-muted);
 	font-variant-numeric: tabular-nums;
@@ -168,7 +179,7 @@
 :is(.gc-day-canvas__block, .gc-week-view__time-block) .gc-task-card--timeline .gc-task-card__repeat-indicator {
 	grid-area: rep;
 	margin-left: 4px;
-	font-size: 10px;
+	font-size: var(--gc-font-2xs);
 	line-height: 16px;
 	opacity: 0.7;
 }
@@ -183,9 +194,14 @@
 :is(.gc-day-canvas__block, .gc-week-view__time-block) .gc-task-card--timeline .gc-task-card__priority-badge {
 	width: auto;
 	height: 16px;
-	font-size: 11px;
+	font-size: var(--gc-font-xxs);
 	background: none;
 	opacity: 0.85;
+}
+
+:is(.gc-day-canvas__block, .gc-week-view__time-block) .gc-task-card--timeline .gc-task-card__priority-badge .svg-icon {
+	width: 12px;
+	height: 12px;
 }
 
 /* 标签：只在高块里显示一行，超出的整枚裁掉 */
@@ -206,7 +222,7 @@
 	padding: 0 6px;
 	border: 0;
 	border-radius: 8px;
-	font-size: 10px;
+	font-size: var(--gc-font-2xs);
 	line-height: 16px;
 	overflow: hidden;
 }
@@ -231,7 +247,7 @@
 /* < 18px（15 分钟 ≈ 12px）：缩一号字，行高贴合块高，避免标题下半截被裁 */
 @container gc-time-block (max-height: 17px) {
 	:is(.gc-day-canvas__block, .gc-week-view__time-block) .gc-task-card.gc-task-card--timeline .gc-task-card__text {
-		font-size: 10px;
+		font-size: var(--gc-font-2xs);
 		line-height: 11px;
 	}
 	:is(.gc-day-canvas__block, .gc-week-view__time-block) .gc-task-card--timeline :is(.gc-task-card__priority, .gc-task-card__repeat-indicator) {
@@ -305,54 +321,245 @@
 	}
 }
 
-/* 窄列（< 100px，重叠并排）：只留复选框与标题；够高时复选框独占首行、标题满宽换行 */
-@container gc-time-block (max-width: 99px) {
-	:is(.gc-day-canvas__block, .gc-week-view__time-block) .gc-task-card--timeline :is(.gc-task-card__block-time, .gc-task-card__priority, .gc-task-card__repeat-indicator) {
-		display: none;
-	}
-	:is(.gc-day-canvas__block, .gc-week-view__time-block) .gc-task-card.gc-task-card--timeline .gc-task-card__tags {
-		display: none;
-	}
-}
-
-@container gc-time-block (max-width: 99px) and (min-height: 44px) {
+/* 窄列（≤ 110px，分屏或重叠并排）：收窄边距、隐藏标签与次要元数据，按高度限制行数防止末行被纵切 */
+@container gc-block (max-width: 110px) {
 	:is(.gc-day-canvas__block, .gc-week-view__time-block) .gc-task-card.gc-task-card--timeline {
-		grid-template-columns: auto minmax(0, 1fr);
-		grid-template-areas:
-			"cb ."
-			"title title";
-		row-gap: 2px;
+		align-content: start;
+		padding: 2px 2px 2px 3px;
+		gap: 2px;
+		row-gap: 1px;
+		column-gap: 2px;
+	}
+	:is(.gc-day-canvas__block, .gc-week-view__time-block) .gc-task-card.gc-task-card--timeline :is(.gc-task-card__tags, .gc-task-card__metadata, .gc-task-card__ticktick, .gc-task-card__file, .gc-task-card__warning, .gc-task-card__block-time, .gc-task-card__times, .gc-task-card__priority, .gc-task-card__priority-badge, .gc-task-card__repeat-indicator) {
+		display: none;
+	}
+	:is(.gc-day-canvas__block, .gc-week-view__time-block) :is(.gc-week-view__time-block-time, .gc-day-canvas__block-time) {
+		display: none;
 	}
 	:is(.gc-day-canvas__block, .gc-week-view__time-block) .gc-task-card.gc-task-card--timeline .gc-task-card__text {
 		display: -webkit-box;
 		-webkit-box-orient: vertical;
 		-webkit-line-clamp: var(--gc-narrow-lines, 2);
+		overflow: hidden;
 		white-space: normal;
+		word-break: break-word;
 		overflow-wrap: anywhere;
+		text-overflow: ellipsis;
+		line-height: 1.2;
+		min-width: 0;
+		width: 100%;
+	}
+	/* ICS 订阅块在窄列中也保留干净多行换行并隐藏易遮挡的时段与地点 */
+	:is(.gc-day-canvas__canvas, .gc-week-view__day-col) :is(.gc-day-canvas__block, .gc-week-view__time-block) .gc-ics-event {
+		flex-direction: column;
+		align-items: stretch;
+		justify-content: flex-start;
+		padding: 2px 2px 2px 3px;
+		gap: 2px;
+	}
+	:is(.gc-day-canvas__block, .gc-week-view__time-block) .gc-ics-event .gc-ics-event__block-time,
+	:is(.gc-day-canvas__block, .gc-week-view__time-block) .gc-ics-event .gc-ics-event__location {
+		display: none;
+	}
+	:is(.gc-day-canvas__block, .gc-week-view__time-block) .gc-ics-event .gc-ics-event__title {
+		display: -webkit-box;
+		-webkit-box-orient: vertical;
+		-webkit-line-clamp: var(--gc-narrow-lines, 2);
+		overflow: hidden;
+		white-space: normal;
+		word-break: break-word;
+		overflow-wrap: anywhere;
+		text-overflow: ellipsis;
+		line-height: 1.2;
+		min-width: 0;
+		width: 100%;
 	}
 }
 
-@container gc-time-block (max-width: 99px) and (min-height: 76px) {
+@container gc-block (max-width: 110px) and (max-height: 43px) {
+	:is(.gc-day-canvas__block, .gc-week-view__time-block) .gc-task-card.gc-task-card--timeline {
+		--gc-narrow-lines: 1;
+	}
+}
+
+@container gc-block (max-width: 110px) and (min-height: 44px) {
+	:is(.gc-day-canvas__block, .gc-week-view__time-block) .gc-task-card.gc-task-card--timeline {
+		grid-template-columns: auto minmax(0, 1fr);
+		grid-template-areas:
+			"cb ."
+			"title title";
+		padding-block: 1px;
+		row-gap: 1px;
+		--gc-narrow-lines: 1;
+	}
+	:is(.gc-day-canvas__block, .gc-week-view__time-block) .gc-task-card--timeline .gc-task-card__checkbox {
+		width: 14px;
+		height: 14px;
+		margin-top: 0;
+	}
+}
+
+@container gc-block (max-width: 110px) and (min-height: 48px) {
+	:is(.gc-day-canvas__block, .gc-week-view__time-block) .gc-task-card.gc-task-card--timeline {
+		--gc-narrow-lines: 2;
+	}
+}
+
+@container gc-block (max-width: 110px) and (min-height: 64px) {
+	:is(.gc-day-canvas__block, .gc-week-view__time-block) .gc-task-card.gc-task-card--timeline {
+		--gc-narrow-lines: 3;
+	}
+}
+
+@container gc-block (max-width: 110px) and (min-height: 78px) {
 	:is(.gc-day-canvas__block, .gc-week-view__time-block) .gc-task-card.gc-task-card--timeline {
 		--gc-narrow-lines: 4;
 	}
 }
 
-@container gc-time-block (max-width: 99px) and (min-height: 140px) {
+@container gc-block (max-width: 110px) and (min-height: 108px) {
+	:is(.gc-day-canvas__block, .gc-week-view__time-block) .gc-task-card.gc-task-card--timeline {
+		--gc-narrow-lines: 6;
+	}
+}
+
+@container gc-block (max-width: 110px) and (min-height: 136px) {
 	:is(.gc-day-canvas__block, .gc-week-view__time-block) .gc-task-card.gc-task-card--timeline {
 		--gc-narrow-lines: 8;
 	}
 }
 
-/* 极窄（< 60px）：去掉复选框，标题从顶端开始 */
-@container gc-time-block (max-width: 59px) {
+@container gc-block (max-width: 110px) and (min-height: 192px) {
+	:is(.gc-day-canvas__block, .gc-week-view__time-block) .gc-task-card.gc-task-card--timeline {
+		--gc-narrow-lines: 12;
+	}
+}
+
+/* 极窄（≤ 68px，如 368px 分屏 7 列）：隐藏复选框、优先级和时刻，只留清晰多行标题，按高度限制行数防末行裁切 */
+@container gc-block (max-width: 68px) {
 	:is(.gc-day-canvas__block, .gc-week-view__time-block) .gc-task-card.gc-task-card--timeline {
 		grid-template-columns: minmax(0, 1fr);
 		grid-template-areas: "title";
-		padding: 3px 3px 3px 6px;
+		align-content: start;
+		padding: 1px 2px 1px 3px;
+		gap: 1px;
+		box-shadow: inset 2px 0 0 var(--gc-block-accent);
 	}
-	:is(.gc-day-canvas__block, .gc-week-view__time-block) .gc-task-card--timeline .gc-task-card__checkbox {
+	:is(.gc-day-canvas__block, .gc-week-view__time-block) .gc-task-card.gc-task-card--timeline :is(.gc-task-card__checkbox, .gc-task-card__priority, .gc-task-card__priority-badge, .gc-task-card__repeat-indicator, .gc-task-card__block-time, .gc-task-card__times) {
 		display: none;
+	}
+	:is(.gc-day-canvas__block, .gc-week-view__time-block) :is(.gc-week-view__time-block-time, .gc-day-canvas__block-time) {
+		display: none;
+	}
+	:is(.gc-day-canvas__block, .gc-week-view__time-block) .gc-task-card.gc-task-card--timeline .gc-task-card__text {
+		grid-area: title;
+		grid-column: 1 / -1;
+		font-size: var(--gc-font-xxs);
+		line-height: 1.15;
+		min-width: 0;
+		width: 100%;
+		white-space: normal;
+		word-break: break-word;
+		overflow-wrap: anywhere;
+		text-overflow: ellipsis;
+	}
+	:is(.gc-day-canvas__canvas, .gc-week-view__day-col) :is(.gc-day-canvas__block, .gc-week-view__time-block) .gc-ics-event {
+		padding: 1px 2px 1px 3px;
+		gap: 1px;
+		box-shadow: inset 2px 0 0 var(--gc-ics-color);
+	}
+	:is(.gc-day-canvas__block, .gc-week-view__time-block) .gc-ics-event .gc-ics-event__title {
+		font-size: var(--gc-font-xxs);
+		line-height: 1.15;
+		min-width: 0;
+		width: 100%;
+	}
+	:is(.gc-day-canvas__canvas, .gc-week-view__day-col) :is(.gc-day-canvas__block, .gc-week-view__time-block) .gc-file-task {
+		padding: 1px 2px 1px 3px;
+		gap: 2px;
+		height: 100%;
+		align-items: flex-start;
+	}
+	:is(.gc-day-canvas__block, .gc-week-view__time-block) .gc-file-task :is(.gc-file-task__icon, .gc-file-task__count) {
+		display: none;
+	}
+	:is(.gc-day-canvas__block, .gc-week-view__time-block) .gc-file-task .gc-file-task__title {
+		display: -webkit-box;
+		-webkit-box-orient: vertical;
+		-webkit-line-clamp: var(--gc-narrow-lines, 2);
+		overflow: hidden;
+		font-size: var(--gc-font-xxs);
+		line-height: 1.15;
+		white-space: normal;
+		word-break: break-word;
+		overflow-wrap: anywhere;
+		text-overflow: ellipsis;
+	}
+}
+
+@container gc-block (max-width: 68px) and (max-height: 27px) {
+	:is(.gc-day-canvas__block, .gc-week-view__time-block) :is(.gc-task-card.gc-task-card--timeline, .gc-ics-event, .gc-file-task) {
+		--gc-narrow-lines: 1;
+	}
+}
+
+@container gc-block (max-width: 68px) and (min-height: 28px) {
+	:is(.gc-day-canvas__block, .gc-week-view__time-block) :is(.gc-task-card.gc-task-card--timeline, .gc-ics-event, .gc-file-task) {
+		--gc-narrow-lines: 2;
+	}
+}
+
+@container gc-block (max-width: 68px) and (min-height: 42px) {
+	:is(.gc-day-canvas__block, .gc-week-view__time-block) :is(.gc-task-card.gc-task-card--timeline, .gc-ics-event, .gc-file-task) {
+		--gc-narrow-lines: 3;
+	}
+}
+
+@container gc-block (max-width: 68px) and (min-height: 55px) {
+	:is(.gc-day-canvas__block, .gc-week-view__time-block) :is(.gc-task-card.gc-task-card--timeline, .gc-ics-event, .gc-file-task) {
+		--gc-narrow-lines: 4;
+	}
+}
+
+@container gc-block (max-width: 68px) and (min-height: 70px) {
+	:is(.gc-day-canvas__block, .gc-week-view__time-block) :is(.gc-task-card.gc-task-card--timeline, .gc-ics-event, .gc-file-task) {
+		--gc-narrow-lines: 5;
+	}
+}
+
+@container gc-block (max-width: 68px) and (min-height: 95px) {
+	:is(.gc-day-canvas__block, .gc-week-view__time-block) :is(.gc-task-card.gc-task-card--timeline, .gc-ics-event, .gc-file-task) {
+		--gc-narrow-lines: 7;
+	}
+}
+
+@container gc-block (max-width: 68px) and (min-height: 120px) {
+	:is(.gc-day-canvas__block, .gc-week-view__time-block) :is(.gc-task-card.gc-task-card--timeline, .gc-ics-event, .gc-file-task) {
+		--gc-narrow-lines: 9;
+	}
+}
+
+@container gc-block (max-width: 68px) and (min-height: 150px) {
+	:is(.gc-day-canvas__block, .gc-week-view__time-block) :is(.gc-task-card.gc-task-card--timeline, .gc-ics-event, .gc-file-task) {
+		--gc-narrow-lines: 11;
+	}
+}
+
+@container gc-block (max-width: 68px) and (min-height: 200px) {
+	:is(.gc-day-canvas__block, .gc-week-view__time-block) :is(.gc-task-card.gc-task-card--timeline, .gc-ics-event, .gc-file-task) {
+		--gc-narrow-lines: 15;
+	}
+}
+
+/* 15 分钟超矮块与极窄列叠加时仍保持 11px 单行不纵向裁切 */
+@container gc-time-block (max-height: 17px) {
+	:is(.gc-day-canvas__block, .gc-week-view__time-block) .gc-task-card.gc-task-card--timeline {
+		padding-block: 0;
+	}
+	:is(.gc-day-canvas__block, .gc-week-view__time-block) .gc-task-card.gc-task-card--timeline .gc-task-card__text {
+		font-size: var(--gc-font-2xs);
+		line-height: 11px;
+		-webkit-line-clamp: 1;
 	}
 }
 
@@ -372,7 +579,7 @@
 	position: absolute;
 	left: 50%;
 	transform: translateX(-50%);
-	font-size: 9px;
+	font-size: var(--gc-font-2xs);
 	line-height: 1;
 	color: var(--text-muted);
 	z-index: 2;
@@ -390,7 +597,7 @@
 }
 
 .gc-day-canvas__block--stacked {
-	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+	box-shadow: var(--gc-elev-2);
 }
 
 /* 块右上角时刻标签 */
@@ -399,9 +606,8 @@
 	top: 1px;
 	right: 3px;
 	z-index: 2;
-	/* 固定 10px：ICS 事件卡 padding-top:14px 按「标签 13px 盒高」让位，
-	   放大字号会撑高标签盒并与 ICS 标题相交（真机 check-timeblock-overlap 已复现） */
-	font-size: 10px;
+	/* 上限 10px（--gc-font-2xs）：ICS 事件卡按「标签 13px 盒高」让位，避免放大与标题相交 */
+	font-size: var(--gc-font-2xs);
 	line-height: 1.3;
 	padding: 0 2px;
 	border-radius: 3px;
@@ -477,7 +683,7 @@
 	position: absolute;
 	top: 2px;
 	left: 3px;
-	font-size: 10px;
+	font-size: var(--gc-font-2xs);
 	line-height: 1.3;
 	padding: 0 3px;
 	border-radius: 3px;

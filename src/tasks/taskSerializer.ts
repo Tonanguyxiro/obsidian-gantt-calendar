@@ -154,12 +154,12 @@ export function serializeTask(
 		metadataFields: updates.metadataFields !== undefined ? (updates.metadataFields || undefined) : task.metadataFields,
 		feishuGuid: updates.feishuGuid !== undefined ? (updates.feishuGuid || undefined) : task.feishuGuid,
 		// 处理日期字段：undefined 使用原始值，null 转为 undefined（表示清除）
-		createdDate: updates.createdDate !== undefined ? (updates.createdDate || undefined) : task.createdDate,
-		startDate: updates.startDate !== undefined ? (updates.startDate || undefined) : task.startDate,
-		scheduledDate: updates.scheduledDate !== undefined ? (updates.scheduledDate || undefined) : task.scheduledDate,
-		dueDate: updates.dueDate !== undefined ? (updates.dueDate || undefined) : task.dueDate,
-		cancelledDate: updates.cancelledDate !== undefined ? (updates.cancelledDate || undefined) : task.cancelledDate,
-		completionDate: updates.completionDate !== undefined ? (updates.completionDate || undefined) : task.completionDate,
+		createdDate: updates.createdDate !== undefined ? (updates.createdDate || undefined) : (task.createdDate || undefined),
+		startDate: updates.startDate !== undefined ? (updates.startDate || undefined) : (task.startDate || undefined),
+		scheduledDate: updates.scheduledDate !== undefined ? (updates.scheduledDate || undefined) : (task.scheduledDate || undefined),
+		dueDate: updates.dueDate !== undefined ? (updates.dueDate || undefined) : (task.dueDate || undefined),
+		cancelledDate: updates.cancelledDate !== undefined ? (updates.cancelledDate || undefined) : (task.cancelledDate || undefined),
+		completionDate: updates.completionDate !== undefined ? (updates.completionDate || undefined) : (task.completionDate || undefined),
 		datePrecision: updates.datePrecision !== undefined ? updates.datePrecision : task.datePrecision,
 	};
 
@@ -264,12 +264,15 @@ export function serializeTask(
 	];
 
 	for (const field of dateOrder) {
-		const date = merged[field];
+		const date = merged[field] as unknown;
 
-		if (date instanceof Date) {
+		if (date instanceof Date || (date !== null && typeof date === 'object' && typeof (date as { getTime?: unknown }).getTime === 'function')) {
+			const dateObj = date as Date;
+			if (Number.isNaN(dateObj.getTime())) continue;
 			const precision = merged.datePrecision?.[field as keyof NonNullable<typeof merged.datePrecision>];
 			const formatStr = precision === 'time' ? 'yyyy-MM-dd HH:mm' : 'yyyy-MM-dd';
-			const dateStr = formatDate(date, formatStr);
+			const dateStr = formatDate(dateObj, formatStr);
+			if (!dateStr) continue;
 			if (format === 'tasks') {
 				parts.push(`${getDateEmoji(field)} ${dateStr}`);
 			} else {

@@ -42,12 +42,33 @@
 	overflow-x: hidden;
 }
 
+/* 月 / 周视图铺满内容区（无外边距，滚动由各自内部容器承担） */
+.calendar-content:has(> .gc-month-anim),
+.calendar-content:has(> .gc-view--week) {
+	padding: 0;
+	overflow: hidden;
+	scrollbar-gutter: auto;
+}
+
+/* 任务视图桌面端有界高度供 Virtuoso 虚拟滚动 */
+.calendar-content:has(> .gc-view--task) {
+	overflow: hidden;
+	padding: 0;
+	scrollbar-gutter: auto;
+}
+
 .calendar-content.gantt-mode {
 	overflow: auto;
 	display: flex;
 	flex-direction: column;
 	flex: 1;
 	min-height: 0;
+}
+
+/* 主日历叶子移除 Obsidian 默认 .view-content 内边距（12px 12px 32px），使顶栏与日历贴边对齐并释放上方空间 */
+.workspace-leaf-content[data-type="gantt-calendar-view"] > .view-content {
+	padding: 0;
+	overflow: hidden;
 }
 
 .view-content.gantt-root {
@@ -166,21 +187,21 @@
    ======================================== */
 .gc-view.gc-view--month {
 	display: grid;
-	/* 7行: 第1行星期标题(自动高度) + 6行日期(高度自适应)：
-	   auto 轨道在 align-content: stretch 下均分剩余空间铺满视图，
-	   某周内容（横跨条 + 格内任务）更多时该行随内容增高，整体超出时纵向滚动；
-	   星期标题行用 max-content，不参与 stretch 均分 */
-	grid-template-rows: max-content repeat(6, auto);
+	/* 第1行星期标题(自动高度) + N行日期（由 --gc-month-weeks 动态指定）：
+	   minmax(min-content, 1fr) 在未溢出时均分剩余空间铺满 100% 高度，
+	   某周内容更多时仍随内容增高，整体超出时纵向滚动 */
+	grid-template-rows: max-content repeat(var(--gc-month-weeks, 6), minmax(min-content, 1fr));
 	align-content: stretch;
 	/* 8列: 第1列周数(40px固定) + 7列星期(均分；minmax(0,·) 防长任务名撑宽列) */
 	grid-template-columns: 40px repeat(7, minmax(0, 1fr));
 	gap: 0;
+	width: 100%;
 	height: 100%;
 	padding: 0;
 	overflow-x: hidden;
 	overflow-y: auto;
-	border-top: 1px solid var(--gc-border-hairline);
-	border-left: 1px solid var(--gc-border-hairline);
+	border-top: none;
+	border-left: none;
 }
 
 /* Week/Day Layout */
@@ -240,12 +261,26 @@
 .gc-view--task {
 	display: flex;
 	flex-direction: column;
-	gap: 6px;
 	padding: 12px;
-	height: auto;
-	flex: none;
-	overflow: visible;
+	height: 100%;
+	flex: 1;
+	min-height: 0;
+	overflow: hidden;
 	width: 100%;
+	box-sizing: border-box;
+}
+
+.gc-view--task:has(> .gc-empty-guide) {
+	overflow-y: auto;
+}
+
+.gc-view--task [data-virtuoso-scroller] {
+	scrollbar-gutter: stable;
+}
+
+body.gc-is-phone .gc-view--task {
+	height: auto;
+	overflow: visible;
 }
 
 /* ==================== Task View 序号列 ==================== */
@@ -255,13 +290,14 @@
 	display: flex;
 	align-items: flex-start;
 	gap: 8px;
+	padding-bottom: 6px;
 }
 
 .gc-task-view__index {
 	flex: 0 0 32px;
-	/* 13px = 卡片 1px 边框 + 10px 内边距 + 与首行文字行盒的半高差，
+	/* 10px = 8px 卡片上内边距 + 与首行文字行盒的半高差，
 	   使序号垂直居中于任务标题首行（卡片首行行高 1.4 倍 font-sm） */
-	padding-top: 13px;
+	padding-top: 10px;
 	font-size: var(--gc-font-xs);
 	font-weight: 500;
 	line-height: 1.2;

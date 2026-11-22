@@ -28,10 +28,45 @@ function generateTaskId(task: GCTask): string {
 	return `${task.filePath}:${task.lineNumber}`;
 }
 
+const TASK_DATE_FIELDS = [
+	'createdDate',
+	'startDate',
+	'scheduledDate',
+	'dueDate',
+	'completionDate',
+	'cancelledDate',
+] as const;
+
+const MAX_BUCKET_SPAN_DAYS = 62;
+const FULL_BUCKET_SCAN_THRESHOLD_DAYS = 4000;
+
+function isValidDateValue(d: unknown): d is Date {
+	return !!d && typeof (d as Date).getTime === 'function' && !Number.isNaN((d as Date).getTime());
+}
+
+function toLocalDayKey(d: Date): string {
+	const y = d.getFullYear();
+	const m = String(d.getMonth() + 1).padStart(2, '0');
+	const day = String(d.getDate()).padStart(2, '0');
+	return `${y}-${m}-${day}`;
+}
+
+function localDaySerial(d: Date): number {
+	return Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000);
+}
+
 export class TaskRepository {
 	private dataSources: Map<string, IDataSource> = new Map();
 	private taskCache: Map<string, GCTask> = new Map();
 	private fileIndex: Map<string, Set<string>> = new Map();
+	/** 按本地 'YYYY-MM-DD' 分桶的任务 ID 索引 */
+	private dateBuckets: Map<string, Set<string>> = new Map();
+	/** taskId -> 已写入 dateBuckets 的日期键（更新/删除时精准清理） */
+	private taskBucketKeys: Map<string, string[]> = new Map();
+	/** 跨度超过 62 天的任务 ID（范围查询时直接并入） */
+	private longSpanIds: Set<string> = new Set();
+	/** 存在 repeat 规则的任务 ID（范围查询时始终并入以供视图生成虚拟实例） */
+	private recurringTaskIds: Set<string> = new Set();
 	/** 各缓存 key 的写入序号（越大越新），输出端去重兜底时保留最新的一份 */
 	private writeSeq: Map<string, number> = new Map();
 	private seqCounter = 0;
@@ -50,6 +85,14 @@ export class TaskRepository {
 		source.onChange(async (changes, opts) => {
 			await this.handleSourceChanges(source.sourceId, changes, opts);
 		});
+	}
+
+	/**
+	 * 注销数据源
+	 * @param sourceId - 数据源ID
+	 */
+	unregisterDataSource(sourceId: string): void {
+		this.dataSources.delete(sourceId);
 	}
 
 	/**
@@ -91,7 +134,7 @@ export class TaskRepository {
 		return Array.from(winners.values(), w => w.task);
 	}
 
-	/** 写入缓存并维护文件索引与写入序号 */
+	/** 写入缓存并维护文件索引、写入序号与日期桶二级索引 */
 	private putTask(taskId: string, task: GCTask): void {
 		this.taskCache.set(taskId, task);
 		this.writeSeq.set(taskId, ++this.seqCounter);
@@ -103,13 +146,15 @@ export class TaskRepository {
 			}
 			ids.add(taskId);
 		}
+		this.indexTask(taskId, task);
 	}
 
-	/** 从缓存、文件索引（按任务实际路径与 key 推得的路径）中移除一个 key */
+	/** 从缓存、文件索引与日期桶索引中移除一个 key */
 	private removeKey(taskId: string, filePath?: string): void {
 		const task = this.taskCache.get(taskId);
 		this.taskCache.delete(taskId);
 		this.writeSeq.delete(taskId);
+		this.unindexTask(taskId);
 		const paths = new Set<string>();
 		if (filePath) paths.add(filePath);
 		if (task?.filePath) paths.add(task.filePath);
@@ -124,22 +169,147 @@ export class TaskRepository {
 		}
 	}
 
+	/** 增量维护单任务的日期桶、长跨度与周期模板索引 */
+	private indexTask(taskId: string, task: GCTask): void {
+		this.unindexTask(taskId);
+		if (task.repeat) {
+			this.recurringTaskIds.add(taskId);
+		}
+
+		let minDate: Date | null = null;
+		let minSerial = Infinity;
+		let maxSerial = -Infinity;
+		const dayKeys = new Set<string>();
+
+		for (const field of TASK_DATE_FIELDS) {
+			const value = task[field];
+			if (!isValidDateValue(value)) continue;
+			dayKeys.add(toLocalDayKey(value));
+			const serial = localDaySerial(value);
+			if (serial < minSerial) {
+				minSerial = serial;
+				minDate = value;
+			}
+			if (serial > maxSerial) {
+				maxSerial = serial;
+			}
+		}
+
+		if (minDate !== null) {
+			const spanDays = maxSerial - minSerial;
+			if (spanDays > MAX_BUCKET_SPAN_DAYS) {
+				this.longSpanIds.add(taskId);
+			} else if (spanDays >= 1) {
+				const cursor = new Date(minDate.getFullYear(), minDate.getMonth(), minDate.getDate());
+				while (localDaySerial(cursor) <= maxSerial) {
+					dayKeys.add(toLocalDayKey(cursor));
+					cursor.setDate(cursor.getDate() + 1);
+				}
+			}
+		}
+
+		if (dayKeys.size > 0) {
+			const keys = Array.from(dayKeys);
+			this.taskBucketKeys.set(taskId, keys);
+			for (const key of keys) {
+				let bucket = this.dateBuckets.get(key);
+				if (!bucket) {
+					bucket = new Set();
+					this.dateBuckets.set(key, bucket);
+				}
+				bucket.add(taskId);
+			}
+		}
+	}
+
+	/** 移除单任务在二级索引中的全部条目 */
+	private unindexTask(taskId: string): void {
+		const keys = this.taskBucketKeys.get(taskId);
+		if (keys) {
+			for (const key of keys) {
+				const bucket = this.dateBuckets.get(key);
+				if (bucket) {
+					bucket.delete(taskId);
+					if (bucket.size === 0) {
+						this.dateBuckets.delete(key);
+					}
+				}
+			}
+			this.taskBucketKeys.delete(taskId);
+		}
+		this.longSpanIds.delete(taskId);
+		this.recurringTaskIds.delete(taskId);
+	}
+
 	/**
 	 * 根据日期范围获取任务
+	 * - 传入 `dateField`：返回该字段落在 `[start, end]` 内的任务（向后兼容）
+	 * - 省略 `dateField`：日历范围查询模式，仅按本地日期桶 + 长跨度 + 周期模板索引在 O(days + matchedTasks) 内返回去重候选集
 	 * @param start - 开始日期
 	 * @param end - 结束日期
-	 * @param dateField - 日期字段名
+	 * @param dateField - 日期字段名（可选）
 	 * @returns 任务列表
 	 */
 	getTasksByDateRange(
 		start: Date,
 		end: Date,
-		dateField: keyof GCTask = 'dueDate'
+		dateField?: keyof GCTask
 	): GCTask[] {
-		return Array.from(this.taskCache.values()).filter(task => {
-			const date = task[dateField] as Date | undefined;
-			return date && date >= start && date <= end;
-		});
+		if (!isValidDateValue(start) || !isValidDateValue(end)) {
+			return [];
+		}
+
+		const startSerial = localDaySerial(start);
+		const endSerial = localDaySerial(end);
+		if (startSerial > endSerial) {
+			return [];
+		}
+
+		const candidateIds = new Set<string>();
+		const rangeDays = endSerial - startSerial + 1;
+		if (rangeDays > FULL_BUCKET_SCAN_THRESHOLD_DAYS && rangeDays > this.dateBuckets.size) {
+			const startKey = toLocalDayKey(start);
+			const endKey = toLocalDayKey(end);
+			for (const [key, bucket] of this.dateBuckets) {
+				if (key >= startKey && key <= endKey) {
+					for (const id of bucket) candidateIds.add(id);
+				}
+			}
+		} else {
+			const cursor = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+			while (localDaySerial(cursor) <= endSerial) {
+				const bucket = this.dateBuckets.get(toLocalDayKey(cursor));
+				if (bucket) {
+					for (const id of bucket) candidateIds.add(id);
+				}
+				cursor.setDate(cursor.getDate() + 1);
+			}
+		}
+
+		for (const id of this.longSpanIds) {
+			candidateIds.add(id);
+		}
+		if (dateField === undefined) {
+			for (const id of this.recurringTaskIds) {
+				candidateIds.add(id);
+			}
+		}
+
+		const result: GCTask[] = [];
+		const seenIdentity = new Set<string>();
+		for (const id of candidateIds) {
+			const task = this.taskCache.get(id);
+			if (!task) continue;
+			if (dateField !== undefined) {
+				const date = task[dateField] as unknown;
+				if (!isValidDateValue(date) || date < start || date > end) continue;
+			}
+			const identity = generateTaskId(task);
+			if (seenIdentity.has(identity)) continue;
+			seenIdentity.add(identity);
+			result.push(task);
+		}
+		return result;
 	}
 
 	/**
@@ -292,14 +462,11 @@ export class TaskRepository {
 			for (const filePath of changes.deletedFilePaths) {
 				const taskIds = this.fileIndex.get(filePath);
 				if (taskIds) {
-					// 删除该文件的所有任务
-					for (const taskId of taskIds) {
-						this.taskCache.delete(taskId);
-						this.writeSeq.delete(taskId);
+					// 删除该文件的所有任务及二级索引
+					for (const taskId of Array.from(taskIds)) {
+						this.removeKey(taskId, filePath);
 						this.eventBus.emit('task:deleted', { taskId });
 					}
-					// 清理文件索引
-					this.fileIndex.delete(filePath);
 				}
 			}
 		}
@@ -338,6 +505,10 @@ export class TaskRepository {
 	clear(): void {
 		this.taskCache.clear();
 		this.fileIndex.clear();
+		this.dateBuckets.clear();
+		this.taskBucketKeys.clear();
+		this.longSpanIds.clear();
+		this.recurringTaskIds.clear();
 		this.writeSeq.clear();
 		// 【修复】不清空 eventBus，因为它是 TaskStore 的实例，TaskStore 的监听器会受影响
 		// this.eventBus.clear();

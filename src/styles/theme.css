@@ -15,25 +15,13 @@
 	border-left-color: var(--gc-task-pending);
 }
 
-/* 7.2 Interactive States (hover, active) */
-.gc-task-card--day:hover {
-	transform: translateX(4px);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.gc-task-card--week:hover {
-	transform: translateX(2px);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.gc-task-card--month:hover {
-	transform: translateY(-1px);
-	box-shadow: var(--gc-elev-2);
-}
-
+/* 7.2 Interactive States (hover, active) — 保持列表静稳，仅柔和改变背景 */
+.gc-task-card--day:hover,
+.gc-task-card--week:hover,
+.gc-task-card--month:hover,
 .gc-task-card--task:hover {
-	transform: translateX(4px);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+	transform: none;
+	box-shadow: none;
 }
 
 /* 年视图日期悬停效果（轻浮起，阴影用统一 elev 层级） */
@@ -65,7 +53,7 @@
 /* 周期指示器 */
 .gc-task-card__repeat-indicator {
 	display: inline-flex;
-	font-size: 11px;
+	font-size: var(--gc-font-xxs);
 	color: var(--text-muted);
 	margin-left: 4px;
 	flex-shrink: 0;
@@ -77,15 +65,24 @@
 }
 
 /* 7.4 Custom Status Colors (from Settings) */
-/* 任务卡片背景色和文字颜色 */
+/* 低饱和度底色染色 + 左侧状态色条，替代高饱和实色整行铺满，与 Obsidian 原生文字对比度更协调 */
 .gc-task-card.task-with-status {
-	background-color: var(--task-bg-color, var(--background-secondary));
-	color: var(--task-text-color, var(--text-normal));
+	background-color: color-mix(in srgb, var(--task-bg-color, var(--background-secondary)) 14%, transparent);
+	border-left-color: var(--task-bg-color, var(--gc-task-pending));
+	color: var(--text-normal);
 }
 
-/* 状态文字颜色应用到任务文本元素 */
+.gc-task-card.task-with-status:hover {
+	background-color: color-mix(in srgb, var(--task-bg-color, var(--background-modifier-hover)) 22%, var(--background-modifier-hover));
+}
+
 .gc-task-card.task-with-status .gc-task-card__text {
-	color: var(--task-text-color, var(--text-normal));
+	color: var(--text-normal);
+}
+
+/* 时间轴块（周/日/全天条）保留稍清晰的色块识别度 */
+.gc-task-card.gc-task-card--timeline.task-with-status {
+	background-color: color-mix(in srgb, var(--task-bg-color, var(--background-secondary)) 22%, transparent);
 }
 
 /* 状态颜色应用到边框 - 仅已完成卡片：色条跟随用户配置的状态色，
@@ -174,7 +171,7 @@
 /* 月视图今天样式已收编至 views/month-view.css */
 
 .gc-week-view__header-cell--today {
-	background-color: rgba(255, 107, 107, 0.1);
+	background-color: color-mix(in srgb, var(--gc-today) 10%, transparent);
 }
 
 .gc-week-view__header-cell--today .gc-week-view__day-number {

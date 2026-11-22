@@ -2,9 +2,8 @@ import { useMemo } from 'react';
 import type { GCTask } from '../../types';
 import type { DateFieldType, FileTaskViewKey } from '../../settings/types';
 import { useCalendarStore } from '../store/calendarStore';
-import { usePlugin } from '../pluginContext';
 import { useAdvancedFilters } from './useAdvancedFilters';
-import { fileTaskToCalendarTask, groupTasksByFile, excludeGroupedTasks, isFileTaskFeatureOn } from '../../fileTasks/fileTaskLayer';
+import { fileTaskToCalendarTask, groupTasksByFile, excludeGroupedTasks } from '../../fileTasks/fileTaskLayer';
 
 export interface FileTaskLayer {
 	/** 本视图是否显示 file-based task */
@@ -33,12 +32,13 @@ export function useFileTaskLayer(
 	endField: DateFieldType,
 	dateField: DateFieldType,
 ): FileTaskLayer {
-	const plugin = usePlugin();
 	const allFileTasks = useCalendarStore((s) => s.fileTasks);
 	const { filterFileTasks } = useAdvancedFilters(view);
 	const fileTasks = useMemo(() => filterFileTasks(allFileTasks), [filterFileTasks, allFileTasks]);
-	const options = plugin.settings.fileTaskViews?.[view];
-	const enabled = isFileTaskFeatureOn(plugin.settings) && !!options?.show && fileTasks.length > 0;
+	const fileTaskIncludeDated = useCalendarStore((s) => !!s.settings.fileTaskIncludeDated);
+	const fileTaskIncludeTaskFiles = useCalendarStore((s) => !!s.settings.fileTaskIncludeTaskFiles);
+	const options = useCalendarStore((s) => s.settings.fileTaskViews?.[view]);
+	const enabled = (fileTaskIncludeDated || fileTaskIncludeTaskFiles) && !!options?.show && fileTasks.length > 0;
 	const groupTasks = enabled && !!options?.groupTasks;
 
 	const calendarTasks = useMemo(

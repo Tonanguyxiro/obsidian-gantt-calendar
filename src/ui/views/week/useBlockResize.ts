@@ -3,6 +3,7 @@ import type { TimeBlock, TimeBlockSegment } from './timelineModel';
 import { MIN_DURATION_MIN, minutesToPx, pxToMinutes, snapMinutes, formatMinutes } from './timelineModel';
 import { WeekViewClasses, setCssProps } from '../../../utils/bem';
 import { rafThrottle, type RafThrottled } from './dragFeedback';
+import { useEdgeAutoScroll } from './useEdgeAutoScroll';
 
 /**
  * 时间块上下边缘 resize 鼠标状态机（参考甘特 taskDragController 模式）：
@@ -39,8 +40,18 @@ interface ActiveResize {
 interface DragHandlers {
 	move: (e: PointerEvent) => void;
 	end: (e: PointerEvent) => void;
+	cancel: () => void;
 	/** 按帧合并的预览更新（布局读取 + 样式写入每帧至多一次） */
 	frame: RafThrottled<[number, number, boolean]>;
+}
+
+export interface UseBlockResizeOptions {
+	/** 获取纵向滚动容器（拖拽边缘自动滚动用） */
+	getScrollContainer?: () => HTMLElement | null;
+	/** 滚动容器顶部 sticky 遮挡高度（px） */
+	getTopInset?: () => number;
+	zonePx?: number;
+	maxSpeedPx?: number;
 }
 
 /**
@@ -81,18 +92,39 @@ export function clearBlockDragMeta(): void {
 	blockDragMeta = null;
 }
 
-export function useBlockResize(onCommit: BlockResizeCommit) {
+export function useBlockResize(onCommit: BlockResizeCommit, scrollOptions?: UseBlockResizeOptions) {
 	const activeRef = useRef<ActiveResize | null>(null);
 	const handlersRef = useRef<DragHandlers | null>(null);
 	const commitRef = useRef(onCommit);
 	commitRef.current = onCommit;
+	const scrollOptionsRef = useRef(scrollOptions);
+	scrollOptionsRef.current = scrollOptions;
+	const lastPointerRef = useRef<{ clientX: number; clientY: number; altKey: boolean } | null>(null);
+	const applyPreviewRef = useRef<((clientX: number, clientY: number, altKey: boolean) => void) | null>(null);
+
+	const autoScroller = useEdgeAutoScroll({
+		getScrollContainer: () => scrollOptionsRef.current?.getScrollContainer?.() ?? null,
+		getTopInset: () => scrollOptionsRef.current?.getTopInset?.() ?? 0,
+		zonePx: scrollOptions?.zonePx,
+		maxSpeedPx: scrollOptions?.maxSpeedPx,
+		onScroll: () => {
+			const ptr = lastPointerRef.current;
+			if (ptr && applyPreviewRef.current) {
+				applyPreviewRef.current(ptr.clientX, ptr.clientY, ptr.altKey);
+			}
+		},
+	});
 
 	const detach = useCallback(() => {
+		autoScroller.stop();
+		applyPreviewRef.current = null;
+		lastPointerRef.current = null;
 		const handlers = handlersRef.current;
 		if (handlers) {
 			handlers.frame.cancel();
 			document.removeEventListener('pointermove', handlers.move);
 			document.removeEventListener('pointerup', handlers.end);
+			document.removeEventListener('pointercancel', handlers.cancel);
 			handlersRef.current = null;
 		}
 		if (activeRef.current) {
@@ -101,7 +133,7 @@ export function useBlockResize(onCommit: BlockResizeCommit) {
 		}
 		resizeActive = false;
 		setCssProps(document.body, { cursor: '', userSelect: '' });
-	}, []);
+	}, [autoScroller]);
 
 	/**
 	 * 在块手柄 mousedown 时调用（仅主键）。
@@ -136,11 +168,13 @@ export function useBlockResize(onCommit: BlockResizeCommit) {
 			tipEl,
 		};
 		activeRef.current = active;
+		lastPointerRef.current = { clientX: e.clientX, clientY: e.clientY, altKey: e.altKey };
 
 		// 时刻标签只查一次（原每次 pointermove 都 querySelector）
 		const label = blockEl.querySelector(`.${WeekViewClasses.elements.timeBlockTime}`);
 
-		const frame = rafThrottle((clientX: number, clientY: number, altKey: boolean) => {
+		const applyPreview = (clientX: number, clientY: number, altKey: boolean) => {
+			if (activeRef.current !== active) return;
 			const rect = active.columnEl.getBoundingClientRect();
 			const minutes = snapMinutes(pxToMinutes(clientY - rect.top), altKey);
 
@@ -152,8 +186,8 @@ export function useBlockResize(onCommit: BlockResizeCommit) {
 				active.newEndMin = Math.min(24 * 60, Math.max(minutes, active.seg.startMin + MIN_DURATION_MIN));
 			}
 
-			if (active.newStartMin === active.seg.startMin && active.newEndMin === active.seg.endMin) return;
-			active.changed = true;
+			if (active.newStartMin === active.seg.startMin && active.newEndMin === active.seg.endMin && !active.changed) return;
+			active.changed = active.newStartMin !== active.seg.startMin || active.newEndMin !== active.seg.endMin;
 
 			// 乐观 DOM 预览
 			active.blockEl.style.top = `${minutesToPx(active.newStartMin)}px`;
@@ -162,12 +196,20 @@ export function useBlockResize(onCommit: BlockResizeCommit) {
 			active.tipEl.style.left = `${clientX + 12}px`;
 			active.tipEl.style.top = `${clientY - 28}px`;
 			active.tipEl.textContent = `${formatMinutes(active.newStartMin)} – ${formatMinutes(active.newEndMin)}`;
-		});
+		};
 
-		const move = (ev: PointerEvent) => frame(ev.clientX, ev.clientY, ev.altKey);
+		applyPreviewRef.current = applyPreview;
+		const frame = rafThrottle(applyPreview);
+
+		const move = (ev: PointerEvent) => {
+			lastPointerRef.current = { clientX: ev.clientX, clientY: ev.clientY, altKey: ev.altKey };
+			frame(ev.clientX, ev.clientY, ev.altKey);
+			autoScroller.update(ev.clientY);
+		};
 
 		const end = () => {
-			// 松手前落实最后一次挂起的位置（提交值与预览一致）
+			// 松手前停止自动滚动并落实最后一次挂起的位置（提交值与预览一致）
+			autoScroller.stop();
 			frame.flush();
 			const finished = activeRef.current;
 			detach();
@@ -175,12 +217,17 @@ export function useBlockResize(onCommit: BlockResizeCommit) {
 			commitRef.current(finished.block, finished.seg, finished.edge, finished.newStartMin, finished.newEndMin, finished.blockEl);
 		};
 
-		handlersRef.current = { move, end, frame };
+		const cancel = () => {
+			detach();
+		};
+
+		handlersRef.current = { move, end, cancel, frame };
 		setCssProps(document.body, { cursor: 'ns-resize', userSelect: 'none' });
 		document.addEventListener('pointermove', move);
 		document.addEventListener('pointerup', end);
+		document.addEventListener('pointercancel', cancel);
 		return true;
-	}, [detach]);
+	}, [autoScroller, detach]);
 
 	// 组件卸载时强制解绑（甘特控制器的 destroy 模式）
 	useEffect(() => () => detach(), [detach]);

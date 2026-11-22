@@ -3,7 +3,6 @@ import type { CSSProperties } from 'react';
 import { generateMonthCalendar } from '../../calendar/calendarGenerator';
 import { getTaskDateField } from '../../types';
 import { YearViewClasses } from '../../utils/bem';
-import { usePlugin } from '../pluginContext';
 import { useCalendarStore, selectViewFilter } from '../store/calendarStore';
 import { applyTagFilter } from '../utils/taskFilters';
 import { useAdvancedFilters } from '../utils/useAdvancedFilters';
@@ -16,7 +15,6 @@ import { useTodayKey } from '../utils/useTodayKey';
  * React 年视图（热力图）
  */
 export function YearView(): JSX.Element {
-	const plugin = usePlugin();
 	const currentDate = useCalendarStore((s) => s.currentDate);
 	const filter = useCalendarStore((s) => selectViewFilter(s, 'year'));
 	const advanced = useAdvancedFilters('year');
@@ -24,11 +22,20 @@ export function YearView(): JSX.Element {
 	const setViewType = useCalendarStore((s) => s.setViewType);
 
 	const year = currentDate.getFullYear();
-	const startOnMonday = !!plugin.settings.startOnMonday;
-	const dateField = plugin.settings.dateFilterField || 'dueDate';
-	const tasks = useViewTasks(plugin.settings.ganttStartField || 'startDate', plugin.settings.ganttEndField || 'dueDate', dateField);
-	const showLunar = plugin.settings.showLunar;
-	const showCount = plugin.settings.yearShowTaskCount;
+	const startOnMonday = useCalendarStore((s) => !!s.settings.startOnMonday);
+	const dateField = useCalendarStore((s) => s.settings.dateFilterField) || 'dueDate';
+	const ganttStartField = useCalendarStore((s) => s.settings.ganttStartField) || 'startDate';
+	const ganttEndField = useCalendarStore((s) => s.settings.ganttEndField) || 'dueDate';
+	const showLunar = useCalendarStore((s) => s.settings.showLunar);
+	const showFestivals = useCalendarStore((s) => s.settings.showFestivals);
+	const showCount = useCalendarStore((s) => s.settings.yearShowTaskCount);
+	const recurringLimit = useCalendarStore((s) => s.settings.recurringTaskDisplayLimit) ?? 5;
+	const palette = useCalendarStore((s) => s.settings.yearHeatmapPalette) || 'blue';
+	const heatEnabled = useCalendarStore((s) => s.settings.yearHeatmapEnabled);
+	const heat3D = useCalendarStore((s) => s.settings.yearHeatmap3DEnabled) || 0;
+	const lunarFontSize = useCalendarStore((s) => s.settings.yearLunarFontSize) || 10;
+	const language = useCalendarStore((s) => s.settings.language);
+	const tasks = useViewTasks(ganttStartField, ganttEndField, dateField);
 
 	const data = useMemo(() => {
 		const start = new Date(year, 0, 1);
@@ -36,7 +43,6 @@ export function YearView(): JSX.Element {
 		const scoped = advanced.filterTasks(applyTagFilter(tasks, filter.tag));
 
 		// 重复任务：生成虚拟实例并合并计数
-		const recurringLimit = plugin.settings.recurringTaskDisplayLimit ?? 5;
 		const virtuals = generateVirtualInstances(scoped, start, end, dateField, recurringLimit);
 		const allTasks = [...scoped, ...virtuals];
 
@@ -49,25 +55,22 @@ export function YearView(): JSX.Element {
 			counts.set(key, (counts.get(key) || 0) + 1);
 		}
 		return counts;
-	}, [tasks, filter, advanced, year, dateField]);
+	}, [tasks, filter, advanced, year, dateField, recurringLimit]);
 
 	// todayKey 入依赖：跨午夜后重算各月格子的 isToday
 	const todayKey = useTodayKey();
-	const months = useMemo(() => {
-		const palette = plugin.settings.yearHeatmapPalette || 'blue';
-		const heatEnabled = plugin.settings.yearHeatmapEnabled;
-		const heat3D = plugin.settings.yearHeatmap3DEnabled || 0;
-		const lunarFontSize = plugin.settings.yearLunarFontSize || 10;
-
+	const monthCards = useMemo(() => {
+		void todayKey;
+		void language;
 		const monthNames = i18n.t('views.yearView.months') as unknown as string[];
 		const labelsSunFirst = i18n.t('views.yearView.weekdaysShort') as unknown as string[];
 		const labelsMonFirst = i18n.t('views.yearView.weekdaysShortMon') as unknown as string[];
 		const weekdayLabels = startOnMonday ? labelsMonFirst : labelsSunFirst;
 
-		const monthCards = [];
+		const cards = [];
 		for (let m = 1; m <= 12; m++) {
 			const monthData = generateMonthCalendar(year, m, startOnMonday);
-			monthCards.push({
+			cards.push({
 				m,
 				name: monthNames[m - 1],
 				weekdayLabels,
@@ -75,10 +78,10 @@ export function YearView(): JSX.Element {
 			});
 		}
 
-		return { palette, heatEnabled, heat3D, lunarFontSize, monthCards };
-	}, [year, startOnMonday, plugin.settings, todayKey]);
+		return cards;
+	}, [year, startOnMonday, todayKey, language]);
 
-	const modClass = (count: number) => modCountClass(count, months.palette);
+	const modClass = (count: number) => modCountClass(count, palette);
 
 	// 打开年视图 / 切换年份时自动滚动到当前月（currentDate 所在月，默认即本月）
 	const viewRef = useRef<HTMLDivElement | null>(null);
@@ -96,7 +99,7 @@ export function YearView(): JSX.Element {
 	return (
 		<div ref={viewRef} className="gc-view gc-view--year">
 			<div className={YearViewClasses.elements.months}>
-				{months.monthCards.map((mc) => (
+				{monthCards.map((mc) => (
 					<div
 						key={mc.m}
 						data-month={mc.m}
@@ -118,16 +121,16 @@ export function YearView(): JSX.Element {
 								const count = data.get(key) || 0;
 
 								const dayClasses = [YearViewClasses.elements.day];
-if (months.heatEnabled && count > 0) {
+if (heatEnabled && count > 0) {
 								dayClasses.push(modClass(count));
-								if (months.heat3D === 1) dayClasses.push('heatmap-3d-1');
-								else if (months.heat3D === 2) dayClasses.push('heatmap-3d-2');
+								if (heat3D === 1) dayClasses.push('heatmap-3d-1');
+								else if (heat3D === 2) dayClasses.push('heatmap-3d-2');
 							}
 								if (!day.isCurrentMonth) dayClasses.push('outside-month');
 								if (day.isToday) dayClasses.push('today');
 
 								const lunarStyle: CSSProperties | undefined = showLunar
-									? { fontSize: `${months.lunarFontSize}px` } : undefined;
+									? { fontSize: `${lunarFontSize}px` } : undefined;
 
 								return (
 									<div
@@ -154,7 +157,7 @@ if (months.heatEnabled && count > 0) {
 										<div className={YearViewClasses.elements.dayNumber}>{day.day.toString()}</div>
 										{day.lunarText && showLunar ? (
 											<div
-												className={`${YearViewClasses.elements.lunarText}${(day.festival || day.festivalType) && plugin.settings.showFestivals ? ` festival${day.festivalType ? ` festival-${day.festivalType}` : ''}` : ''}`}
+												className={`${YearViewClasses.elements.lunarText}${(day.festival || day.festivalType) && showFestivals ? ` festival${day.festivalType ? ` festival-${day.festivalType}` : ''}` : ''}`}
 												style={lunarStyle}
 											>
 												{day.lunarText}

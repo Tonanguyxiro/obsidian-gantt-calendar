@@ -27,6 +27,14 @@ export const MIN_DURATION_MIN = 15;
 export const DEFAULT_POINT_DURATION_MIN = 60;
 /** 同簇重叠块最多分 3 列，第 4 条起叠加偏移 */
 export const MAX_LANE = 3;
+/** 单条并排时间块最小可读宽度（px）：列宽不足时不硬切多列导致文字挤成竖条 */
+export const MIN_LANE_WIDTH_PX = 80;
+
+/** 根据可用日列宽度计算时间网格允许的最大并行分列数（1..MAX_LANE） */
+export function computeMaxLanesForWidth(columnWidthPx: number): number {
+	if (!Number.isFinite(columnWidthPx) || columnWidthPx <= 0) return MAX_LANE;
+	return Math.max(1, Math.min(MAX_LANE, Math.floor(columnWidthPx / MIN_LANE_WIDTH_PX)));
+}
 
 /**
  * 快速创建（前向默认时长）的可用终点：钳到当日 24:00 与下一个块的起点。
@@ -472,6 +480,7 @@ export function buildWeekTimelineModel(
 	startField: DateFieldType,
 	endField: DateFieldType,
 	dateField: DateFieldType,
+	maxLane: number = MAX_LANE,
 ): WeekTimelineModel {
 	const blocks: TimeBlock[] = [];
 	const alldayTasks: GCTask[] = [];
@@ -531,7 +540,7 @@ export function buildWeekTimelineModel(
 		}
 	}
 	for (const daySegs of days) {
-		assignLanes(daySegs.map((d) => d.seg));
+		assignLanes(daySegs.map((d) => d.seg), maxLane);
 		daySegs.sort((a, b) => a.seg.startMin - b.seg.startMin || b.seg.lane - a.seg.lane);
 	}
 
@@ -639,6 +648,7 @@ export function buildDayTimelineModel(
 	startField: DateFieldType,
 	endField: DateFieldType,
 	dateField: DateFieldType,
+	maxLane: number = MAX_LANE,
 ): DayTimelineModel {
 	// 注意：参数名用 day，避免遮蔽模块级 dayStart() 工具函数
 	const dayEnd = new Date(day);
@@ -698,7 +708,7 @@ export function buildDayTimelineModel(
 	for (const block of blocks) {
 		for (const seg of block.segments) daySegs.push({ block, seg });
 	}
-	assignLanes(daySegs.map((d) => d.seg));
+	assignLanes(daySegs.map((d) => d.seg), maxLane);
 	daySegs.sort((a, b) => a.seg.startMin - b.seg.startMin || b.seg.lane - a.seg.lane);
 
 	return { blocks: daySegs, allday };

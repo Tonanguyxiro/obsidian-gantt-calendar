@@ -112,6 +112,8 @@ export const BLOCKS = {
 	/** File-based task 卡片与悬浮展开卡片 */
 	FILE_TASK: 'file-task',
 	ICS_EVENT: 'ics-event',
+	/** 空库引导卡片 */
+	EMPTY_GUIDE: 'empty-guide',
 } as const;
 
 /**
@@ -203,6 +205,7 @@ export const TaskCardClasses = {
 		weekView: bem(BLOCKS.TASK_CARD, undefined, 'week'),
 		dayView: bem(BLOCKS.TASK_CARD, undefined, 'day'),
 		taskView: bem(BLOCKS.TASK_CARD, undefined, 'task'),
+		sidebarView: bem(BLOCKS.TASK_CARD, undefined, 'sidebar'),
 		// 布局变体修饰符（由 config.variant 声明，与视图修饰符正交）
 		timeline: bem(BLOCKS.TASK_CARD, undefined, 'timeline'),
 		// 状态修饰符
@@ -1056,6 +1059,7 @@ export const SidebarClasses = {
 		searchInput: bem(BLOCKS.SIDEBAR, 'search-input'),
 		filterBar: bem(BLOCKS.SIDEBAR, 'filter-bar'),
 		taskList: bem(BLOCKS.SIDEBAR, 'task-list'),
+		taskRow: bem(BLOCKS.SIDEBAR, 'task-row'),
 		taskItem: bem(BLOCKS.SIDEBAR, 'task-item'),
 		emptyState: bem(BLOCKS.SIDEBAR, 'empty-state'),
 		// 每日时间线（连续画布，与周视图同语义）
@@ -1373,6 +1377,10 @@ export const TagSelectorTreeClasses = {
 		pillRemove: bem(BLOCKS.TAG_SELECTOR, 'pill-remove'),
 		/** 提示文字（无匹配 / 回车创建） */
 		hint: bem(BLOCKS.TAG_SELECTOR, 'hint'),
+		/** 自动补全下拉弹窗 */
+		suggest: bem(BLOCKS.TAG_SELECTOR, 'suggest'),
+		suggestCount: bem(BLOCKS.TAG_SELECTOR, 'suggest-count'),
+		suggestHint: bem(BLOCKS.TAG_SELECTOR, 'suggest-hint'),
 	},
 	modifiers: {
 		/** 已被选中的子标签涵盖 */
@@ -1498,6 +1506,33 @@ export const WhenPickerClasses = {
 		hintBad: bem(BLOCKS.WHEN_PICKER, 'hint', 'bad'),
 		timeMuted: bem(BLOCKS.WHEN_PICKER, 'time', 'muted'),
 		stripDisabled: bem(BLOCKS.WHEN_PICKER, 'strip', 'disabled'),
+	},
+} as const;
+
+/** 空库引导卡片（EmptyVaultGuide） */
+export const EmptyGuideClasses = {
+	block: bem(BLOCKS.EMPTY_GUIDE),
+	elements: {
+		header: bem(BLOCKS.EMPTY_GUIDE, 'header'),
+		icon: bem(BLOCKS.EMPTY_GUIDE, 'icon'),
+		title: bem(BLOCKS.EMPTY_GUIDE, 'title'),
+		desc: bem(BLOCKS.EMPTY_GUIDE, 'desc'),
+		filterRow: bem(BLOCKS.EMPTY_GUIDE, 'filter-row'),
+		filterLabel: bem(BLOCKS.EMPTY_GUIDE, 'filter-label'),
+		filterChip: bem(BLOCKS.EMPTY_GUIDE, 'filter-chip'),
+		examples: bem(BLOCKS.EMPTY_GUIDE, 'examples'),
+		examplesTitle: bem(BLOCKS.EMPTY_GUIDE, 'examples-title'),
+		exampleItem: bem(BLOCKS.EMPTY_GUIDE, 'example-item'),
+		exampleMeta: bem(BLOCKS.EMPTY_GUIDE, 'example-meta'),
+		exampleLabel: bem(BLOCKS.EMPTY_GUIDE, 'example-label'),
+		exampleCode: bem(BLOCKS.EMPTY_GUIDE, 'example-code'),
+		copyBtn: bem(BLOCKS.EMPTY_GUIDE, 'copy-btn'),
+		actions: bem(BLOCKS.EMPTY_GUIDE, 'actions'),
+		ctaBtn: bem(BLOCKS.EMPTY_GUIDE, 'cta-btn'),
+	},
+	modifiers: {
+		compact: bem(BLOCKS.EMPTY_GUIDE, undefined, 'compact'),
+		copied: bem(BLOCKS.EMPTY_GUIDE, 'copy-btn', 'copied'),
 	},
 } as const;
 

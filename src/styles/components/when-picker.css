@@ -135,7 +135,7 @@
 }
 
 .gc-when-picker__cell-label {
-	font-size: 11px;
+	font-size: var(--gc-font-xxs);
 	color: var(--text-muted);
 	white-space: nowrap;
 }
@@ -267,7 +267,7 @@
 	height: 100%;
 	display: flex;
 	align-items: flex-end;
-	font-size: 9px;
+	font-size: var(--gc-font-2xs);
 	line-height: 1;
 	color: var(--text-faint);
 	pointer-events: none;
@@ -280,7 +280,7 @@
 	min-width: 4px;
 	border-radius: 4px;
 	background: color-mix(in srgb, var(--interactive-accent) 70%, var(--text-normal) 10%);
-	box-shadow: inset 4px 0 0 rgba(0, 0, 0, 0.15), inset -4px 0 0 rgba(0, 0, 0, 0.15);
+	box-shadow: inset 4px 0 0 color-mix(in srgb, var(--gc-shadow-ink) 15%, transparent), inset -4px 0 0 color-mix(in srgb, var(--gc-shadow-ink) 15%, transparent);
 	cursor: grab;
 }
 

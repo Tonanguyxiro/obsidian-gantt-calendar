@@ -1,3 +1,4 @@
+import { setIcon } from 'obsidian';
 import type { IPluginContext, GCTask } from '../types';
 import { TooltipClasses, setCssProps } from './bem';
 import { TagPill } from '../components/tagPill';
@@ -204,7 +205,17 @@ export class TooltipManager {
 		if (row.isOverdue) {
 			valueEl.addClass(TooltipClasses.modifiers.propertyValueOverdue);
 		}
-		valueEl.setText(row.value);
+		if (row.icon) {
+			const iconEl = valueEl.createSpan();
+			iconEl.setAttr('data-icon', row.icon);
+			if (row.iconColor) {
+				setCssProps(iconEl, { color: row.iconColor });
+			}
+			setIcon(iconEl, row.icon);
+			valueEl.createSpan({ text: row.value });
+		} else {
+			valueEl.setText(row.value);
+		}
 	}
 
 	private updatePosition(card: HTMLElement): void {

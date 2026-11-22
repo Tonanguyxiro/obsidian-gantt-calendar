@@ -84,6 +84,28 @@ export function searchTags(model: TagSelectorModel, query: string, limit: number
 		.slice(0, limit);
 }
 
+/** 自动补全建议：前缀匹配优先于子串匹配，同档内按聚合计数降序、名称升序 */
+export function suggestTags(model: TagSelectorModel, query: string, limit: number): Array<[string, number]> {
+	const q = normalizeTagInput(query).toLowerCase();
+	if (!q) return [];
+	return Array.from(model.counts.entries())
+		.filter(([tag]) => tag.toLowerCase().includes(q))
+		.sort((a, b) => {
+			const aPrefix = a[0].toLowerCase().startsWith(q) ? 0 : 1;
+			const bPrefix = b[0].toLowerCase().startsWith(q) ? 0 : 1;
+			return aPrefix - bPrefix || b[1] - a[1] || a[0].localeCompare(b[0]);
+		})
+		.slice(0, limit);
+}
+
+/**
+ * 将补全项写入输入框文本：保留前导 `#`（若用户原本输入了 `#`），
+ * 不追加 `/` 也不自动提交，方便继续追加子标签（如 `/v0-3-0`）或按回车确认。
+ */
+export function applyTagCompletion(currentInput: string, selectedTag: string): string {
+	return currentInput.trimStart().startsWith('#') ? `#${selectedTag}` : selectedTag;
+}
+
 /** 输入框文本 → 标签路径（去首尾空白与开头的 #） */
 export function normalizeTagInput(input: string): string {
 	return input.trim().replace(RegularExpressions.FileTask.leadingHash, '');

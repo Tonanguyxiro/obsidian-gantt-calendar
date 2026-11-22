@@ -16,6 +16,7 @@ import type { GCTask } from '../../types';
 import { TooltipClasses } from '../../utils/bem';
 import { TagPill } from '../../components/tagPill';
 import { TagPillSpan } from './TagPillSpan';
+import { Icon } from './Icon';
 import { DescriptionWithLinks } from './DescriptionWithLinks';
 import { useApp } from '../pluginContext';
 import { MOTION, tooltipVariants, easeOutTransition } from '../motion';
@@ -196,7 +197,18 @@ function TooltipContent({ state, onClose }: { state: TooltipState; onClose: () =
 												row.isOverdue ? TooltipClasses.modifiers.propertyValueOverdue : '',
 											].filter(Boolean).join(' ')}
 										>
-											{row.value}
+											{row.icon ? (
+												<>
+													<span
+														className="gc-task-tooltip__priority-icon"
+														data-icon={row.icon}
+														style={row.iconColor ? { color: row.iconColor } : undefined}
+													>
+														<Icon icon={row.icon} />
+													</span>
+													<span>{row.value}</span>
+												</>
+											) : row.value}
 										</div>
 									</div>
 								))

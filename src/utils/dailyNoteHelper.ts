@@ -92,7 +92,7 @@ export interface CreateTaskData {
 	/** 任务状态 key（取复选框符号）；缺省为 todo */
 	status?: string;
 	repeat?: string;
-	createdDate: Date;
+	createdDate?: Date | null;
 	startDate?: Date | null;
 	scheduledDate?: Date | null;
 	/** 当日任务（只有 ⏳ + 时刻）没有截止日期 */
@@ -101,6 +101,10 @@ export interface CreateTaskData {
 	cancelledDate?: Date | null;
 	tags?: string[];
 	datePrecision?: Record<string, 'day' | 'time'>;
+}
+
+function isValidTaskDate(d: Date | null | undefined): d is Date {
+	return !!d && typeof d.getTime === 'function' && !Number.isNaN(d.getTime());
 }
 
 /**
@@ -121,23 +125,25 @@ export async function createTaskInDailyNote(
 	dailyNoteIndex?: DailyNoteIndex,
 	date: Date = new Date()
 ): Promise<string | null> {
+	const safeDate = isValidTaskDate(date) ? date : new Date();
 	const source = getEffectiveDailyNoteSource(app, settings);
 	if (source === 'notebook-navigator') {
 		// Notebook Navigator 模式：根文件夹 + Moment 路径模式定位，缺失时按其模板创建
-		const nn = getNotebookNavigatorDailyNoteSettings(app)!;
-		const filePath = getNotebookNavigatorDailyNotePath(nn, date);
+		const nn = getNotebookNavigatorDailyNoteSettings(app);
+		if (!nn) return null;
+		const filePath = getNotebookNavigatorDailyNotePath(nn, safeDate);
 		const existing = app.vault.getFileByPath(filePath);
 		if (existing) {
 			await insertTaskToFile(app, existing, taskData, settings.newTaskHeading);
 			new Notice(i18n.t('dailyNote.taskAdded'));
 			return existing.path;
 		}
-		return await handleMissingDailyNote(app, filePath, taskData, settings, nn.template, date);
+		return await handleMissingDailyNote(app, filePath, taskData, settings, nn.template, safeDate);
 	}
 
 	if (source === 'obsidian' && dailyNoteIndex) {
 		// Obsidian 模式：使用 obsidian-daily-notes-interface
-		const momentDate = window.moment(date);
+		const momentDate = window.moment(safeDate);
 		const dailyNotes = dailyNoteIndex.getIndex();
 		let file = getDailyNoteFromIndex(momentDate, dailyNotes);
 
@@ -167,7 +173,7 @@ export async function createTaskInDailyNote(
 	const { dailyNotePath, dailyNoteNameFormat, newTaskHeading } = settings;
 
 	// 修复嵌套文件夹格式 bug：提取纯文件名用于搜索
-	const fullFormatResult = formatDate(date, dailyNoteNameFormat);
+	const fullFormatResult = formatDate(safeDate, dailyNoteNameFormat);
 	const fileName = fullFormatResult.split('/').pop()! + '.md';
 
 	const searchResult = findDailyNoteRecursive(app, dailyNotePath, fileName);
@@ -178,7 +184,7 @@ export async function createTaskInDailyNote(
 	} else {
 		// 创建新文件时使用完整格式路径（支持嵌套文件夹）
 		const filePath = `${dailyNotePath}/${fullFormatResult}.md`;
-		return await handleMissingDailyNote(app, filePath, taskData, settings, settings.dailyNoteTemplatePath, date);
+		return await handleMissingDailyNote(app, filePath, taskData, settings, settings.dailyNoteTemplatePath, safeDate);
 	}
 }
 
@@ -194,16 +200,17 @@ export async function createTaskInWeeklyNote(
 	settings: GanttCalendarSettings,
 	date: Date = new Date()
 ): Promise<string | null> {
+	const safeDate = isValidTaskDate(date) ? date : new Date();
 	const config = getWeeklyNoteConfig(app, settings);
 	if (!config) return null;
-	const filePath = getWeeklyNotePath(config, date);
+	const filePath = getWeeklyNotePath(config, safeDate);
 	const existing = app.vault.getFileByPath(filePath);
 	if (existing) {
 		await insertTaskToFile(app, existing, taskData, settings.newTaskHeading);
 		new Notice(i18n.t('modals.createTask.addedToFile', { name: existing.basename }));
 		return existing.path;
 	}
-	return await handleMissingDailyNote(app, filePath, taskData, settings, config.template, date, 'weekly');
+	return await handleMissingDailyNote(app, filePath, taskData, settings, config.template, safeDate, 'weekly');
 }
 
 /**
@@ -403,9 +410,9 @@ export async function createTaskInFile(
 /**
  * 序列化新任务为文本行
  */
-function serializeNewTask(taskData: CreateTaskData, app: App): string {
+export function serializeNewTask(taskData: CreateTaskData, app: App): string {
 	// Access Obsidian internal plugin API (not in public types)
-	const plugin = (app as unknown as Record<string, Record<string, Record<string, unknown>>>).plugins.plugins['gantt-calendar'] as Record<string, unknown> | undefined;
+	const plugin = (app as unknown as { plugins?: { plugins?: Record<string, Record<string, unknown>> } }).plugins?.plugins?.['gantt-calendar'];
 	const settings = plugin?.settings as Record<string, unknown> | undefined;
 	const globalFilter: string = (settings?.globalTaskFilter as string) || '';
 	const enabledFormats: string[] = (settings?.enabledTaskFormats as string[]) || ['tasks'];
@@ -449,68 +456,27 @@ function serializeNewTask(taskData: CreateTaskData, app: App): string {
 		}
 	}
 
-	// 创建日期
-	const createdPrecision = taskData.datePrecision?.['createdDate'];
-		const createdStr = formatDate(taskData.createdDate, createdPrecision === 'time' ? 'yyyy-MM-dd HH:mm' : 'yyyy-MM-dd');
-	if (format === 'tasks') {
-		parts.push(`➕ ${createdStr}`);
-	} else {
-		parts.push(`[created:: ${createdStr}]`);
-	}
+	// 日期字段（null / undefined / Invalid Date 安全跳过，不输出空标记）
+	const dateFields: Array<{
+		key: 'createdDate' | 'startDate' | 'scheduledDate' | 'dueDate' | 'completionDate' | 'cancelledDate';
+		emoji: string;
+		dvKey: string;
+	}> = [
+		{ key: 'createdDate', emoji: '➕', dvKey: 'created' },
+		{ key: 'startDate', emoji: '🛫', dvKey: 'start' },
+		{ key: 'scheduledDate', emoji: '⏳', dvKey: 'scheduled' },
+		{ key: 'dueDate', emoji: '📅', dvKey: 'due' },
+		{ key: 'completionDate', emoji: '✅', dvKey: 'completed' },
+		{ key: 'cancelledDate', emoji: '❌', dvKey: 'cancelled' },
+	];
 
-	// 开始日期
-	if (taskData.startDate) {
-		const startPrecision = taskData.datePrecision?.['startDate'];
-		const startStr = formatDate(taskData.startDate, startPrecision === 'time' ? 'yyyy-MM-dd HH:mm' : 'yyyy-MM-dd');
-		if (format === 'tasks') {
-			parts.push(`🛫 ${startStr}`);
-		} else {
-			parts.push(`[start:: ${startStr}]`);
-		}
-	}
-
-	// 计划日期
-	if (taskData.scheduledDate) {
-		const scheduledPrecision = taskData.datePrecision?.['scheduledDate'];
-		const scheduledStr = formatDate(taskData.scheduledDate, scheduledPrecision === 'time' ? 'yyyy-MM-dd HH:mm' : 'yyyy-MM-dd');
-		if (format === 'tasks') {
-			parts.push(`⏳ ${scheduledStr}`);
-		} else {
-			parts.push(`[scheduled:: ${scheduledStr}]`);
-		}
-	}
-
-	// 截止日期
-	if (taskData.dueDate) {
-		const duePrecision = taskData.datePrecision?.['dueDate'];
-		const dueStr = formatDate(taskData.dueDate, duePrecision === 'time' ? 'yyyy-MM-dd HH:mm' : 'yyyy-MM-dd');
-		if (format === 'tasks') {
-			parts.push(`📅 ${dueStr}`);
-		} else {
-			parts.push(`[due:: ${dueStr}]`);
-		}
-	}
-
-	// 完成日期
-	if (taskData.completionDate) {
-		const completionPrecision = taskData.datePrecision?.['completionDate'];
-		const completionStr = formatDate(taskData.completionDate, completionPrecision === 'time' ? 'yyyy-MM-dd HH:mm' : 'yyyy-MM-dd');
-		if (format === 'tasks') {
-			parts.push(`✅ ${completionStr}`);
-		} else {
-			parts.push(`[completed:: ${completionStr}]`);
-		}
-	}
-
-	// 取消日期
-	if (taskData.cancelledDate) {
-		const cancelledPrecision = taskData.datePrecision?.['cancelledDate'];
-		const cancelledStr = formatDate(taskData.cancelledDate, cancelledPrecision === 'time' ? 'yyyy-MM-dd HH:mm' : 'yyyy-MM-dd');
-		if (format === 'tasks') {
-			parts.push(`❌ ${cancelledStr}`);
-		} else {
-			parts.push(`[cancelled:: ${cancelledStr}]`);
-		}
+	for (const { key, emoji, dvKey } of dateFields) {
+		const dateValue = taskData[key];
+		if (!isValidTaskDate(dateValue)) continue;
+		const precision = taskData.datePrecision?.[key];
+		const dateStr = formatDate(dateValue, precision === 'time' ? 'yyyy-MM-dd HH:mm' : 'yyyy-MM-dd');
+		if (!dateStr) continue;
+		parts.push(format === 'tasks' ? `${emoji} ${dateStr}` : `[${dvKey}:: ${dateStr}]`);
 	}
 
 	return `- ${parts.join(' ')}`;

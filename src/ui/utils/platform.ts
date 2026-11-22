@@ -61,3 +61,25 @@ export function useElementNarrow(ref: RefObject<HTMLElement | null>, maxWidth: n
 	}, [ref, maxWidth, observeParent]);
 	return narrow;
 }
+
+/**
+ * 观察元素当前渲染宽度（px），供动态计算重叠时间块列数等自适应逻辑使用；
+ * 非浏览器 / jsdom 环境下安全返回 0。
+ */
+export function useElementWidth(ref: RefObject<HTMLElement | null>): number {
+	const [width, setWidth] = useState(0);
+	useEffect(() => {
+		const el = ref.current;
+		if (!el || typeof ResizeObserver === 'undefined') return;
+		const update = (w: number) => {
+			if (w > 0) setWidth((prev) => (Math.abs(prev - w) < 1 ? prev : Math.round(w)));
+		};
+		update(el.getBoundingClientRect().width);
+		const ro = new ResizeObserver((entries) => {
+			for (const entry of entries) update(entry.contentRect.width);
+		});
+		ro.observe(el);
+		return () => ro.disconnect();
+	}, [ref]);
+	return width;
+}

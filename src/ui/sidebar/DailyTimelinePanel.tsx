@@ -1,14 +1,14 @@
-import { useCallback, useEffect, useMemo, useState, type JSX } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import { Notice } from 'obsidian';
 import type { DateFieldType } from '../../settings/types';
+import { DEFAULT_SETTINGS } from '../../settings/constants';
 import { i18n } from '../../i18n/i18n';
 import { SidebarClasses } from '../../utils/bem';
 import { buildSidebarConfig } from '../../components/TaskCard';
 import { getTodayInTimezone } from '../../dateUtils/timezone';
 import { formatDate } from '../../dateUtils/dateUtilsIndex';
 import { updateTaskProperties } from '../../tasks/taskUpdater';
-import { getTaskInterval } from '../views/week/timelineModel';
-import { buildDayTimelineModel } from '../views/week/timelineModel';
+import { buildDayTimelineModel, computeMaxLanesForWidth, getTaskInterval } from '../views/week/timelineModel';
 import { DayTimelineCanvas } from '../views/week/DayTimelineCanvas';
 import { Logger } from '../../utils/logger';
 import { usePlugin, useApp } from '../pluginContext';
@@ -19,6 +19,7 @@ import { CalendarItemCard } from '../components/FileTaskCard';
 import { useIcsLayer } from '../utils/useIcsLayer';
 import { useViewTasks } from '../utils/useViewTasks';
 import { findTaskById } from '../utils/taskId';
+import { useElementWidth } from '../utils/platform';
 
 /** dataTransfer.taskId（filePath:lineNumber）→ 任务查找 */
 /** 归零到本地午夜（Date 比较以 getTime 为准，需先抹平时分秒） */
@@ -36,6 +37,8 @@ function shiftDay(date: Date, delta: number): Date {
 	return d;
 }
 
+const EMPTY_FORMATS: string[] = [];
+
 /**
  * 侧边栏 — 每日时间线 Tab（连续画布版）
  * 日期默认"今天"，标题行右侧导航可前后切换；跨天后跟随态自动前进。
@@ -45,6 +48,15 @@ export function DailyTimelinePanel(): JSX.Element {
 	const plugin = usePlugin();
 	const app = useApp();
 	const refreshTasks = useCalendarStore((s) => s.refreshTasks);
+	const sidebarShowCheckbox = useCalendarStore((s) => s.settings.sidebarShowCheckbox);
+	const sidebarShowTags = useCalendarStore((s) => s.settings.sidebarShowTags);
+	const sidebarShowPriority = useCalendarStore((s) => s.settings.sidebarShowPriority);
+	const sidebarShowFileLocation = useCalendarStore((s) => s.settings.sidebarShowFileLocation);
+	const sidebarShowTicktick = useCalendarStore((s) => s.settings.sidebarShowTicktick);
+	const sidebarShowDueDate = useCalendarStore((s) => s.settings.sidebarShowDueDate);
+	const startField = useCalendarStore((s) => s.settings.ganttStartField) || 'startDate';
+	const endField = useCalendarStore((s) => s.settings.ganttEndField) || 'dueDate';
+	const enabledFormats = useCalendarStore((s) => s.settings.enabledTaskFormats) || EMPTY_FORMATS;
 
 	/** 手动选定的日期；null = 跟随"今天"（默认态，时钟跨天后自动前进） */
 	const [pickedDate, setPickedDate] = useState<Date | null>(null);
@@ -68,23 +80,45 @@ export function DailyTimelinePanel(): JSX.Element {
 		};
 	}, []);
 
-	const config = useMemo(() => buildSidebarConfig(plugin.settings), [plugin.settings]);
+	const config = useMemo(
+		() => buildSidebarConfig({
+			...DEFAULT_SETTINGS,
+			sidebarShowCheckbox,
+			sidebarShowTags,
+			sidebarShowPriority,
+			sidebarShowFileLocation,
+			sidebarShowTicktick,
+			sidebarShowDueDate,
+		}),
+		[
+			sidebarShowCheckbox,
+			sidebarShowTags,
+			sidebarShowPriority,
+			sidebarShowFileLocation,
+			sidebarShowTicktick,
+			sidebarShowDueDate,
+		],
+	);
 	// 时间线内统一使用紧凑变体，高度由块容器按时长撑开
 	const timelineConfig = useMemo(() => ({ ...config, variant: 'timeline' as const }), [config]);
 
+	const panelBodyRef = useRef<HTMLDivElement | null>(null);
+	const panelBodyWidth = useElementWidth(panelBodyRef);
+	const maxLane = useMemo(
+		() => computeMaxLanesForWidth(panelBodyWidth > 48 ? panelBodyWidth - 48 : 0),
+		[panelBodyWidth],
+	);
+
 	// 侧栏语义保持以 dueDate 为读取字段；区间路由用 gantt 起止字段（与周视图一致）
 	const dateField: DateFieldType = 'dueDate';
-	const startField = plugin.settings.ganttStartField || 'startDate';
-	const endField = plugin.settings.ganttEndField || 'dueDate';
 	const tasks = useViewTasks(startField, endField, dateField, true);
-	const enabledFormats = plugin.settings.enabledTaskFormats || [];
 
 	const mergeIcs = useIcsLayer(startField, endField, dateField);
 	const candidates = useMemo(() => tasks.filter((t) => !t.cancelled), [tasks]);
 	// ICS 事件只读，不进入 candidates（全天区拖放按 candidates 查找并写回任务）
 	const model = useMemo(() => (
-		buildDayTimelineModel(mergeIcs(candidates), day, startField, endField, dateField)
-	), [candidates, mergeIcs, day, startField, endField, dateField]);
+		buildDayTimelineModel(mergeIcs(candidates), day, startField, endField, dateField, maxLane)
+	), [candidates, mergeIcs, day, startField, endField, dateField, maxLane]);
 
 	// ===== 日期导航 =====
 	const goPrevDay = useCallback(() => setPickedDate(shiftDay(day, -1)), [day]);
@@ -187,7 +221,7 @@ export function DailyTimelinePanel(): JSX.Element {
 				</div>
 			</div>
 
-			<div className={SidebarClasses.elements.panelBody}>
+			<div ref={panelBodyRef} className={SidebarClasses.elements.panelBody}>
 				{isEmpty ? (
 					<div className={SidebarClasses.elements.emptyState}>
 						{i18n.t('sidebar.dailyTimeline.noTasks')}

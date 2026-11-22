@@ -1,5 +1,7 @@
 import type { IcsCalendarEvent } from '../../data-layer/ics/icsTask';
 import { create } from 'zustand';
+import type { GanttCalendarSettings } from '../../settings/types';
+import { DEFAULT_SETTINGS } from '../../settings/constants';
 import type {
 	CalendarViewType,
 	FileTask,
@@ -45,8 +47,8 @@ interface CalendarStoreState {
 	tasksReady: boolean;
 	changedFilePath?: string;
 	updateSeq: number;
-	/** 设置变更版本号：刷新设置时自增，用于触发 React 视图整体重挂载 */
-	settingsVersion: number;
+	/** 插件设置不可变快照（由 main.ts / 视图生命周期 syncSettings 同步） */
+	settings: GanttCalendarSettings;
 
 	/** 每个视图作用域独立的筛选/排序状态（视图切换时保留） */
 	viewFilters: Record<ViewScope, ViewFilterState>;
@@ -61,8 +63,8 @@ interface CalendarStoreState {
 	setTasks: (tasks: GCTask[]) => void;
 	setFileTasks: (fileTasks: FileTask[]) => void;
 	setIcsEvents: (events: IcsCalendarEvent[]) => void;
-	/** 设置/视图全量刷新：自增 settingsVersion，触发整体重挂载 */
-	bumpSettings: () => void;
+	/** 同步最新设置快照（深拷贝隔离外部原地修改，并对未变化字段保持引用稳定） */
+	syncSettings: (settings: GanttCalendarSettings) => void;
 	/** 请求甘特图滚动（每次调用自增 seq，GanttView 订阅执行） */
 	requestGanttScroll: (action: GanttScrollAction) => void;
 	/** 插件启动时从 data.json 恢复持久化筛选（main.ts 在 loadSettings 后调用） */
@@ -146,6 +148,116 @@ export function pruneTagFilters(
 	return changed ? next : viewFilters;
 }
 
+function isPlainObject(val: unknown): val is Record<string, unknown> {
+	if (typeof val !== 'object' || val === null || Array.isArray(val)) return false;
+	const proto = Object.getPrototypeOf(val) as unknown;
+	return proto === Object.prototype || proto === null;
+}
+
+function deepClone<T>(value: T): T {
+	if (value === null || typeof value !== 'object') return value;
+	if (value instanceof Date) return new Date(value.getTime()) as unknown as T;
+	if (Array.isArray(value)) {
+		return (value as unknown[]).map((item) => deepClone(item)) as unknown as T;
+	}
+	if (isPlainObject(value)) {
+		const out: Record<string, unknown> = {};
+		for (const key of Object.keys(value)) {
+			out[key] = deepClone(value[key]);
+		}
+		return out as T;
+	}
+	return value;
+}
+
+function deepEqual(a: unknown, b: unknown): boolean {
+	if (Object.is(a, b)) return true;
+	if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') {
+		return false;
+	}
+	if (a instanceof Date && b instanceof Date) {
+		return a.getTime() === b.getTime();
+	}
+	if (Array.isArray(a) || Array.isArray(b)) {
+		if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+		for (let i = 0; i < a.length; i++) {
+			if (!deepEqual(a[i], b[i])) return false;
+		}
+		return true;
+	}
+	if (isPlainObject(a) && isPlainObject(b)) {
+		const keysA = Object.keys(a);
+		const keysB = Object.keys(b);
+		if (keysA.length !== keysB.length) return false;
+		for (const key of keysA) {
+			if (!Object.prototype.hasOwnProperty.call(b, key)) return false;
+			if (!deepEqual(a[key], b[key])) return false;
+		}
+		return true;
+	}
+	return false;
+}
+
+function normalizeSettings(input?: Partial<GanttCalendarSettings> | null): GanttCalendarSettings {
+	const base = deepClone(DEFAULT_SETTINGS);
+	if (!input) return base;
+	const merged: Record<string, unknown> = { ...base };
+	for (const key of Object.keys(input)) {
+		const val = (input as Record<string, unknown>)[key];
+		if (val !== undefined) {
+			merged[key] = deepClone(val);
+		}
+	}
+	if (input.fileTaskViews) {
+		merged.fileTaskViews = {
+			...base.fileTaskViews,
+			...Object.fromEntries(
+				Object.entries(input.fileTaskViews).map(([k, v]) => [
+					k,
+					{
+						...base.fileTaskViews[k as keyof typeof base.fileTaskViews],
+						...deepClone(v),
+					},
+				])
+			),
+		};
+	}
+	return merged as unknown as GanttCalendarSettings;
+}
+
+function reconcileValue<T>(prev: T, next: T): T {
+	if (Object.is(prev, next)) return prev;
+	if (prev === null || next === null || typeof prev !== 'object' || typeof next !== 'object') {
+		return next;
+	}
+	if (prev instanceof Date && next instanceof Date) {
+		return prev.getTime() === next.getTime() ? prev : next;
+	}
+	if (Array.isArray(prev) && Array.isArray(next)) {
+		if (deepEqual(prev, next)) return prev;
+		const prevArr = prev as unknown[];
+		const nextArr = next as unknown[];
+		return nextArr.map((item, i) => (i < prevArr.length ? reconcileValue(prevArr[i], item) : item)) as unknown as T;
+	}
+	if (isPlainObject(prev) && isPlainObject(next)) {
+		const prevKeys = Object.keys(prev);
+		const nextKeys = Object.keys(next);
+		let changed = prevKeys.length !== nextKeys.length;
+		const out: Record<string, unknown> = {};
+		for (const key of nextKeys) {
+			const hadKey = Object.prototype.hasOwnProperty.call(prev, key);
+			const nextVal = hadKey ? reconcileValue(prev[key], next[key]) : next[key];
+			if (!hadKey || !Object.is(nextVal, prev[key])) {
+				changed = true;
+			}
+			out[key] = nextVal;
+		}
+		if (!changed) return prev;
+		return out as T;
+	}
+	return next;
+}
+
 export const useCalendarStore = create<CalendarStoreState>((set) => ({
 	viewType: 'year',
 	currentDate: new Date(),
@@ -156,7 +268,7 @@ export const useCalendarStore = create<CalendarStoreState>((set) => ({
 	changedFilePath: undefined,
 	updateSeq: 0,
 	viewFilters: buildInitialFilters(),
-	settingsVersion: 0,
+	settings: deepClone(DEFAULT_SETTINGS),
 	ganttScroll: null,
 
 	setViewType: (type) => set({ viewType: type }),
@@ -184,7 +296,13 @@ export const useCalendarStore = create<CalendarStoreState>((set) => ({
 		})),
 	setFileTasks: (fileTasks) => set({ fileTasks }),
 	setIcsEvents: (icsEvents) => set({ icsEvents }),
-	bumpSettings: () => set((s) => ({ settingsVersion: s.settingsVersion + 1 })),
+	syncSettings: (settings) =>
+		set((s) => {
+			const normalized = normalizeSettings(settings);
+			const reconciled = reconcileValue(s.settings, normalized);
+			if (reconciled === s.settings) return s;
+			return { settings: reconciled };
+		}),
 	requestGanttScroll: (action) =>
 		set((s) => ({ ganttScroll: { seq: (s.ganttScroll?.seq ?? 0) + 1, action } })),
 	/** 任务写回后触发一次顺带重渲染（数据最终由事件总线回流） */

@@ -57,6 +57,45 @@ function resolveNativeEditorClass(app: App): NativeEditorClass | null {
 	return cachedClass;
 }
 
+/** 标记由 DescriptionEditor 创建的合成 owner，避免污染并方便识别 app.workspace.activeEditor */
+const DESC_OWNER_FLAG = '__gcDescEditorOwner';
+
+export function isDescriptionEditorOwner(target: unknown): boolean {
+	return typeof target === 'object' && target !== null && (target as Record<string, unknown>)[DESC_OWNER_FLAG] === true;
+}
+
+/**
+ * 捕获切换焦点前的真实笔记编辑器：
+ * 原生编辑器自身的焦点回调可能先于 CodeMirror updateListener 把 ws.activeEditor 改成 ed.owner，
+ * 此时绝不能把 ed.owner（或另一个合成 owner）记作 previousActive。
+ */
+export function capturePreviousActiveEditor(
+	currentActive: unknown,
+	owner: unknown,
+	currentPrevious: unknown,
+): unknown {
+	if (currentActive && currentActive !== owner && !isDescriptionEditorOwner(currentActive)) {
+		return currentActive;
+	}
+	return currentPrevious && !isDescriptionEditorOwner(currentPrevious) ? currentPrevious : null;
+}
+
+/** 仅当 activeEditor 仍指向当前合成 owner 时才还原为真实编辑器 */
+export function restorePreviousActiveEditor(
+	ws: { activeEditor: unknown },
+	owner: unknown,
+	previous: unknown,
+): void {
+	if (ws.activeEditor !== owner) return;
+	// Obsidian 的 activeEditor setter 会忽略 MarkdownView 实例（e instanceof MarkdownView || (this._activeEditor = e)），
+	// 必须先置 null 清空 _activeEditor，让 getter 回落到当前 MarkdownView；
+	// 若 previous 是非 MarkdownView 的嵌入式编辑器（如 Canvas），再写回 previous。
+	ws.activeEditor = null;
+	if (previous && !isDescriptionEditorOwner(previous) && ws.activeEditor !== previous) {
+		ws.activeEditor = previous;
+	}
+}
+
 /** 任务描述是单行：换行一律折成空格 */
 function singleLine(text: string): string {
 	return text.split('\r\n').join(' ').split('\n').join(' ').split('\r').join(' ');
@@ -68,8 +107,8 @@ export interface DescriptionEditorProps {
 	onChange: (value: string) => void;
 	/** Enter 提交（原生补全列表打开时 Enter 属于补全，不会走到这里） */
 	onSubmit: () => void;
-	/** 父组件用来聚焦编辑器 */
-	focusRef: MutableRefObject<{ focus: () => void } | null>;
+	/** 父组件用来聚焦 / 失焦编辑器 */
+	focusRef: MutableRefObject<{ focus: () => void; blur?: () => void } | null>;
 	placeholder?: string;
 	/** 任务所在文件（编辑模式）：链接补全据此生成最短且无歧义的链接文字；创建模式为空 */
 	sourcePath?: string;
@@ -93,6 +132,8 @@ export function DescriptionEditor({ app, value, onChange, onSubmit, focusRef, pl
 		if (!NativeClass || !hostEl) return;
 		const host: HTMLElement = hostEl;
 		try {
+			const wsInit = app.workspace as unknown as { activeEditor: unknown };
+			previousActive.current = capturePreviousActiveEditor(wsInit.activeEditor, null, previousActive.current);
 			const Base = NativeClass;
 			class SingleLineEditor extends Base {
 				constructor() {
@@ -100,6 +141,7 @@ export function DescriptionEditor({ app, value, onChange, onSubmit, focusRef, pl
 					super(app, host, { app, onMarkdownScroll: () => {}, getMode: () => 'source' });
 					this.owner.editMode = this;
 					this.owner.editor = this.editor;
+					this.owner[DESC_OWNER_FLAG] = true;
 				}
 				override buildLocalExtensions(): Extension[] {
 					return [
@@ -113,10 +155,10 @@ export function DescriptionEditor({ app, value, onChange, onSubmit, focusRef, pl
 								const ed = editorRef.current;
 								const ws = app.workspace as unknown as { activeEditor: unknown };
 								if (ed && u.view.hasFocus) {
-									previousActive.current = ws.activeEditor;
+									previousActive.current = capturePreviousActiveEditor(ws.activeEditor, ed.owner, previousActive.current);
 									ws.activeEditor = ed.owner;
 								} else if (ed) {
-									if (ws.activeEditor === ed.owner) ws.activeEditor = previousActive.current ?? null;
+									restorePreviousActiveEditor(ws, ed.owner, previousActive.current);
 									ed.editorSuggest?.close();
 								}
 							}
@@ -145,15 +187,22 @@ export function DescriptionEditor({ app, value, onChange, onSubmit, focusRef, pl
 			const ed = new SingleLineEditor();
 			ed.set(initialValue.current, false);
 			editorRef.current = ed;
-			focusRef.current = { focus: () => ed.editor.cm.focus() };
+			focusRef.current = {
+				focus: () => ed.editor.cm.focus(),
+				blur: () => ed.editor.cm.contentDOM.blur(),
+			};
 			return () => {
-				const ws = app.workspace as unknown as { activeEditor: unknown };
-				if (ws.activeEditor === ed.owner) ws.activeEditor = previousActive.current ?? null;
+				ed.editorSuggest?.close();
+				if (ed.editor.cm.contentDOM === ed.editor.cm.contentDOM.ownerDocument.activeElement) {
+					ed.editor.cm.contentDOM.blur();
+				}
 				focusRef.current = null;
 				editorRef.current = null;
 				ed.unload();
 				ed.destroy?.();
 				host.empty();
+				const ws = app.workspace as unknown as { activeEditor: unknown };
+				restorePreviousActiveEditor(ws, ed.owner, previousActive.current);
 			};
 		} catch {
 			failed.current = true;
@@ -172,7 +221,7 @@ export function DescriptionEditor({ app, value, onChange, onSubmit, focusRef, pl
 			<textarea
 				ref={(el) => {
 					textareaRef.current = el;
-					focusRef.current = el ? { focus: () => el.focus() } : null;
+					focusRef.current = el ? { focus: () => el.focus(), blur: () => el.blur() } : null;
 				}}
 				className={EditTaskModalClasses.elements.descTextarea}
 				placeholder={placeholder}

@@ -47,6 +47,9 @@ export class GCMainView extends ItemView {
 		// onLayoutReady 之后」互相等待成环，会把 ~1s 的扫描放大成 ~10s 的
 		// Load layout 卡顿（docs/report-startup-layout-block-2026-09-23.md §4）。
 		// 现在先挂骨架（tasksReady=false）立即返回，数据就绪后由 store 驱动接管。
+		if (this.plugin?.settings) {
+			useCalendarStore.getState().syncSettings(this.plugin.settings);
+		}
 		useCalendarStore.setState({
 			viewType: this.plugin.settings.defaultView || 'year',
 			currentDate: getTodayInTimezone(),
@@ -93,10 +96,12 @@ export class GCMainView extends ItemView {
 	}
 
 	/**
-	 * 设置变更后触发 React 整体重挂载（重新读取设置）
+	 * 设置变更后同步设置快照到 calendarStore（响应式增量更新）
 	 */
 	public refreshSettings(): void {
-		useCalendarStore.getState().bumpSettings();
+		if (this.plugin?.settings) {
+			useCalendarStore.getState().syncSettings(this.plugin.settings);
+		}
 	}
 
 	async onClose(): Promise<void> {

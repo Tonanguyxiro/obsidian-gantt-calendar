@@ -29,54 +29,81 @@ export class TaskDataAdapter {
 		endField: DateFieldType,
 		id?: string
 	): GanttChartTask | null {
-		const endDate = getTaskDateField(task, endField);
-
-		// End field is always required.
-		if (!endDate || isNaN(endDate.getTime())) {
-			return null;
-		}
-
-		// Start resolution: the configured field first, then the two supported
-		// fallbacks. createdDate and startDate are both valid Gantt start points,
-		// so a task is renderable when ANY candidate exists plus the end field.
-		const startCandidates: DateFieldType[] = startField === 'createdDate'
-			? [startField, 'startDate']
-			: startField === 'startDate'
-				? [startField, 'createdDate']
-				: [startField, 'createdDate', 'startDate'];
-
-		let startDate: Date | undefined;
+		let startDate: Date;
+		let normalizedEndDate: Date;
+		let leadStart: string | undefined;
 		let startSourceField: DateFieldType = startField;
-		for (const candidate of startCandidates) {
-			const value = getTaskDateField(task, candidate);
-			if (value && !isNaN(value.getTime())) {
-				startDate = value;
-				startSourceField = candidate;
-				break;
+		let timeLabel: string | undefined;
+		let datePrecision = task.datePrecision;
+		let scheduledProxy = task.scheduledProxy;
+
+		if (this.isScheduledOnlySingleDay(task, startField, endField)) {
+			const scheduledDate = task.scheduledDate as Date;
+			const isScheduledTimed = task.datePrecision?.scheduledDate === 'time';
+			startDate = scheduledDate;
+			normalizedEndDate = scheduledDate;
+			leadStart = undefined;
+			startSourceField = 'scheduledDate';
+			timeLabel = buildIntervalTimeLabel(scheduledDate, scheduledDate, isScheduledTimed, isScheduledTimed);
+			if (!scheduledProxy) {
+				scheduledProxy = { source: task, startField, endField, dateField: endField };
+				if (isScheduledTimed) {
+					datePrecision = { ...task.datePrecision, [endField]: 'time' };
+				}
 			}
-		}
-		if (!startDate) {
-			return null;
-		}
+		} else {
+			const endDate = getTaskDateField(task, endField);
 
-		// 确保结束日期不早于开始日期
-		const normalizedEndDate = endDate < startDate ? startDate : endDate;
+			// End field is always required.
+			if (!this.isValidDate(endDate)) {
+				return null;
+			}
 
-		// Lead-in segment: creation → effective start, drawn in a distinct
-		// muted color when both dates exist and creation precedes the start.
-		const createdDate = task.createdDate;
-		const leadStart = (createdDate && !isNaN(createdDate.getTime()) && createdDate < startDate)
-			? this.formatDate(createdDate)
-			: undefined;
+			// Start resolution: the configured field first, then the two supported
+			// fallbacks. createdDate and startDate are both valid Gantt start points,
+			// so a task is renderable when ANY candidate exists plus the end field.
+			const startCandidates: DateFieldType[] = startField === 'createdDate'
+				? [startField, 'startDate']
+				: startField === 'startDate'
+					? [startField, 'createdDate']
+					: [startField, 'createdDate', 'startDate'];
+
+			let resolvedStart: Date | undefined;
+			for (const candidate of startCandidates) {
+				const value = getTaskDateField(task, candidate);
+				if (this.isValidDate(value)) {
+					resolvedStart = value;
+					startSourceField = candidate;
+					break;
+				}
+			}
+			if (!resolvedStart) {
+				return null;
+			}
+
+			startDate = resolvedStart;
+			// 确保结束日期不早于开始日期
+			normalizedEndDate = endDate < startDate ? startDate : endDate;
+
+			// Lead-in segment: creation → effective start, drawn in a distinct
+			// muted color when both dates exist and creation precedes the start.
+			const createdDate = task.createdDate;
+			leadStart = (this.isValidDate(createdDate) && createdDate < startDate)
+				? this.formatDate(createdDate)
+				: undefined;
+
+			timeLabel = buildIntervalTimeLabel(
+				startDate,
+				normalizedEndDate,
+				task.datePrecision?.[startField] === 'time',
+				task.datePrecision?.[endField] === 'time',
+			);
+		}
 
 		return {
 			id: id ?? this.generateTaskId(task),
 			name: taskDisplayText(task.description) || i18n.t('common.untitledTask'),
-			timeLabel: buildIntervalTimeLabel(
-				startDate, normalizedEndDate,
-				task.datePrecision?.[startField] === 'time',
-				task.datePrecision?.[endField] === 'time'
-			),
+			timeLabel,
 			start: this.formatDate(startDate),
 			end: this.formatDate(normalizedEndDate),
 			leadStart,
@@ -105,11 +132,32 @@ export class TaskDataAdapter {
 			cancelledDate: task.cancelledDate,
 			completionDate: task.completionDate,
 			repeat: task.repeat,
-			datePrecision: task.datePrecision,
+			datePrecision,
 			metadataFields: task.metadataFields,
 			plannerTime: task.plannerTime,
-			scheduledProxy: task.scheduledProxy,
+			scheduledProxy,
 		};
+	}
+
+	private static isValidDate(value: Date | undefined): value is Date {
+		return !!value && !isNaN(value.getTime());
+	}
+
+	/** 仅含 ⏳ 计划日期（无 Day Planner 时间前缀，非时段/旧写法代理）的甘特单日条判定 */
+	private static isScheduledOnlySingleDay(
+		task: GCTask,
+		startField: DateFieldType,
+		endField: DateFieldType,
+	): boolean {
+		if (!this.isValidDate(task.scheduledDate) || task.plannerTime) {
+			return false;
+		}
+		if (task.scheduledProxy) {
+			return !task.scheduledProxy.slot && !task.scheduledProxy.legacy;
+		}
+		const hasStart = this.isValidDate(getTaskDateField(task, startField));
+		const hasEnd = this.isValidDate(getTaskDateField(task, endField));
+		return !hasStart && !hasEnd;
 	}
 
 	/**

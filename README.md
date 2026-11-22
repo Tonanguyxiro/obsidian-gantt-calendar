@@ -54,7 +54,6 @@ A powerful visual task management plugin for Obsidian.
 - [FAQ & Troubleshooting](#faq--troubleshooting)
 - [Development](#development)
 - [Contributing](#contributing)
-- [Roadmap](#roadmap)
 - [License](#license)
 
 ---
@@ -651,53 +650,6 @@ UI strings live in `src/i18n/locales/`. To add a language, copy `en.json`, trans
 3. Commit, then create an annotated tag **without** a `v` prefix (e.g. `1.6.3`)
 4. Push `master` and the tag
 5. Create a GitHub Release whose assets are exactly `main.js`, `manifest.json`, and `styles.css` — the community plugin store pulls from there
-
----
-
-## Roadmap
-
-### Task Parsing
-- [x] Tasks and Dataview dual-format parsing
-- [x] Global filter markers
-- [x] Task tags
-- [x] Task description
-- [x] 6 priority levels
-- [x] 6 date fields with time precision (HH:mm)
-- [x] Recurring task recognition and display
-- [x] Recurring task virtual instances across all views (Year/Month/Week/Day/Task/Gantt)
-- [x] Smart write-back (line drift protection, file-level locking, mixed-format preservation)
-- [ ] Nested tag recognition
-- [ ] Multi-line task recognition
-- [ ] Sub-task recognition
-- [ ] Task dependency relationships
-
-### Views
-- [x] Day View with Daily Note integration (embedded editor)
-- [x] Day View timeline layout
-- [x] Week View continuous time canvas
-- [x] Week/Month View drag & drop
-- [x] Year View heatmap and task count
-- [x] Task View (multi-dimensional filter + date range + recurring task virtual instances)
-- [x] Gantt View (drag + incremental refresh + navigation + recurring task virtual instances)
-- [x] Sidebar View (task list + daily timeline)
-
-### Toolbar
-- [x] View switcher
-- [x] Tag / status / priority filtering
-- [x] Date navigation buttons
-- [x] Time field selector
-- [x] Add task button
-
-### Interactions
-- [x] Task cards (description, tags, priority)
-- [x] Context menu (edit, create note, priority, status, postpone, cancel, delete)
-- [x] Hover tooltips
-- [x] Quick create on empty time slots
-
-### Future Plans (v2.0.0)
-- [ ] Third-party calendar subscription (Feishu Calendar, Outlook Calendar)
-- [ ] Microsoft To Do sync
-- [ ] Google / Apple Calendar via CalDAV
 
 ---
 

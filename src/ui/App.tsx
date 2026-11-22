@@ -46,7 +46,6 @@ export function App(): JSX.Element {
 	}, []);
 
 	const viewTypeRaw = useCalendarStore((s) => s.viewType);
-	const settingsVersion = useCalendarStore((s) => s.settingsVersion);
 	const tasksReady = useCalendarStore((s) => s.tasksReady);
 
 	// 手机端形态：工具栏取消（改 MobileNavDock 悬浮菜单），且不提供甘特图
@@ -69,7 +68,7 @@ export function App(): JSX.Element {
 					<AnimatePresence mode="wait" initial={false}>
 						{!isGantt ? (
 							<motion.div
-								key={`${viewType}-${settingsVersion}`}
+								key={viewType}
 								className={`calendar-content${isGantt ? ' gantt-mode' : ''}`}
 								style={{ overflow: isWaterfall ? 'visible' : undefined }}
 								initial={{ opacity: 0 }}
@@ -81,7 +80,7 @@ export function App(): JSX.Element {
 							</motion.div>
 						) : (
 							<div
-								key={`gantt-${settingsVersion}`}
+								key="gantt"
 								className="calendar-content gantt-mode"
 							>
 								{tasksReady ? <GanttView /> : <CalendarSkeleton />}

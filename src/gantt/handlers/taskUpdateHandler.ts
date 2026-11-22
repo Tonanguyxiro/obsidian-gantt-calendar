@@ -69,14 +69,30 @@ export class TaskUpdateHandler {
 			// 而不是修改创建时间。创建时间保持原值，创建→开始自然形成引导段。
 			const writeStartTo: DateFieldType = startSource !== startField ? startField : startSource;
 
-			// Dragging is day-granular: re-apply the original time-of-day so a
-			// timed task (yyyy-MM-dd HH:mm) does not lose its time on write-back.
-			const originalStartDate = getTaskDateField(ganttTask as unknown as GCTask, writeStartTo);
-			const originalEndDate = getTaskDateField(ganttTask as unknown as GCTask, endField);
-			const updates: Record<string, Date> = {
-				[writeStartTo]: this.preserveTimeOfDay(newStart, originalStartDate, ganttTask.datePrecision?.[writeStartTo]),
-				[endField]: this.preserveTimeOfDay(newEnd, originalEndDate, ganttTask.datePrecision?.[endField]),
-			};
+			const isSameLocalDay =
+				newStart.getFullYear() === newEnd.getFullYear() &&
+				newStart.getMonth() === newEnd.getMonth() &&
+				newStart.getDate() === newEnd.getDate();
+
+			let updates: Record<string, Date>;
+			if (!ganttTask.scheduledProxy && ganttTask.startSourceField === 'scheduledDate' && isSameLocalDay) {
+				updates = {
+					scheduledDate: this.preserveTimeOfDay(
+						newStart,
+						ganttTask.scheduledDate,
+						ganttTask.datePrecision?.scheduledDate
+					),
+				};
+			} else {
+				// Dragging is day-granular: re-apply the original time-of-day so a
+				// timed task (yyyy-MM-dd HH:mm) does not lose its time on write-back.
+				const originalStartDate = getTaskDateField(ganttTask as unknown as GCTask, writeStartTo);
+				const originalEndDate = getTaskDateField(ganttTask as unknown as GCTask, endField);
+				updates = {
+					[writeStartTo]: this.preserveTimeOfDay(newStart, originalStartDate, ganttTask.datePrecision?.[writeStartTo]),
+					[endField]: this.preserveTimeOfDay(newEnd, originalEndDate, ganttTask.datePrecision?.[endField]),
+				};
+			}
 
 			// 使用 updateTaskProperties
 			const { updateTaskProperties } = await import('../../tasks/taskUpdater');

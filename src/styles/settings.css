@@ -16,7 +16,7 @@
 .gc-settings__tab-button {
 	flex: 1;
 	padding: 7px 0;
-	font-size: 13px;
+	font-size: var(--gc-font-sm);
 	font-weight: 500;
 	letter-spacing: -0.12px;
 	color: var(--text-muted);
@@ -38,7 +38,7 @@
 	color: var(--text-normal);
 	font-weight: 600;
 	background: var(--background-primary);
-	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+	box-shadow: var(--gc-elev-1);
 }
 
 .gc-settings__tab-content {
@@ -68,13 +68,13 @@
 	margin-bottom: 24px;
 	padding: 16px 20px;
 	border-radius: 11px;
-	border: 1px solid rgba(204, 85, 0, 0.25);
-	background-color: rgba(255, 140, 0, 0.12);
+	border: 1px solid color-mix(in srgb, var(--gc-color-orange) 28%, transparent);
+	background-color: color-mix(in srgb, var(--gc-color-orange) 12%, transparent);
 }
 
 .gc-settings-sync-warning__icon {
 	flex-shrink: 0;
-	font-size: 22px;
+	font-size: var(--gc-font-xl);
 	line-height: 1.4;
 }
 
@@ -84,41 +84,41 @@
 }
 
 .gc-settings-sync-warning__title {
-	font-size: 15px;
+	font-size: var(--gc-font-lg);
 	font-weight: 600;
-	color: #8b3a00;
+	color: color-mix(in srgb, var(--gc-color-orange) 72%, var(--text-normal));
 	letter-spacing: -0.15px;
 	line-height: 1.35;
 }
 
 .gc-settings-sync-warning__desc {
 	margin-top: 6px;
-	font-size: 13px;
-	color: #6e4a2a;
+	font-size: var(--gc-font-sm);
+	color: color-mix(in srgb, var(--gc-color-orange) 40%, var(--text-normal));
 	line-height: 1.55;
 	letter-spacing: -0.08px;
 }
 
 .gc-settings-sync-warning__desc strong {
-	color: #b34700;
+	color: color-mix(in srgb, var(--gc-color-orange) 82%, var(--text-normal));
 	font-weight: 600;
 }
 
 .theme-dark .gc-settings-sync-warning {
-	border-color: rgba(255, 160, 40, 0.30);
-	background-color: rgba(255, 140, 0, 0.10);
+	border-color: color-mix(in srgb, var(--gc-color-orange) 30%, transparent);
+	background-color: color-mix(in srgb, var(--gc-color-orange) 10%, transparent);
 }
 
 .theme-dark .gc-settings-sync-warning__title {
-	color: #f0a050;
+	color: color-mix(in srgb, var(--gc-color-orange) 80%, var(--text-normal));
 }
 
 .theme-dark .gc-settings-sync-warning__desc {
-	color: #a08060;
+	color: color-mix(in srgb, var(--gc-color-orange) 45%, var(--text-muted));
 }
 
 .theme-dark .gc-settings-sync-warning__desc strong {
-	color: #f0883e;
+	color: var(--gc-color-orange);
 }
 
 .gc-sync-hint {
@@ -139,7 +139,7 @@
 
 .gc-sync-hint--success {
 	border: 1px solid var(--color-green);
-	background-color: hsla(var(--color-green-hsl), 0.15);
+	background-color: color-mix(in srgb, var(--color-green) 15%, transparent);
 	color: var(--color-green);
 	font-weight: var(--font-medium);
 }
@@ -187,7 +187,7 @@
 }
 
 .gc-sync-tasklist-card__guid {
-	font-size: 11px;
+	font-size: var(--gc-font-xxs);
 	font-family: var(--font-monospace);
 	color: var(--text-muted);
 	margin-top: var(--size-2-1);
@@ -270,7 +270,7 @@
 	background: var(--background-secondary);
 	cursor: pointer;
 	transition: all 120ms ease;
-	font-size: 12px;
+	font-size: var(--gc-font-xs);
 	font-weight: 600;
 	color: var(--text-muted);
 	user-select: none;
@@ -311,7 +311,7 @@
 	justify-content: center;
 	padding: 4px 14px;
 	border-radius: 9999px;
-	font-size: 12px;
+	font-size: var(--gc-font-xs);
 	font-weight: 600;
 	letter-spacing: -0.12px;
 	cursor: pointer;
@@ -368,7 +368,7 @@
 	align-items: center;
 	padding: 4px 12px;
 	border-radius: 9999px;
-	font-size: 12px;
+	font-size: var(--gc-font-xs);
 	font-weight: 600;
 	letter-spacing: -0.12px;
 	transition: background-color 120ms ease, color 120ms ease;
@@ -386,7 +386,7 @@
 }
 
 .gc-settings-status-card__key {
-	font-size: 11px;
+	font-size: var(--gc-font-xxs);
 	font-weight: 400;
 	color: var(--text-faint);
 	font-family: var(--font-monospace);
@@ -396,7 +396,7 @@
 	width: 24px;
 	height: 24px;
 	padding: 0;
-	font-size: 16px;
+	font-size: var(--gc-font-lg);
 	line-height: 1;
 	border-radius: 50%;
 	border: none;
@@ -418,7 +418,7 @@
 	width: 24px;
 	height: 24px;
 	padding: 0;
-	font-size: 14px;
+	font-size: var(--gc-font-md);
 	line-height: 1;
 	border-radius: 50%;
 	border: none;
@@ -463,7 +463,7 @@
 }
 
 .gc-settings-status-card__theme-label {
-	font-size: 11px;
+	font-size: var(--gc-font-xxs);
 	font-weight: 600;
 	color: var(--text-muted);
 	letter-spacing: -0.12px;
@@ -488,7 +488,7 @@
 }
 
 .gc-settings-status-card__color-label-text {
-	font-size: 11px;
+	font-size: var(--gc-font-xxs);
 	color: var(--text-muted);
 }
 
@@ -546,7 +546,7 @@
 	display: block;
 	margin-bottom: 6px;
 	font-weight: 500;
-	font-size: 13px;
+	font-size: var(--gc-font-sm);
 }
 
 .gc-settings-status-modal__input {
@@ -556,7 +556,7 @@
 	border: 1px solid var(--background-modifier-border);
 	background: var(--background-primary);
 	color: var(--text-normal);
-	font-size: 14px;
+	font-size: var(--gc-font-md);
 }
 
 .gc-settings-status-modal__textarea {
@@ -566,18 +566,18 @@
 	border: 1px solid var(--background-modifier-border);
 	background: var(--background-primary);
 	color: var(--text-normal);
-	font-size: 14px;
+	font-size: var(--gc-font-md);
 	resize: vertical;
 }
 
 .gc-settings-status-modal__hint {
-	font-size: 11px;
+	font-size: var(--gc-font-xxs);
 	color: var(--text-muted);
 	margin-bottom: 4px;
 }
 
 .gc-settings-status-modal__error {
-	font-size: 12px;
+	font-size: var(--gc-font-xs);
 	color: var(--text-error);
 	margin-top: 4px;
 }
@@ -607,7 +607,7 @@
 }
 
 .gc-settings-status-modal__color-label {
-	font-size: 12px;
+	font-size: var(--gc-font-xs);
 }
 
 .gc-settings-status-modal__swatch-wrapper {
@@ -652,7 +652,7 @@
 	background: transparent;
 	color: var(--text-normal);
 	cursor: pointer;
-	font-size: 14px;
+	font-size: var(--gc-font-md);
 	transition: background 120ms ease;
 }
 

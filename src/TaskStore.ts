@@ -1,4 +1,4 @@
-import { App } from 'obsidian';
+import { App, EventRef } from 'obsidian';
 import { GCTask } from './types';
 import { Logger } from './utils/logger';
 
@@ -13,9 +13,22 @@ export {
 import { EventBus } from './data-layer/EventBus';
 import { TaskRepository } from './data-layer/TaskRepository';
 import { MarkdownDataSource } from './data-layer/MarkdownDataSource';
+import {
+	DataviewDataSource,
+	isDataviewIndexingAvailable,
+	isDataviewPluginEnabled,
+} from './data-layer/DataviewDataSource';
+import { IDataSource } from './data-layer/IDataSource';
 import { DataSourceConfig } from './data-layer/types';
 
 export type TaskStoreUpdateListener = (filePath?: string) => void;
+
+function toLocalDayKey(d: Date): string {
+	const y = d.getFullYear();
+	const m = String(d.getMonth() + 1).padStart(2, '0');
+	const day = String(d.getDate()).padStart(2, '0');
+	return `${y}-${m}-${day}`;
+}
 
 /**
  * TaskStore - 任务数据存储
@@ -39,6 +52,10 @@ export class TaskStore {
 	private eventBus: EventBus;
 	private repository: TaskRepository;
 	private markdownSource: MarkdownDataSource;
+	private dataviewSource: DataviewDataSource | null = null;
+	private activeSource: IDataSource;
+	private dataviewReadyRef: EventRef | null = null;
+	private fallbackInProgress: boolean = false;
 	private globalTaskFilter: string = '';
 	private enabledFormats: string[] = ['tasks', 'dataview'];
 	private isInitialized: boolean = false;
@@ -53,6 +70,8 @@ export class TaskStore {
 	// 结果缓存
 	private cachedTasks: GCTask[] | null = null;
 	private cacheValid: boolean = false;
+	private rangeCache: Map<string, GCTask[]> = new Map();
+	private readonly MAX_RANGE_CACHE_ENTRIES = 32;
 
 	// 防抖
 	private updateDebounceTimer: number | null = null;
@@ -71,7 +90,7 @@ export class TaskStore {
 		this.eventBus = new EventBus();
 		this.repository = new TaskRepository(this.eventBus);
 
-		// 创建 Markdown 数据源配置
+		// 创建默认 Markdown 数据源（若 Dataview 可用，在 initialize 时切换为主索引）
 		const config: DataSourceConfig = {
 			enabled: true,
 			syncDirection: 'import-only',
@@ -82,8 +101,9 @@ export class TaskStore {
 		};
 
 		this.markdownSource = new MarkdownDataSource(app, this.eventBus, config);
+		this.activeSource = this.markdownSource;
 
-		// 注册数据源
+		// 注册默认数据源
 		this.repository.registerDataSource(this.markdownSource);
 
 		// 监听数据层事件
@@ -218,10 +238,23 @@ export class TaskStore {
 		}
 
 		const scanStartTime = performance.now();
+		this.clearDataviewReadyListener();
 
-		await this.markdownSource.initialize(config);
+		if (isDataviewIndexingAvailable(this.app)) {
+			try {
+				await this.activateDataviewSource(config);
+			} catch (error) {
+				Logger.warn('TaskStore', 'DataviewDataSource initialization failed, falling back to MarkdownDataSource:', error);
+				await this.fallbackToMarkdownSource(config);
+			}
+		} else {
+			await this.activateMarkdownSource(config);
+			if (isDataviewPluginEnabled(this.app)) {
+				this.watchForDataviewReady();
+			}
+		}
 
-		Logger.debug('TaskStore', 'MarkdownDataSource initialized');
+		Logger.debug('TaskStore', `Active data source initialized: ${this.activeSource.sourceId}`);
 
 		this.isInitialized = true;
 		// 结算门闩：唤醒所有 whenReady 等待者
@@ -235,9 +268,124 @@ export class TaskStore {
 		Logger.stats('TaskStore', `Initial scan completed in ${scanElapsed.toFixed(2)}ms`, {
 			totalFiles: markdownFiles.length,
 			tasksFound: stats.totalTasks,
-			dataSources: stats.dataSources
+			dataSources: stats.dataSources,
+			activeSource: this.activeSource.sourceId,
 		});
 		Logger.debug('TaskStore', '===== Initialization complete =====');
+	}
+
+	/** 切换并初始化 Dataview 主数据源 */
+	private async activateDataviewSource(config: DataSourceConfig): Promise<void> {
+		if (!this.dataviewSource || this.activeSource !== this.dataviewSource) {
+			this.markdownSource.destroy();
+			this.repository.unregisterDataSource(this.markdownSource.sourceId);
+			this.repository.clear();
+			this.invalidateCache();
+			this.dataviewSource = new DataviewDataSource(
+				this.app,
+				this.eventBus,
+				config,
+				() => {
+					void this.handleDataviewRuntimeFailure();
+				}
+			);
+			this.repository.registerDataSource(this.dataviewSource);
+			this.activeSource = this.dataviewSource;
+		}
+		await this.dataviewSource.initialize(config);
+	}
+
+	/** 激活 Markdown 后备数据源 */
+	private async activateMarkdownSource(config: DataSourceConfig): Promise<void> {
+		if (this.activeSource !== this.markdownSource) {
+			this.dataviewSource?.destroy();
+			this.repository.unregisterDataSource('dataview');
+			this.dataviewSource = null;
+			this.repository.clear();
+			this.invalidateCache();
+			this.repository.registerDataSource(this.markdownSource);
+			this.activeSource = this.markdownSource;
+		}
+		await this.markdownSource.initialize(config);
+	}
+
+	/** Dataview 出错或失效时自动回退到 MarkdownDataSource */
+	private async fallbackToMarkdownSource(config: DataSourceConfig): Promise<void> {
+		this.dataviewSource?.destroy();
+		this.repository.unregisterDataSource('dataview');
+		this.dataviewSource = null;
+		this.repository.clear();
+		this.invalidateCache();
+		this.repository.registerDataSource(this.markdownSource);
+		this.activeSource = this.markdownSource;
+		await this.markdownSource.initialize(config);
+	}
+
+	/** Dataview 已启用但索引尚未就绪时，先由 MarkdownDataSource 兜底，待 index-ready 后无感切换为主索引 */
+	private watchForDataviewReady(): void {
+		const metadataCache = this.app.metadataCache as unknown as {
+			on?: (name: string, cb: () => void) => EventRef;
+		};
+		if (typeof metadataCache?.on !== 'function') return;
+
+		this.dataviewReadyRef = metadataCache.on('dataview:index-ready', () => {
+			this.clearDataviewReadyListener();
+			if (!this.isInitialized || !isDataviewIndexingAvailable(this.app)) return;
+			const config: DataSourceConfig = {
+				enabled: true,
+				syncDirection: 'import-only',
+				autoSync: true,
+				conflictResolution: 'local-win',
+				globalFilter: this.globalTaskFilter,
+				enabledFormats: this.enabledFormats,
+			};
+			void this.activateDataviewSource(config)
+				.then(() => {
+					this.invalidateCache();
+					this.notifyListeners();
+				})
+				.catch((error) => {
+					Logger.warn('TaskStore', 'Switching to Dataview after index-ready failed, keeping MarkdownDataSource:', error);
+					void this.fallbackToMarkdownSource(config);
+				});
+		});
+	}
+
+	private clearDataviewReadyListener(): void {
+		if (!this.dataviewReadyRef) return;
+		const metadataCache = this.app.metadataCache as unknown as {
+			offref?: (ref: EventRef) => void;
+		};
+		metadataCache?.offref?.(this.dataviewReadyRef);
+		this.dataviewReadyRef = null;
+	}
+
+	private async handleDataviewRuntimeFailure(): Promise<void> {
+		if (this.fallbackInProgress || this.activeSource !== this.dataviewSource) return;
+		this.fallbackInProgress = true;
+		try {
+			Logger.warn('TaskStore', 'Dataview runtime error detected, falling back to MarkdownDataSource');
+			const config: DataSourceConfig = {
+				enabled: true,
+				syncDirection: 'import-only',
+				autoSync: true,
+				conflictResolution: 'local-win',
+				globalFilter: this.globalTaskFilter,
+				enabledFormats: this.enabledFormats,
+			};
+			await this.fallbackToMarkdownSource(config);
+			this.invalidateCache();
+			this.notifyListeners();
+		} finally {
+			this.fallbackInProgress = false;
+		}
+	}
+
+	/**
+	 * 获取当前激活的数据源 ID（'dataview' | 'markdown'）
+	 */
+	getActiveDataSourceId(): string {
+		return this.activeSource.sourceId;
 	}
 
 	/**
@@ -266,6 +414,26 @@ export class TaskStore {
 		Logger.debug('TaskStore', `Cache rebuilt in ${elapsed.toFixed(2)}ms (${allTasks.length} tasks)`);
 
 		return allTasks;
+	}
+
+	/**
+	 * 按本地日期范围查询任务（使用 TaskRepository 日期桶二级索引 + 轻量范围缓存）
+	 */
+	getTasksByDateRange(start: Date, end: Date): GCTask[] {
+		if (!start || !end || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+			return [];
+		}
+		const key = `${toLocalDayKey(start)}_${toLocalDayKey(end)}`;
+		const cached = this.rangeCache.get(key);
+		if (cached) {
+			return cached;
+		}
+		const matched = this.repository.getTasksByDateRange(start, end);
+		if (this.rangeCache.size >= this.MAX_RANGE_CACHE_ENTRIES) {
+			this.rangeCache.clear();
+		}
+		this.rangeCache.set(key, matched);
+		return matched;
 	}
 
 	/**
@@ -304,9 +472,16 @@ export class TaskStore {
 			this.updateDebounceTimer = null;
 		}
 		this.updateDebounceFirstAt = null;
+		this.clearDataviewReadyListener();
 		// 销毁数据源，移除所有事件监听器
+		this.dataviewSource?.destroy();
+		this.dataviewSource = null;
 		this.markdownSource.destroy();
+		this.repository.unregisterDataSource('dataview');
+		this.repository.registerDataSource(this.markdownSource);
+		this.activeSource = this.markdownSource;
 		this.repository.clear();
+		this.invalidateCache();
 		this.isInitialized = false;
 		// 重开门闩：下一次 initialize 完成前 whenReady 应继续等待
 		this.createInitGate();
@@ -328,14 +503,18 @@ export class TaskStore {
 	}
 
 	/**
-	 * 立即刷新指定文件的 Repository 缓存（跳过文件事件的 50ms 防抖）。
-	 * 写回完成后立即调用此方法，确保 getAllTasks() 返回最新数据。
+	 * 立即刷新指定文件的 Repository 缓存（跳过文件事件的防抖）。
+	 * 写回完成后立即调用此方法，确保 getAllTasks() / getTasksByDateRange() 返回最新数据。
 	 */
 	async refreshFile(filePath: string): Promise<void> {
-		await (this.markdownSource as unknown as { processFileModification: (p: string) => Promise<void> }).processFileModification(filePath);
+		if (this.activeSource.refreshFile) {
+			await this.activeSource.refreshFile(filePath);
+		} else {
+			await (this.markdownSource as unknown as { processFileModification: (p: string) => Promise<void> }).processFileModification(filePath);
+		}
 		// 立即通知视图（跳过 75ms 防抖），确保返回最新数据
 		this.invalidateCache();
-		this.notifyListeners();
+		this.notifyListeners(filePath);
 	}
 
 	/**
@@ -355,6 +534,7 @@ export class TaskStore {
 	private invalidateCache(): void {
 		this.cachedTasks = null;
 		this.cacheValid = false;
+		this.rangeCache.clear();
 	}
 
 	/**

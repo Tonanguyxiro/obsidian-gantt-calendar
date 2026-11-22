@@ -10,6 +10,7 @@ import type GanttCalendarPlugin from '../../../main';
 import type { IcsConfiguration, IcsSubscription } from '../../settings/types';
 import { useCalendarStore } from '../../ui/store/calendarStore';
 import { parseIcs } from './icsParser';
+import { loadIcsCache, saveIcsCache, type IcsCacheEntry } from './icsCache';
 import type { IcsCalendarEvent } from './icsTask';
 import { Logger } from '../../utils/logger';
 import { i18n } from '../../i18n/i18n';
@@ -40,14 +41,22 @@ export function normalizeIcsUrl(url: string): string {
 export class IcsService {
 	/** url → 最近一次成功拉取的文本（拉取失败时回退） */
 	private readonly lastGood = new Map<string, string>();
+	/** url → 最近一次成功拉取时间戳（毫秒） */
+	private readonly fetchedAt = new Map<string, number>();
+	/** 磁盘缓存中已记录的 url（用于检测被移除的订阅并裁剪落盘） */
+	private readonly diskUrls = new Set<string>();
 	private timer?: number;
 	private interval = 0;
 	/** 影响拉取结果的配置签名（启用的订阅地址）；变化才重新拉取 */
 	private fetchSignature = '';
+	private hydrationStarted = false;
+	private hydrating = false;
+	private hydrationPromise: Promise<void> | null = null;
+	private destroyed = false;
 
 	constructor(private readonly plugin: GanttCalendarPlugin) {}
 
-	/** 设置变化 / 启动时调用：按配置重排定时器，必要时重新拉取或仅重新着色 */
+	/** 设置变化 / 启动时调用：按配置重排定时器，首次先水合磁盘缓存再后台刷新 */
 	applyConfig(): void {
 		const config = getIcsConfig(this.plugin);
 
@@ -61,33 +70,62 @@ export class IcsService {
 			}
 		}
 
-		const signature = this.activeSubscriptions(config).map((s) => s.url.trim()).join('\n');
+		const signature = this.buildFetchSignature(config);
+		if (!this.hydrationStarted) {
+			this.hydrationStarted = true;
+			this.hydrating = true;
+			this.fetchSignature = signature;
+			this.bootstrapFromCache().catch((e) => Logger.error('IcsService', 'Cache bootstrap failed', e));
+			return;
+		}
+		if (this.hydrating) {
+			this.fetchSignature = signature;
+			return;
+		}
+
+		const pruned = this.pruneUnconfigured(config);
 		if (signature !== this.fetchSignature) {
 			this.fetchSignature = signature;
 			this.refresh({ silent: true }).catch((e) => Logger.error('IcsService', 'Refresh failed', e));
 		} else {
 			this.rebuild(config); // 仅名称/颜色变化：用缓存重新着色
+			if (pruned) {
+				this.persistCache(config).catch((e) => Logger.error('IcsService', 'Failed to persist ICS cache', e));
+			}
 		}
 	}
 
 	/** 重新拉取全部启用的订阅 */
 	async refresh(options?: { silent?: boolean }): Promise<void> {
+		await this.ensureCacheHydrated();
+		if (this.destroyed) return;
+
 		const config = getIcsConfig(this.plugin);
 		const active = this.activeSubscriptions(config);
-		this.fetchSignature = active.map((s) => s.url.trim()).join('\n');
+		this.fetchSignature = this.buildFetchSignature(config);
 		const errors: string[] = [];
+		let anySucceeded = false;
 
 		await Promise.all(active.map(async (sub) => {
+			const key = sub.url.trim();
 			try {
-				this.lastGood.set(sub.url, await this.fetch(sub.url));
+				const text = await this.fetch(sub.url);
+				this.lastGood.set(key, text);
+				this.fetchedAt.set(key, Date.now());
+				anySucceeded = true;
 			} catch (error) {
 				const msg = error instanceof Error ? error.message : String(error);
-				errors.push(`${sub.name.trim() || sub.url}: ${msg}${this.lastGood.has(sub.url) ? ` (${i18n.t('settings.ics.usingCache')})` : ''}`);
+				errors.push(`${sub.name.trim() || sub.url}: ${msg}${this.lastGood.has(key) ? ` (${i18n.t('settings.ics.usingCache')})` : ''}`);
 				Logger.error('IcsService', `Failed to fetch ${sub.url}`, error);
 			}
 		}));
 
+		const pruned = this.pruneUnconfigured(config);
 		const count = this.rebuild(config);
+
+		if (anySucceeded || pruned) {
+			await this.persistCache(config);
+		}
 
 		if (errors.length > 0) {
 			new Notice(`${i18n.t('settings.ics.syncFailed')}\n${errors.join('\n')}`, 10000);
@@ -97,8 +135,97 @@ export class IcsService {
 	}
 
 	destroy(): void {
+		this.destroyed = true;
 		this.stopTimer();
 		useCalendarStore.getState().setIcsEvents([]);
+	}
+
+	private async bootstrapFromCache(): Promise<void> {
+		try {
+			await this.ensureCacheHydrated();
+		} finally {
+			this.hydrating = false;
+		}
+		if (this.destroyed) return;
+
+		const config = getIcsConfig(this.plugin);
+		const pruned = this.pruneUnconfigured(config);
+		this.rebuild(config);
+
+		const signature = this.buildFetchSignature(config);
+		this.fetchSignature = signature;
+		if (signature !== '') {
+			await this.refresh({ silent: true });
+		} else if (pruned) {
+			await this.persistCache(config);
+		}
+	}
+
+	private ensureCacheHydrated(): Promise<void> {
+		if (!this.hydrationPromise) {
+			this.hydrationPromise = this.hydrateFromCache();
+		}
+		return this.hydrationPromise;
+	}
+
+	private async hydrateFromCache(): Promise<void> {
+		const cache = await loadIcsCache(this.plugin);
+		for (const [rawUrl, entry] of Object.entries(cache.entries)) {
+			const key = rawUrl.trim();
+			if (!key) continue;
+			this.diskUrls.add(key);
+			if (!this.lastGood.has(key)) {
+				this.lastGood.set(key, entry.text);
+				this.fetchedAt.set(key, entry.fetchedAt);
+			}
+		}
+	}
+
+	private buildFetchSignature(config: IcsConfiguration): string {
+		return this.activeSubscriptions(config).map((s) => s.url.trim()).join('\n');
+	}
+
+	private configuredUrls(config: IcsConfiguration): Set<string> {
+		return new Set(config.subscriptions.map((s) => s.url.trim()).filter((u) => u.length > 0));
+	}
+
+	private pruneUnconfigured(config: IcsConfiguration): boolean {
+		const configured = this.configuredUrls(config);
+		let changed = false;
+		for (const key of Array.from(this.lastGood.keys())) {
+			if (!configured.has(key)) {
+				this.lastGood.delete(key);
+				this.fetchedAt.delete(key);
+				changed = true;
+			}
+		}
+		for (const key of Array.from(this.diskUrls)) {
+			if (!configured.has(key)) {
+				changed = true;
+			}
+		}
+		return changed;
+	}
+
+	private async persistCache(config: IcsConfiguration): Promise<void> {
+		const configured = this.configuredUrls(config);
+		const entries: Record<string, IcsCacheEntry> = {};
+		for (const [url, text] of this.lastGood.entries()) {
+			if (!configured.has(url)) continue;
+			entries[url] = {
+				text,
+				fetchedAt: this.fetchedAt.get(url) ?? Date.now(),
+			};
+		}
+		try {
+			await saveIcsCache(this.plugin, entries);
+			this.diskUrls.clear();
+			for (const url of Object.keys(entries)) {
+				this.diskUrls.add(url);
+			}
+		} catch (error) {
+			Logger.error('IcsService', 'Failed to persist ICS cache', error);
+		}
 	}
 
 	private activeSubscriptions(config: IcsConfiguration): IcsSubscription[] {
@@ -127,7 +254,7 @@ export class IcsService {
 		const events: IcsCalendarEvent[] = [];
 
 		for (const sub of this.activeSubscriptions(config)) {
-			const text = this.lastGood.get(sub.url);
+			const text = this.lastGood.get(sub.url.trim());
 			if (!text) continue;
 			const calendarName = sub.name.trim() || sub.url;
 			for (const ev of parseIcs(text, winStart, winEnd)) {

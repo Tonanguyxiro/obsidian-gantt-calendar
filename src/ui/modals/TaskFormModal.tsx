@@ -26,12 +26,13 @@ import { stripPlannerTime } from '../../tasks/taskParser/utils';
 import { getStatusColor, getCurrentThemeMode } from '../../tasks/taskStatus';
 import { openReactModal } from './modalHost';
 import { useCalendarStore } from '../store/calendarStore';
+import { PRIORITY_ORDER, getPriorityMeta, type PriorityLevel } from '../../utils/priorityIcons';
 
 /**
  * 优先级选项
  */
 export interface PriorityOption {
-	value: 'highest' | 'high' | 'medium' | 'normal' | 'low' | 'lowest';
+	value: PriorityLevel;
 	label: string;
 	icon: string;
 }
@@ -67,14 +68,11 @@ export interface TaskFormModalProps {
 // 模块级常量会在 import 时固化 i18n 文案，语言切换后不生效——
 // 改为组件内按当前语言求值
 function getPriorityOptions(): PriorityOption[] {
-	return [
-		{ value: 'highest', label: i18n.t('common.priority.highest'), icon: '🔺' },
-		{ value: 'high', label: i18n.t('common.priority.high'), icon: '⏫' },
-		{ value: 'medium', label: i18n.t('common.priority.medium'), icon: '🔼' },
-		{ value: 'normal', label: i18n.t('common.priority.normal'), icon: '◽' },
-		{ value: 'low', label: i18n.t('common.priority.low'), icon: '🔽' },
-		{ value: 'lowest', label: i18n.t('common.priority.lowest'), icon: '⏬' },
-	];
+	return PRIORITY_ORDER.map((value) => ({
+		value,
+		label: i18n.t(`common.priority.${value}`),
+		icon: getPriorityMeta(value).icon,
+	}));
 }
 
 const sameDay = (a: Date | null | undefined, b: Date | null | undefined): boolean =>
@@ -199,10 +197,9 @@ export function TaskFormModal({
 			d.completionDate = dayOnly(task.completionDate);
 			d.cancelledDate = dayOnly(task.cancelledDate);
 		} else {
-			const base = targetDate || new Date();
-			const dayStart = dayStartOf(base);
-			d.createdDate = new Date(dayStart);
-			d.dueDate = new Date(dayStart);
+			// 新建默认不填创建日期与安排时间；仅时间轴点选/框选拖入时预填对应日期的时间片
+			d.createdDate = null;
+			d.dueDate = null;
 			d.startDate = null;
 			// 从时间轴点选 / 框选新建：直接是一个时间片（⏳ 当日 + 时间前缀）
 			d.scheduledDate = initialSlot.day ? new Date(initialSlot.day) : null;
@@ -269,7 +266,7 @@ export function TaskFormModal({
 	}, [mode, task, initialSlot]);
 	const [kind, setKind] = useState<TaskKind>(initialKind);
 	const kindChanged = kind !== initialKind;
-	const descriptionRef = useRef<{ focus: () => void } | null>(null);
+	const descriptionRef = useRef<{ focus: () => void; blur?: () => void } | null>(null);
 	// 状态：设置里配置的全部状态（含自定义）；编辑模式默认取任务当前状态
 	const initialStatus = mode === 'edit' ? (task?.status ?? (task?.completed ? 'done' : task?.cancelled ? 'canceled' : 'todo')) : 'todo';
 	const [status, setStatus] = useState<string>(initialStatus);
@@ -300,7 +297,10 @@ export function TaskFormModal({
 	// 直接调 onClose 会立即卸载整个弹窗，动画中断且可能丢弃动画中的状态。
 	// useCallback：Modal 的焦点管理 useEffect 依赖 onClose，
 	// 未 memo 化会导致每次键入触发 focus 面板（输入框焦点被抢走）
-	const handleClose = useCallback(() => setOpen(false), []);
+	const handleClose = useCallback(() => {
+		descriptionRef.current?.blur?.();
+		setOpen(false);
+	}, []);
 
 	const isEdit = mode === 'edit';
 	const title = isEdit ? i18n.t('modals.editTask.title') : i18n.t('modals.createTask.title');
@@ -374,7 +374,7 @@ export function TaskFormModal({
 					priority: priority === 'normal' ? undefined : priority,
 					status: status !== 'todo' ? status : undefined,
 					repeat: repeat || undefined,
-					createdDate: dates.createdDate!,
+					createdDate: dates.createdDate,
 					startDate: kind === 'period' ? dates.startDate : null,
 					scheduledDate: scheduled,
 					dueDate: kind === 'period' ? dates.dueDate : null,
@@ -563,9 +563,6 @@ export function TaskFormModal({
 		return `${day} · ${range}${len}`;
 	})();
 
-	// 分段控件里 ◽ 几乎看不见，普通优先级用短横表示
-	const priorityIcon = (v: PriorityOption['value']) => (v === 'normal' ? '–' : priorityOptions.find((o) => o.value === v)?.icon ?? '');
-
 	return (
 		<Modal open={open} onClose={handleClose} onExited={onClose} title={title} width={600} className={ModalClasses.overlayTop}>
 			<div className={EditTaskModalClasses.block}>
@@ -640,27 +637,30 @@ export function TaskFormModal({
 
 						<PropRow icon="flag" label={i18n.t('modals.editTask.priorityLabel')}>
 							<div className={EditTaskModalClasses.elements.prioritySegments} role="radiogroup">
-								{priorityOptions.map(option => (
-									<button
-										key={option.value}
-										type="button"
-										role="radio"
-										aria-checked={option.value === priority}
-										aria-label={option.label}
-										title={option.label}
-										className={[
-											EditTaskModalClasses.elements.prioritySegment,
-											...(option.value === priority ? [EditTaskModalClasses.elements.priorityBtnSelected] : []),
-										].join(' ')}
-										data-value={option.value}
-										onClick={() => {
-											setPriority(option.value);
-											if (isEdit) setPriorityChanged(true);
-										}}
-									>
-										<span>{priorityIcon(option.value)}</span>
-									</button>
-								))}
+								{priorityOptions.map(option => {
+									const meta = getPriorityMeta(option.value);
+									return (
+										<button
+											key={option.value}
+											type="button"
+											role="radio"
+											aria-checked={option.value === priority}
+											aria-label={option.label}
+											title={option.label}
+											className={[
+												EditTaskModalClasses.elements.prioritySegment,
+												...(option.value === priority ? [EditTaskModalClasses.elements.priorityBtnSelected] : []),
+											].join(' ')}
+											data-value={option.value}
+											onClick={() => {
+												setPriority(option.value);
+												if (isEdit) setPriorityChanged(true);
+											}}
+										>
+											<Icon icon={meta.icon} style={{ color: meta.colorVar }} />
+										</button>
+									);
+								})}
 							</div>
 							{/* 选中项名称放在分段控件外的固定位置：切换时按钮不改变宽度、不移动 */}
 							<span className={EditTaskModalClasses.elements.priorityName}>

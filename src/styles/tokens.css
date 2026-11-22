@@ -13,26 +13,68 @@ Author: sugar
    ======================================== */
 
 :root {
-	/* Festival Colors */
-	--gc-festival-solar: #e74c3c;    /* 阳历节日 - 红色 */
-	--gc-festival-lunar: #e8a041;    /* 农历节日 - 橙色 */
-	--gc-festival-solar-term: #52c41a; /* 节气 - 绿色 */
-
-	/* Task Status Colors */
-	--gc-task-completed: #52c41a;
-	--gc-task-pending: #ff7a45;
+	/* Festival Colors（保留在 :root 以便 SettingsManager 写入 documentElement 覆盖） */
+	--gc-festival-solar: var(--color-red, #e74c3c);    /* 阳历节日 - 红色 */
+	--gc-festival-lunar: var(--color-orange, #e8a041);    /* 农历节日 - 橙色 */
+	--gc-festival-solar-term: var(--color-green, #52c41a); /* 节气 - 绿色 */
 
 	/* Timeline Slot — 卡片高度驱动格子行高 */
 	--gc-tl-card-h: 24px;
 	--gc-tl-card-gap: 2px;
+
+	--gc-radius-full: 999px;
+
+	/* 间距（4px 基准网格） */
+	--gc-space-1: 4px;
+	--gc-space-2: 8px;
+	--gc-space-3: 12px;
+	--gc-space-4: 16px;
+	--gc-space-5: 24px;
+	--gc-space-6: 32px;
+
+	/* 动效 */
+	--gc-dur-fast: 120ms;
+	--gc-dur-normal: 200ms;
+	--gc-dur-slow: 320ms;
+	--gc-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+	--gc-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);     /* 弹性，仅用于小幅度回弹 */
+
+	/* 字号（响应式 clamp 阶梯：默认值与 Obsidian 根字号联动，随字体缩放浮动） */
+	--gc-font-2xs: clamp(9px, 0.625rem, 10px);
+	--gc-font-xxs: clamp(10px, 0.6875rem, 11px);
+	--gc-font-xs: clamp(11px, 0.75rem, 13px);
+	--gc-font-sm: clamp(12px, 0.8125rem, 14px);
+	--gc-font-md: clamp(13px, 0.875rem, 15px);
+	--gc-font-lg: clamp(15px, 1rem, 18px);
+	--gc-font-xl: clamp(18px, 1.25rem, 22px);
+
+	/* 阴影与高光基色（供 color-mix 生成分层阴影与透明高光，避免各处散落硬编码） */
+	--gc-shadow-ink: #000;
+	--gc-highlight-ink: #fff;
 }
 
 /* ========================================
    设计令牌体系（Design Tokens）
-   全插件唯一视觉值源，组件样式一律引用，禁止硬编码
+   Obsidian 原生变量（--color-* / --background-* / --text-*）挂在 body，
+   必须在 body（而非 :root）派生，深浅色主题才能自动适配。
    ======================================== */
 
-:root {
+body {
+	/* 语义色 token：直接引用 Obsidian 原生色板（--color-*） */
+	--gc-color-red: var(--color-red);
+	--gc-color-orange: var(--color-orange);
+	--gc-color-yellow: var(--color-yellow);
+	--gc-color-green: var(--color-green);
+	--gc-color-blue: var(--color-blue);
+	--gc-color-cyan: var(--color-cyan);
+	--gc-color-purple: var(--color-purple);
+	--gc-color-pink: var(--color-pink);
+	--gc-danger: var(--color-red);
+
+	/* Task Status Colors */
+	--gc-task-completed: var(--color-green);
+	--gc-task-pending: var(--color-orange);
+
 	/* 背景层级（引用 Obsidian 主题变量，深浅主题自动适配） */
 	--gc-bg-sunken: var(--background-primary);
 	--gc-bg-surface: var(--background-primary);
@@ -47,8 +89,8 @@ Author: sugar
 	/* 边框 */
 	--gc-border: var(--background-modifier-border);
 	--gc-border-strong: var(--background-modifier-border-hover);
-	/* hairline：半透明发丝线，叠在表面上产生"层次"而不显生硬（深色主题下方自动翻转为白系） */
-	--gc-border-hairline: rgba(0, 0, 0, 0.08);
+	/* hairline：半透明发丝线，叠在表面上产生"层次"而不显生硬（深色主题自动翻转为浅色） */
+	--gc-border-hairline: color-mix(in srgb, var(--text-normal) 8%, transparent);
 
 	/* 主题色 + 状态色（随主题切换） */
 	--gc-accent: var(--interactive-accent);
@@ -56,101 +98,50 @@ Author: sugar
 	--gc-accent-wash: color-mix(in srgb, var(--interactive-accent) 14%, transparent);
 	--gc-on-accent: var(--text-on-accent);
 	/* 今天：固定红色，不随主题 accent（灰色 accent 主题下也醒目） */
-	--gc-today: var(--color-red, #e5484d);
-	--gc-on-today: #fff;
+	--gc-today: var(--color-red);
+	--gc-on-today: var(--gc-highlight-ink);
 	--gc-status-done: var(--color-green);
 	--gc-status-canceled: var(--color-orange);
 	--gc-status-overdue: var(--color-red);
 
-	/* 中性交互洗色（Plane 风格：导航/列表 hover 与 active 用中性背景块，不用 accent）
-	   浅色=黑系、深色=白系，数值对齐 Plane bg-layer-transparent 三态 */
-	--gc-hover-wash: rgba(0, 0, 0, 0.04);
-	--gc-active-wash: rgba(0, 0, 0, 0.08);
-	--gc-selected-wash: rgba(0, 0, 0, 0.10);
+	/* 圆角（复用 Obsidian 原生主题变量，无缝跟随 Minimal/Things 等社区主题） */
+	--gc-radius-xs: var(--radius-s, 4px);
+	--gc-radius-sm: var(--radius-m, 6px);
+	--gc-radius-md: var(--radius-m, 8px);
+	--gc-radius-lg: var(--modal-radius, var(--radius-l, 12px));
 
-	/* Plane raised 卡片阴影：rest 极轻、hover 微升（深色主题自动加重） */
-	--gc-card-shadow: 0 1px 6px -1px rgb(41 47 61 / 0.03), 0 1px 4px rgb(41 47 61 / 0.04);
-	--gc-card-shadow-hover: 0 1px 2px -1px rgb(41 47 61 / 0.06), 0 1px 3px rgb(41 47 61 / 0.05);
+	/* 中性交互洗色（导航/列表 hover 与 active 用中性背景块，不用 accent） */
+	--gc-hover-wash: var(--background-modifier-hover);
+	--gc-active-wash: color-mix(in srgb, var(--text-normal) 8%, transparent);
+	--gc-selected-wash: color-mix(in srgb, var(--text-normal) 10%, transparent);
 
-	/* 圆角（现代圆润风：基准上调，卡片 14px / 格子 10px / 药丸 full） */
-	--gc-radius-xs: 6px;
-	--gc-radius-sm: 8px;
-	--gc-radius-md: 10px;
-	--gc-radius-lg: 14px;
-	--gc-radius-full: 999px;
+	/* 阴影层级（遵循 Obsidian 原生克制阴影变量） */
+	--gc-card-shadow: none;
+	--gc-card-shadow-hover: none;
+	--gc-shadow-color: color-mix(in srgb, var(--gc-shadow-ink) 8%, transparent);
+	--gc-elev-1: none;
+	--gc-elev-2: var(--shadow-s);
+	--gc-elev-3: var(--shadow-s);
+	--gc-elev-4: var(--shadow-l);
 
-	/* 间距（4px 基准网格） */
-	--gc-space-1: 4px;
-	--gc-space-2: 8px;
-	--gc-space-3: 12px;
-	--gc-space-4: 16px;
-	--gc-space-5: 24px;
-	--gc-space-6: 32px;
-
-	/* 阴影层级（现代分层式：低透明度、大模糊、小偏移；深色主题下方整体加重并少用） */
-	--gc-shadow-color: rgba(0, 0, 0, 0.08);
-	--gc-elev-1: 0 1px 2px rgba(0, 0, 0, 0.05);                                          /* 贴面/输入 */
-	--gc-elev-2: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);           /* 卡片悬浮 */
-	--gc-elev-3: 0 4px 8px -2px rgba(0, 0, 0, 0.10), 0 2px 4px -2px rgba(0, 0, 0, 0.06); /* 下拉/悬浮窗 */
-	--gc-elev-4: 0 12px 24px -6px rgba(0, 0, 0, 0.14), 0 8px 12px -6px rgba(0, 0, 0, 0.08); /* 模态框 */
-
-	/* 动效 */
-	--gc-dur-fast: 120ms;
-	--gc-dur-normal: 200ms;
-	--gc-dur-slow: 320ms;
-	--gc-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-	--gc-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);     /* 弹性，仅用于小幅度回弹 */
-
-	/* 字号（响应式：默认值与 Obsidian 根字号联动，随字体缩放 1-2px 浮动） */
-	--gc-font-xxs: clamp(10px, 0.6875rem, 11px);
-	--gc-font-xs: clamp(11px, 0.75rem, 13px);
-	--gc-font-sm: clamp(12px, 0.8125rem, 14px);
-	--gc-font-md: clamp(13px, 0.875rem, 15px);
-	--gc-font-lg: clamp(15px, 1rem, 18px);
+	/* 热力图色板基色（8 色，引用 Obsidian 主题色板；明暗档位由 heatmap.css 用 color-mix 生成） */
+	--gc-heat-blue: var(--color-blue);
+	--gc-heat-green: var(--color-green);
+	--gc-heat-red: var(--color-red);
+	--gc-heat-purple: var(--color-purple);
+	--gc-heat-orange: var(--color-orange);
+	--gc-heat-cyan: var(--color-cyan);
+	--gc-heat-pink: var(--color-pink);
+	--gc-heat-yellow: var(--color-yellow);
 }
 
-/* 语义色 token：引用 Obsidian 原生色板（--color-*），深浅色主题自动适配；
-   回退值为收编前的硬编码颜色 */
-:root {
-	--gc-color-red: var(--color-red, #ef4444);
-	--gc-color-orange: var(--color-orange, #f97316);
-	--gc-color-yellow: var(--color-yellow, #eab308);
-	--gc-color-green: var(--color-green, #22c55e);
-	--gc-color-blue: var(--color-blue, #3884ff);
-	--gc-color-cyan: var(--color-cyan, #00bcd4);
-	--gc-color-purple: var(--color-purple, #a855f7);
-	--gc-color-pink: var(--color-pink, #ec4899);
-	--gc-danger: var(--color-red, #ff6b6b);
-}
-
-/* 热力图色板基色（9 色，深浅主题共用色相；
-   明暗档位由 heatmap.css 用 color-mix 与主题背景混合生成，
-   浅色"越深=越多"、深色"越亮=越多"，与 GitHub 贡献图行为一致） */
-:root {
-	--gc-heat-blue: #3b82f6;
-	--gc-heat-green: #22c55e;
-	--gc-heat-red: #ef4444;
-	--gc-heat-purple: #a855f7;
-	--gc-heat-orange: #f97316;
-	--gc-heat-cyan: #06b6d4;
-	--gc-heat-pink: #ec4899;
-	--gc-heat-yellow: #eab308;
-}
-
-/* 深色主题微调：阴影加重补足对比，层次主要靠 hairline 边框与表面提亮 */
+/* 深色主题微调：沿用 Obsidian 原生变量，仅对发丝线和选中态微调对比度 */
 .theme-dark {
-	--gc-border-hairline: rgba(255, 255, 255, 0.09);
+	--gc-border-hairline: color-mix(in srgb, var(--text-normal) 9%, transparent);
 	--gc-accent-soft: color-mix(in srgb, var(--interactive-accent) 12%, transparent);
 	--gc-accent-wash: color-mix(in srgb, var(--interactive-accent) 18%, transparent);
-	--gc-hover-wash: rgba(255, 255, 255, 0.05);
-	--gc-active-wash: rgba(255, 255, 255, 0.07);
-	--gc-selected-wash: rgba(255, 255, 255, 0.10);
-	--gc-card-shadow: 0 1px 6px -1px rgb(0 0 0 / 0.20), 0 1px 4px rgb(0 0 0 / 0.25);
-	--gc-card-shadow-hover: 0 1px 2px -1px rgb(0 0 0 / 0.25), 0 1px 3px rgb(0 0 0 / 0.30);
-	--gc-elev-1: 0 1px 2px rgba(0, 0, 0, 0.35);
-	--gc-elev-2: 0 2px 6px rgba(0, 0, 0, 0.40);
-	--gc-elev-3: 0 4px 12px rgba(0, 0, 0, 0.45);
-	--gc-elev-4: 0 12px 28px rgba(0, 0, 0, 0.55);
+	--gc-active-wash: color-mix(in srgb, var(--text-normal) 9%, transparent);
+	--gc-selected-wash: color-mix(in srgb, var(--text-normal) 12%, transparent);
 }
 
 /* 系统开启"减少动态效果"：动效全部降级为瞬切。

@@ -1,9 +1,81 @@
 import { useEffect, useRef, type JSX, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
-import { ModalClasses, setCssProps } from '../../utils/bem';
+import {
+	ContextMenuClasses,
+	DateTimePickerClasses,
+	DropdownMenuClasses,
+	ModalClasses,
+	NativeSuggestClasses,
+	PopoverClasses,
+	TagSelectorTreeClasses,
+	setCssProps,
+} from '../../utils/bem';
 import { Icon } from './Icon';
 import { MOTION, modalVariants, overlayVariants, easeOutTransition } from '../motion';
+
+const FOCUSABLE_SELECTOR = [
+	'a[href]',
+	'button:not([disabled])',
+	'textarea:not([disabled])',
+	'input:not([disabled]):not([type="hidden"])',
+	'select:not([disabled])',
+	'[tabindex]:not([tabindex="-1"])',
+	'[contenteditable="true"]',
+	'[contenteditable=""]',
+].join(', ');
+
+const EXTERNAL_PORTAL_SELECTOR = [
+	`.${PopoverClasses.block}`,
+	`.${NativeSuggestClasses.container}`,
+	`.${DateTimePickerClasses.elements.popover}`,
+	`.${DropdownMenuClasses.container}`,
+	`.${ContextMenuClasses.container}`,
+	`.${TagSelectorTreeClasses.elements.suggest}`,
+].join(', ');
+
+function isFocusableVisible(el: HTMLElement, boundary: HTMLElement): boolean {
+	if ((el as HTMLButtonElement).disabled) return false;
+	if (el.getAttribute('contenteditable') === 'false') return false;
+	if (el.closest('fieldset[disabled], [hidden], [aria-hidden="true"], [inert]')) return false;
+
+	let cur: HTMLElement | null = el;
+	while (cur) {
+		if (
+			cur.hasAttribute('hidden') ||
+			cur.getAttribute('aria-hidden') === 'true' ||
+			cur.hasAttribute('inert')
+		) {
+			return false;
+		}
+		const style = window.getComputedStyle(cur);
+		if (style.display === 'none' || style.visibility === 'hidden') {
+			return false;
+		}
+		if (cur === boundary) break;
+		cur = cur.parentElement;
+	}
+	return true;
+}
+
+/**
+ * 收集容器内可见、可交互的焦点元素（按 DOM 顺序）。
+ * 不依赖 offsetParent（jsdom 下恒为 null），改用逐层样式与属性判定。
+ */
+export function getFocusableElements(container: HTMLElement): HTMLElement[] {
+	const candidates = Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
+	return candidates.filter((el) => isFocusableVisible(el, container));
+}
+
+function isTopmostModalOverlay(overlay: HTMLElement | null): boolean {
+	if (!overlay) return true;
+	const overlays = Array.from(
+		document.querySelectorAll<HTMLElement>(
+			`.${ModalClasses.overlay}:not(.${ModalClasses.overlayClosing})`
+		)
+	);
+	return overlays.length === 0 || overlays[overlays.length - 1] === overlay;
+}
 
 /**
  * 兜底：motion 的 rAF 在后台标签页 / 无头环境可能不触发，进场动画停在 initial
@@ -88,14 +160,84 @@ export function Modal({
 		overlayRef.current?.classList.add(ModalClasses.overlayClosing);
 	}, []);
 
+	const onCloseRef = useRef(onClose);
+	onCloseRef.current = onClose;
+	const closeOnEscRef = useRef(closeOnEsc);
+	closeOnEscRef.current = closeOnEsc;
+
 	useEffect(() => {
 		if (!open) return;
 		// 焦点管理：打开时记录来源并聚焦面板（键盘用户可直接 Tab 操作），
-		// 关闭后把焦点归还触发元素
+		// 关闭后把焦点归还触发元素；Tab / Shift+Tab 约束在面板内（嵌套外置弹层放行）
 		const previouslyFocused = document.activeElement as HTMLElement | null;
 		panelRef.current?.focus();
 		const handleKeydown = (e: KeyboardEvent) => {
-			if (e.key === 'Escape' && closeOnEsc) onClose();
+			if (!isTopmostModalOverlay(overlayRef.current)) return;
+
+			if (e.key === 'Escape' && closeOnEscRef.current) {
+				onCloseRef.current();
+				return;
+			}
+
+			if (e.key !== 'Tab' || e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) {
+				return;
+			}
+
+			const panel = panelRef.current;
+			if (!panel) return;
+
+			const active = document.activeElement;
+			if (active instanceof Element && !panel.contains(active) && active.closest(EXTERNAL_PORTAL_SELECTOR)) {
+				return;
+			}
+
+			const focusables = getFocusableElements(panel);
+			if (focusables.length === 0) {
+				e.preventDefault();
+				panel.focus();
+				return;
+			}
+
+			const first = focusables[0];
+			const last = focusables[focusables.length - 1];
+
+			if (!(active instanceof HTMLElement) || !panel.contains(active) || active === panel) {
+				e.preventDefault();
+				(e.shiftKey ? last : first).focus();
+				return;
+			}
+
+			const idx = focusables.indexOf(active);
+			if (idx === -1) {
+				if (e.shiftKey) {
+					const prev = [...focusables]
+						.reverse()
+						.find((el) => Boolean(el.compareDocumentPosition(active) & Node.DOCUMENT_POSITION_FOLLOWING));
+					if (!prev) {
+						e.preventDefault();
+						last.focus();
+					}
+				} else {
+					const next = focusables.find((el) =>
+						Boolean(active.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING)
+					);
+					if (!next) {
+						e.preventDefault();
+						first.focus();
+					}
+				}
+				return;
+			}
+
+			if (e.shiftKey) {
+				if (idx === 0) {
+					e.preventDefault();
+					last.focus();
+				}
+			} else if (idx === focusables.length - 1) {
+				e.preventDefault();
+				first.focus();
+			}
 		};
 		document.addEventListener('keydown', handleKeydown);
 		return () => {
@@ -106,7 +248,7 @@ export function Modal({
 				previouslyFocused.focus?.();
 			}
 		};
-	}, [open, closeOnEsc, onClose]);
+	}, [open]);
 
 	useEffect(() => {
 		if (!open) return;
@@ -158,6 +300,8 @@ export function Modal({
 				>
 					<motion.div
 						ref={panelRef}
+						role="dialog"
+						aria-modal="true"
 						tabIndex={-1}
 						className={ModalClasses.panel}
 						style={width ? { width: `${width}px`, maxWidth: '90vw' } : undefined}
@@ -167,7 +311,7 @@ export function Modal({
 						{title !== undefined ? (
 							<div className={ModalClasses.header}>
 								<h2 className={ModalClasses.title}>{title}</h2>
-								<button className={ModalClasses.closeBtn} aria-label="Close" onClick={onClose}>
+								<button type="button" className={ModalClasses.closeBtn} aria-label="Close" onClick={onClose}>
 									<Icon icon="x" />
 								</button>
 							</div>

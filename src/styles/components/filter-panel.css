@@ -47,7 +47,7 @@
 	border-radius: 8px;
 	background: var(--interactive-accent);
 	color: var(--text-on-accent);
-	font-size: 10px;
+	font-size: var(--gc-font-2xs);
 	line-height: 16px;
 	text-align: center;
 }

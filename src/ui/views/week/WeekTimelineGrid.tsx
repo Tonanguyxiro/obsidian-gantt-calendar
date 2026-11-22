@@ -6,6 +6,7 @@ import type { DateFieldType } from '../../../settings/types';
 import type { TaskCardConfig } from '../../../components/TaskCard/TaskCardConfig';
 import { WeekViewClasses, ContextMenuClasses, setCssProps } from '../../../utils/bem';
 import { usePlugin, useApp } from '../../pluginContext';
+import { useCalendarStore } from '../../store/calendarStore';
 import { useTaskTooltip } from '../../components/TooltipProvider';
 import { Icon } from '../../components/Icon';
 import { taskKey } from '../../utils/taskKey';
@@ -33,6 +34,7 @@ import {
 } from './timelineModel';
 import { useBlockResize, isBlockResizing, setBlockDragMeta, getBlockDragMeta, clearBlockDragMeta } from './useBlockResize';
 import { useCanvasTouchDrag } from './useCanvasTouchDrag';
+import { useEdgeAutoScroll } from './useEdgeAutoScroll';
 import { CalendarItemCard } from '../../components/FileTaskCard';
 import { findTaskById } from '../../utils/taskId';
 import { createDragFeedbackStore, useDragFeedback, DropIndicatorLayer, rafThrottle, type DragFeedbackStore } from './dragFeedback';
@@ -75,6 +77,8 @@ export interface WeekTimelineGridProps {
 	/** 横向 swipe 翻页回调（手机端；桌面不传） */
 	onSwipe?: (dir: -1 | 1) => void;
 }
+
+const EMPTY_FORMATS: string[] = [];
 
 /** 某日无时间块时的稳定空数组（避免 `|| []` 每次渲染生成新引用击穿 DayColumn memo） */
 const EMPTY_SEGS: DaySegment[] = [];
@@ -127,10 +131,10 @@ export function WeekTimelineGrid({
 		}
 	}, [onSwipe]);
 
-	const dateField = plugin.settings.dateFilterField || 'dueDate';
-	const startField = plugin.settings.ganttStartField || 'startDate';
-	const endField = plugin.settings.ganttEndField || 'dueDate';
-	const enabledFormats = plugin.settings.enabledTaskFormats || [];
+	const dateField = useCalendarStore((s) => s.settings.dateFilterField) || 'dueDate';
+	const startField = useCalendarStore((s) => s.settings.ganttStartField) || 'startDate';
+	const endField = useCalendarStore((s) => s.settings.ganttEndField) || 'dueDate';
+	const enabledFormats = useCalendarStore((s) => s.settings.enabledTaskFormats) || EMPTY_FORMATS;
 
 	/**
 	 * 拖放瞬时反馈（落点指示线 / 预览块 / 列高亮 / 全天行悬停日）放在独立小 store：
@@ -139,6 +143,22 @@ export function WeekTimelineGrid({
 	const [feedback] = useState(createDragFeedbackStore);
 	const hideTooltip = useCallback(() => tooltip.hide(), [tooltip]);
 	const gridRef = useRef<HTMLDivElement | null>(null);
+	const alldayRowRef = useRef<HTMLDivElement | null>(null);
+
+	const getScrollContainer = useCallback((): HTMLElement | null => gridRef.current, []);
+	const getTopInset = useCallback((): number => {
+		const grid = gridRef.current;
+		if (!grid) return 0;
+		const allday = alldayRowRef.current;
+		if (allday) {
+			const gridRect = grid.getBoundingClientRect();
+			const alldayRect = allday.getBoundingClientRect();
+			if (alldayRect.height > 0) {
+				return Math.max(0, alldayRect.bottom - gridRect.top);
+			}
+		}
+		return 0;
+	}, []);
 
 	const hasToday = days.some((d) => d.isToday);
 	const allDayLabel = i18n.t('views.weekView.allDay');
@@ -224,7 +244,7 @@ export function WeekTimelineGrid({
 		})();
 	}, [dayDate, atMinutes, startField, endField, persistTaskUpdate]);
 
-	const beginResize = useBlockResize(commitResize);
+	const beginResize = useBlockResize(commitResize, { getScrollContainer, getTopInset });
 
 	// ===== 拖放落点：整体平移块（保留时长与精度；minutes = 块上边缘的吸附时刻） =====
 	const commitBlockMove = useCallback((task: GCTask, dayIndex: number, minutes: number): void => {
@@ -305,15 +325,158 @@ export function WeekTimelineGrid({
 		void persistTaskUpdate(task, updates, precision, 'views.dayView.updateTaskFailed');
 	}, [dayDate, startField, endField, dateField, persistTaskUpdate]);
 
-	// 触屏整块拖动（长按 500ms 起拖；提交与落点预览复用现有链路）
-	const setTouchPreview = useCallback((p: { dayIndex: number; startMin: number; endMin: number } | null) => {
-		feedback.patch({ indicator: p && { kind: 'preview', ...p } });
+	// ===== HTML5 拖拽边缘自动滚动（鼠标静止时同步重算列落点指示） =====
+	const activeDragRef = useRef<{ dayIndex: number; colEl: HTMLElement; clientY: number } | null>(null);
+	const updateColumnDragFeedback = useCallback((dayIndex: number, colEl: HTMLElement, clientY: number) => {
+		const top = colEl.getBoundingClientRect().top;
+		const meta = getBlockDragMeta();
+		if (meta) {
+			const topMin = snapMinutes(pxToMinutes(clientY - meta.offsetPx - top), false);
+			const endMin = Math.min(topMin + meta.durationMin, MINUTES_PER_DAY);
+			feedback.patch({ overCol: dayIndex, indicator: { dayIndex, kind: 'preview', startMin: topMin, endMin } });
+			return;
+		}
+		const min = snapMinutes(pxToMinutes(clientY - top), false);
+		feedback.patch({ overCol: dayIndex, indicator: { dayIndex, kind: 'line', startMin: min, endMin: min } });
 	}, [feedback]);
-	const beginBlockTouchPress = useCanvasTouchDrag({
+
+	const dragAutoScroller = useEdgeAutoScroll({
+		getScrollContainer,
+		getTopInset,
+		onScroll: () => {
+			const cur = activeDragRef.current;
+			if (cur) updateColumnDragFeedback(cur.dayIndex, cur.colEl, cur.clientY);
+		},
+	});
+
+	const dragCleanupBoundRef = useRef(false);
+	const stopDragAutoScrollRef = useRef<() => void>(() => {});
+	const stopDragAutoScroll = useCallback(() => {
+		dragAutoScroller.stop();
+		activeDragRef.current = null;
+		if (dragCleanupBoundRef.current) {
+			document.removeEventListener('dragend', stopDragAutoScrollRef.current);
+			document.removeEventListener('drop', stopDragAutoScrollRef.current);
+			dragCleanupBoundRef.current = false;
+		}
+	}, [dragAutoScroller]);
+	stopDragAutoScrollRef.current = stopDragAutoScroll;
+
+	const ensureDragEndCleanup = useCallback(() => {
+		if (dragCleanupBoundRef.current) return;
+		dragCleanupBoundRef.current = true;
+		document.addEventListener('dragend', stopDragAutoScrollRef.current);
+		document.addEventListener('drop', stopDragAutoScrollRef.current);
+	}, []);
+
+	useEffect(() => () => stopDragAutoScrollRef.current(), []);
+
+	const handleColumnDragHover = useCallback((dayIndex: number, colEl: HTMLElement, clientY: number) => {
+		activeDragRef.current = { dayIndex, colEl, clientY };
+		ensureDragEndCleanup();
+		dragAutoScroller.update(clientY);
+	}, [ensureDragEndCleanup, dragAutoScroller]);
+
+	const handleColumnDragClear = useCallback((dayIndex: number) => {
+		if (activeDragRef.current?.dayIndex === dayIndex) {
+			activeDragRef.current = null;
+		}
+	}, []);
+
+	const handleGridDragOver = useCallback((e: ReactDragEvent<HTMLDivElement>) => {
+		ensureDragEndCleanup();
+		dragAutoScroller.update(e.clientY);
+	}, [ensureDragEndCleanup, dragAutoScroller]);
+
+	const handleGridDragLeave = useCallback((e: ReactDragEvent<HTMLDivElement>) => {
+		const related = e.relatedTarget as Node | null;
+		if (related && e.currentTarget.contains(related)) return;
+		stopDragAutoScroll();
+	}, [stopDragAutoScroll]);
+
+	// 触屏整块拖动（长按 500ms 起拖；提交与落点预览复用现有链路 + 边缘自动滚动）
+	const touchDragStateRef = useRef<{ offsetPx: number; durationMin: number; clientX: number; clientY: number; dragging: boolean } | null>(null);
+	const touchAutoScroller = useEdgeAutoScroll({
+		getScrollContainer,
+		getTopInset,
+		onScroll: () => {
+			const st = touchDragStateRef.current;
+			if (!st || !st.dragging) return;
+			const hit = document.elementFromPoint(st.clientX, st.clientY)?.closest(`.${WeekViewClasses.elements.dayCol}`) as HTMLElement | null;
+			if (!hit) return;
+			const dayIdx = Number(hit.dataset.dayIdx);
+			if (Number.isNaN(dayIdx)) return;
+			const topMin = snapMinutes(pxToMinutes(st.clientY - st.offsetPx - hit.getBoundingClientRect().top), false);
+			feedback.patch({
+				indicator: {
+					dayIndex: dayIdx,
+					kind: 'preview',
+					startMin: topMin,
+					endMin: Math.min(topMin + st.durationMin, MINUTES_PER_DAY),
+				},
+			});
+		},
+	});
+	const touchListenersRef = useRef<{ move: (ev: PointerEvent) => void; end: () => void } | null>(null);
+	const detachTouchAutoScroll = useCallback(() => {
+		touchAutoScroller.stop();
+		touchDragStateRef.current = null;
+		const listeners = touchListenersRef.current;
+		if (listeners) {
+			document.removeEventListener('pointermove', listeners.move);
+			document.removeEventListener('pointerup', listeners.end);
+			document.removeEventListener('pointercancel', listeners.end);
+			touchListenersRef.current = null;
+		}
+	}, [touchAutoScroller]);
+	useEffect(() => () => detachTouchAutoScroll(), [detachTouchAutoScroll]);
+
+	const setTouchPreview = useCallback((p: { dayIndex: number; startMin: number; endMin: number } | null) => {
+		if (p === null) {
+			touchAutoScroller.stop();
+			if (touchDragStateRef.current) touchDragStateRef.current.dragging = false;
+		} else if (touchDragStateRef.current) {
+			touchDragStateRef.current.dragging = true;
+		}
+		feedback.patch({ indicator: p && { kind: 'preview', ...p } });
+	}, [feedback, touchAutoScroller]);
+
+	const rawBeginTouchPress = useCanvasTouchDrag({
 		onCommit: commitBlockMove,
 		setPreview: setTouchPreview,
 		columnSelector: '.' + WeekViewClasses.elements.dayCol,
 	});
+
+	const beginBlockTouchPress = useCallback((e: ReactPointerEvent, block: TimeBlock, blockEl: HTMLElement): void => {
+		rawBeginTouchPress(e, block, blockEl);
+		if (e.pointerType === 'mouse' || block.task.icsEvent) return;
+		detachTouchAutoScroll();
+		const rect = blockEl.getBoundingClientRect();
+		touchDragStateRef.current = {
+			offsetPx: e.clientY - rect.top,
+			durationMin: Math.round((block.end.getTime() - block.start.getTime()) / 60000),
+			clientX: e.clientX,
+			clientY: e.clientY,
+			dragging: false,
+		};
+		const move = (ev: PointerEvent) => {
+			const st = touchDragStateRef.current;
+			if (!st) return;
+			st.clientX = ev.clientX;
+			st.clientY = ev.clientY;
+			if (st.dragging || document.querySelector('.gc-canvas-drag-chip')) {
+				st.dragging = true;
+				touchAutoScroller.update(ev.clientY);
+			}
+		};
+		const end = () => {
+			detachTouchAutoScroll();
+		};
+		touchListenersRef.current = { move, end };
+		document.addEventListener('pointermove', move);
+		document.addEventListener('pointerup', end);
+		document.addEventListener('pointercancel', end);
+	}, [rawBeginTouchPress, detachTouchAutoScroll, touchAutoScroller]);
 
 	// ===== 空白快速创建 =====
 	const handleQuickCreate = useCallback((payload: QuickCreate): void => {
@@ -389,8 +552,11 @@ export function WeekTimelineGrid({
 	const handleAlldayDragOver = useCallback((e: ReactDragEvent<HTMLElement>) => {
 		e.preventDefault();
 		if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+		activeDragRef.current = null;
+		ensureDragEndCleanup();
+		dragAutoScroller.update(e.clientY);
 		alldayOver(e.currentTarget, e.clientX);
-	}, [alldayOver]);
+	}, [alldayOver, ensureDragEndCleanup, dragAutoScroller]);
 
 	const handleAlldayDragLeave = useCallback((e: ReactDragEvent) => {
 		const related = e.relatedTarget as Node | null;
@@ -402,6 +568,7 @@ export function WeekTimelineGrid({
 	const handleAlldayDrop = useCallback((e: ReactDragEvent) => {
 		e.preventDefault();
 		alldayOver.cancel();
+		stopDragAutoScroll();
 		feedback.patch({ alldayDay: null });
 		const taskId = e.dataTransfer?.getData('taskId');
 		if (!taskId) return;
@@ -410,7 +577,7 @@ export function WeekTimelineGrid({
 		const rect = e.currentTarget.getBoundingClientRect();
 		const dayIndex = Math.max(0, Math.min(6, Math.floor(((e.clientX - rect.left) / rect.width) * 7)));
 		commitAlldayMove(task, dayIndex);
-	}, [tasks, commitAlldayMove, alldayOver, feedback]);
+	}, [tasks, commitAlldayMove, alldayOver, stopDragAutoScroll, feedback]);
 
 	const handleCardRefresh = useCallback(() => refreshTasks(), [refreshTasks]);
 
@@ -420,12 +587,15 @@ export function WeekTimelineGrid({
 			ref={gridRef}
 			style={{
 				'--gc-tl-hour-h': `${DAY_PX / 24}px`,
-				gridTemplateColumns: `48px repeat(${colCount}, 1fr)`,
+				gridTemplateColumns: `48px repeat(${colCount}, minmax(0, 1fr))`,
 				// 触屏：纵向滚动交给浏览器，横向位移留给 swipe 翻页
 				touchAction: onSwipe ? 'pan-y' : undefined,
 			} as CSSProperties}
 			onPointerDown={onSwipe ? handleGridPointerDown : undefined}
 			onPointerUp={onSwipe ? handleGridPointerUp : undefined}
+			onDragOver={handleGridDragOver}
+			onDragLeave={handleGridDragLeave}
+			onDrop={stopDragAutoScroll}
 		>
 			{/* 表头（仅渲染可见日窗口） */}
 			<div className={WeekViewClasses.elements.headerSpacer} style={{ gridColumn: '1', gridRow: '1' }} />
@@ -451,6 +621,7 @@ export function WeekTimelineGrid({
 				{allDayLabel}
 			</div>
 			<div
+				ref={alldayRowRef}
 				className={WeekViewClasses.elements.alldayRow}
 				style={{ gridColumn: '2 / -1', gridRow: '2', height: `${alldayRowHeight}px` }}
 				onDragOver={handleAlldayDragOver}
@@ -547,6 +718,11 @@ export function WeekTimelineGrid({
 					tasks={tasks}
 					hideTooltip={hideTooltip}
 					onCardRefresh={handleCardRefresh}
+					getScrollContainer={getScrollContainer}
+					getTopInset={getTopInset}
+					onColumnDragHover={handleColumnDragHover}
+					onColumnDragClear={handleColumnDragClear}
+					onDragFinish={stopDragAutoScroll}
 				/>
 			))}
 
@@ -604,7 +780,7 @@ interface DayColumnProps {
 	daySegs: DaySegment[];
 	config: TaskCardConfig;
 	beginResize: ReturnType<typeof useBlockResize>;
-	beginTouchPress: ReturnType<typeof useCanvasTouchDrag>;
+	beginTouchPress: (e: ReactPointerEvent, block: TimeBlock, blockEl: HTMLElement) => void;
 	onQuickCreate: (payload: QuickCreate) => void;
 	onBlockMove: (task: GCTask, dayIndex: number, minutes: number) => void;
 	/** 拖放瞬时反馈 store（网格级共享；列只订阅"本列是否悬停"） */
@@ -612,6 +788,11 @@ interface DayColumnProps {
 	tasks: GCTask[];
 	hideTooltip: () => void;
 	onCardRefresh: () => void;
+	getScrollContainer: () => HTMLElement | null;
+	getTopInset: () => number;
+	onColumnDragHover: (dayIndex: number, colEl: HTMLElement, clientY: number) => void;
+	onColumnDragClear: (dayIndex: number) => void;
+	onDragFinish: () => void;
 }
 
 /**
@@ -632,12 +813,18 @@ const DayColumn = memo(function DayColumn({
 	tasks,
 	hideTooltip,
 	onCardRefresh,
+	getScrollContainer,
+	getTopInset,
+	onColumnDragHover,
+	onColumnDragClear,
+	onDragFinish,
 }: DayColumnProps): JSX.Element {
 	const colRef = useRef<HTMLDivElement | null>(null);
 	const ghostRef = useRef<HTMLDivElement | null>(null);
 	const ghostLabelRef = useRef<HTMLSpanElement | null>(null);
 	/** 拖拽选区创建状态（mousedown 于空白处时激活；moved 以像素位移判定，防点击抖动） */
 	const createRef = useRef<{ anchorMin: number; anchorX: number; anchorY: number; lastMin: number; moved: boolean } | null>(null);
+	const createPointerRef = useRef<{ clientX: number; clientY: number } | null>(null);
 	/** pointercancel 清理经 ref 桥接，避免与 finishCreate 形成循环推断 */
 	const cancelCreateRef = useRef<() => void>(() => {});
 	const dragOver = useDragFeedback(feedback, (s) => s.overCol === dayIndex);
@@ -674,29 +861,47 @@ const DayColumn = memo(function DayColumn({
 		return clampForwardPointEnd(min, daySegs.map((s) => s.seg));
 	}, [daySegs]);
 
+	const updateCreateSelection = useCallback((clientY: number, fromScroll = false): void => {
+		const create = createRef.current;
+		if (!create) return;
+		const minutes = minutesFromEvent(clientY);
+		create.lastMin = minutes;
+		// 像素位移超阈值，或边缘自动滚动已带出选区变化，才算拖拽选区
+		if (!create.moved && (Math.abs(clientY - create.anchorY) > CREATE_DRAG_THRESHOLD_PX || (fromScroll && minutes !== create.anchorMin))) {
+			create.moved = true;
+		}
+		if (!create.moved) {
+			// 抖动范围内：维持可用空隙预览（按下瞬间不坍缩）
+			showGhost(create.anchorMin, quickCreateEnd(create.anchorMin), true);
+			return;
+		}
+		showGhost(Math.min(create.anchorMin, minutes), Math.max(create.anchorMin, minutes), true);
+	}, [minutesFromEvent, quickCreateEnd, showGhost]);
+
+	const createAutoScroller = useEdgeAutoScroll({
+		getScrollContainer,
+		getTopInset,
+		onScroll: () => {
+			const ptr = createPointerRef.current;
+			if (ptr) updateCreateSelection(ptr.clientY, true);
+		},
+	});
+
+	const handleDocCreateMove = useCallback((ev: PointerEvent): void => {
+		if (!createRef.current) return;
+		createPointerRef.current = { clientX: ev.clientX, clientY: ev.clientY };
+		updateCreateSelection(ev.clientY, false);
+		createAutoScroller.update(ev.clientY);
+	}, [updateCreateSelection, createAutoScroller]);
+
 	// ===== hover ghost / 拖拽选区 =====
 	const handleMouseMove = useCallback((e: ReactPointerEvent) => {
+		if (createRef.current) return; // 选区拖拽中由 document pointermove 统一驱动（含出列/边缘滚动）
 		if (isInsideBlock(e.target)) {
-			// 选区拖拽中指针掠过块上：ghost 保持（选区仍跟随指针）
-			if (!createRef.current) hideGhost();
+			hideGhost();
 			return;
 		}
 		const minutes = minutesFromEvent(e.clientY);
-		const create = createRef.current;
-		if (create) {
-			create.lastMin = minutes;
-			// 像素位移超阈值才算拖拽选区（吸附步长对点击抖动过于敏感）
-			if (!create.moved && Math.abs(e.clientY - create.anchorY) > CREATE_DRAG_THRESHOLD_PX) {
-				create.moved = true;
-			}
-			if (!create.moved) {
-				// 抖动范围内：维持可用空隙预览（按下瞬间不坍缩）
-				showGhost(create.anchorMin, quickCreateEnd(create.anchorMin), true);
-				return;
-			}
-			showGhost(Math.min(create.anchorMin, minutes), Math.max(create.anchorMin, minutes), true);
-			return;
-		}
 		// DOM 物理包含校验：portal 浮层（右键菜单/弹窗）的 mousemove 虽从 React 树冒泡进列内，
 		// 但其目标不在本列 DOM 中，不算画布 hover（contextmenu 被 trigger 截断，菜单状态只能直接探测）
 		const col = colRef.current;
@@ -727,6 +932,9 @@ const DayColumn = memo(function DayColumn({
 	const finishCreate = useCallback((e?: PointerEvent): void => {
 		const create = createRef.current;
 		createRef.current = null;
+		createPointerRef.current = null;
+		createAutoScroller.stop();
+		document.removeEventListener('pointermove', handleDocCreateMove);
 		document.removeEventListener('pointerup', finishCreate);
 		document.removeEventListener('pointercancel', cancelCreateRef.current);
 		hideGhost();
@@ -745,17 +953,21 @@ const DayColumn = memo(function DayColumn({
 		} else {
 			onQuickCreate({ type: 'point', dayIndex, min: create.anchorMin });
 		}
-	}, [dayIndex, onQuickCreate, hideGhost]);
+	}, [dayIndex, onQuickCreate, hideGhost, createAutoScroller, handleDocCreateMove]);
 
 	/** 触屏滚动接管手势（pointercancel）：静默放弃创建，不弹窗 */
 	const cancelCreate = useCallback((): void => {
 		createRef.current = null;
+		createPointerRef.current = null;
+		createAutoScroller.stop();
+		document.removeEventListener('pointermove', handleDocCreateMove);
 		document.removeEventListener('pointerup', finishCreate);
 		document.removeEventListener('pointercancel', cancelCreateRef.current);
 		hideGhost();
-	}, [finishCreate, hideGhost]);
+	}, [finishCreate, hideGhost, createAutoScroller, handleDocCreateMove]);
 
 	cancelCreateRef.current = cancelCreate;
+	useEffect(() => () => cancelCreateRef.current(), []);
 
 	const handleMouseDown = useCallback((e: ReactPointerEvent) => {
 		if (e.button !== 0 || isInsideBlock(e.target)) return;
@@ -770,14 +982,17 @@ const DayColumn = memo(function DayColumn({
 		const endMin = quickCreateEnd(anchorMin);
 		if (endMin <= anchorMin) return; // 光标处即下一个块起点：无空隙，不启动创建手势
 		createRef.current = { anchorMin, anchorX: e.clientX, anchorY: e.clientY, lastMin: anchorMin, moved: false };
+		createPointerRef.current = { clientX: e.clientX, clientY: e.clientY };
 		// 按下瞬间维持 hover 的可用空隙块（仅切换激活样式），像素级拖动后才变为选区
 		showGhost(anchorMin, endMin, true);
 		// 防御：上一手势未正常收尾时先解绑，避免 finishCreate 重复触发
+		document.removeEventListener('pointermove', handleDocCreateMove);
 		document.removeEventListener('pointerup', finishCreate);
 		document.removeEventListener('pointercancel', cancelCreateRef.current);
+		document.addEventListener('pointermove', handleDocCreateMove);
 		document.addEventListener('pointerup', finishCreate);
 		document.addEventListener('pointercancel', cancelCreateRef.current);
-	}, [minutesFromEvent, showGhost, finishCreate, cancelCreate, quickCreateEnd]);
+	}, [minutesFromEvent, showGhost, finishCreate, quickCreateEnd, handleDocCreateMove]);
 
 	// ===== HTML5 拖放（整体平移；块拖动按块边缘落点 + 预览块，外部拖入按指针 + 指示线） =====
 	/**
@@ -806,22 +1021,25 @@ const DayColumn = memo(function DayColumn({
 		e.preventDefault();
 		if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
 		dragOverFrame(e.clientY);
-	}, [dragOverFrame]);
+		if (colRef.current) onColumnDragHover(dayIndex, colRef.current, e.clientY);
+	}, [dragOverFrame, onColumnDragHover, dayIndex]);
 
 	const handleDragLeave = useCallback((e: ReactDragEvent) => {
 		const related = e.relatedTarget as Node | null;
 		if (related && e.currentTarget.contains(related)) return;
 		dragOverFrame.cancel();
+		onColumnDragClear(dayIndex);
 		const cur = feedback.get();
 		feedback.patch({
 			indicator: cur.indicator && cur.indicator.dayIndex === dayIndex ? null : cur.indicator,
 			overCol: cur.overCol === dayIndex ? null : cur.overCol,
 		});
-	}, [dayIndex, feedback, dragOverFrame]);
+	}, [dayIndex, feedback, dragOverFrame, onColumnDragClear]);
 
 	const handleDrop = useCallback((e: ReactDragEvent) => {
 		e.preventDefault();
 		dragOverFrame.cancel();
+		onDragFinish();
 		feedback.patch({ indicator: null, overCol: null });
 		const taskId = e.dataTransfer?.getData('taskId');
 		if (!taskId) return;
@@ -834,7 +1052,7 @@ const DayColumn = memo(function DayColumn({
 		const meta = getBlockDragMeta();
 		const topEdgeClientY = meta ? e.clientY - meta.offsetPx : e.clientY;
 		onBlockMove(task, dayIndex, minutesFromEvent(topEdgeClientY));
-	}, [tasks, dayIndex, minutesFromEvent, onBlockMove, feedback, dragOverFrame]);
+	}, [tasks, dayIndex, minutesFromEvent, onBlockMove, feedback, dragOverFrame, onDragFinish]);
 
 	return (
 		<div
@@ -862,6 +1080,7 @@ const DayColumn = memo(function DayColumn({
 					beginTouchPress={beginTouchPress}
 					hideTooltip={hideTooltip}
 					onCardRefresh={onCardRefresh}
+					onDragFinish={onDragFinish}
 				/>
 			))}
 			{/* 拖放吸附指示线（仅外部来源拖入）/ 整块拖动的落点预览（上边缘吸附位置 + 任务时长） */}
@@ -891,9 +1110,10 @@ interface WeekTimeBlockProps {
 	colRef: RefObject<HTMLDivElement | null>;
 	feedback: DragFeedbackStore;
 	beginResize: ReturnType<typeof useBlockResize>;
-	beginTouchPress: ReturnType<typeof useCanvasTouchDrag>;
+	beginTouchPress: (e: ReactPointerEvent, block: TimeBlock, blockEl: HTMLElement) => void;
 	hideTooltip: () => void;
 	onCardRefresh: () => void;
+	onDragFinish: () => void;
 }
 
 const WeekTimeBlock = memo(function WeekTimeBlock({
@@ -907,6 +1127,7 @@ const WeekTimeBlock = memo(function WeekTimeBlock({
 	beginTouchPress,
 	hideTooltip,
 	onCardRefresh,
+	onDragFinish,
 }: WeekTimeBlockProps): JSX.Element {
 	const durationMin = seg.endMin - seg.startMin;
 	const timeLabel = `${formatMinutes(seg.startMin)} – ${formatMinutes(seg.endMin)}`;
@@ -917,13 +1138,14 @@ const WeekTimeBlock = memo(function WeekTimeBlock({
 		seg.continuesAfter ? WeekViewClasses.modifiers.timeBlockContinuesAfter : '',
 		seg.stackedIndex > 0 ? WeekViewClasses.modifiers.timeBlockStacked : '',
 	].filter(Boolean).join(' ');
-	const style: CSSProperties = {
+	const stackShift = seg.stackedIndex > 0 ? Math.min(seg.stackedIndex, 2) * 2 : 0;
+	const style = {
 		top: `${minutesToPx(seg.startMin)}px`,
 		height: `${minutesToPx(durationMin)}px`,
-		left: `calc(${(seg.lane / seg.laneCount) * 100}% + ${(seg.stackedIndex > 0 ? seg.stackedIndex * 3 : 0) + 1}px)`,
-		width: `calc(${100 / seg.laneCount}% - 2px)`,
-		zIndex: seg.lane + (seg.stackedIndex > 0 ? 4 : 1),
-	};
+		left: `calc(${(seg.lane / seg.laneCount) * 100}% + ${stackShift + 1}px)`,
+		width: `calc(${100 / seg.laneCount}% - ${stackShift + 2}px)`,
+		'--gc-block-z': seg.lane + (seg.stackedIndex > 0 ? 4 : 1),
+	} as CSSProperties;
 	return (
 		<div
 			className={cls}
@@ -940,6 +1162,7 @@ const WeekTimeBlock = memo(function WeekTimeBlock({
 			}}
 			onDragEnd={() => {
 				clearBlockDragMeta();
+				onDragFinish();
 				feedback.patch({ indicator: null, overCol: null });
 			}}
 		>

@@ -4,11 +4,12 @@
  * 可由用户经 Commander 等插件加入编辑器右键菜单。
  */
 
-import { Notice, type Editor, type MarkdownFileInfo, type MarkdownView } from 'obsidian';
+import { MarkdownView, Notice, type Editor, type MarkdownFileInfo } from 'obsidian';
 import type GanttCalendarPlugin from '../../main';
 import { parseSingleTaskLine } from '../tasks/taskParser/main';
 import { parseTaskLine } from '../tasks/taskParser/step1';
 import type { TaskFormatType } from '../tasks/taskSerializerSymbols';
+import { isDescriptionEditorOwner } from '../ui/components/DescriptionEditor';
 import { openCreateTaskModal, openEditTaskModal } from '../ui/modals/TaskFormModal';
 import { RegularExpressions } from '../utils/RegularExpressions';
 import { Logger } from '../utils/logger';
@@ -19,16 +20,22 @@ export function registerEditTaskCommand(plugin: GanttCalendarPlugin): void {
 		id: 'edit-task',
 		name: i18n.t('commands.editTask'),
 		editorCallback: (editor: Editor, ctx: MarkdownView | MarkdownFileInfo): void => {
-			const file = ctx.file;
-			if (!file) return;
+			let activeEditor = editor;
+			let file = ctx.file;
+			if (!file || isDescriptionEditorOwner(ctx)) {
+				const mdView = plugin.app.workspace.getActiveViewOfType(MarkdownView);
+				if (!mdView?.file) return;
+				file = mdView.file;
+				activeEditor = mdView.editor;
+			}
 
-			const lineIndex = editor.getCursor().line;
+			const lineIndex = activeEditor.getCursor().line;
 			const formats = (plugin.settings.enabledTaskFormats || ['tasks']) as TaskFormatType[];
 			const filter = plugin.settings.globalTaskFilter;
 			const parse = (line: string, globalFilter?: string) =>
 				parseSingleTaskLine(line, file.path, file.basename, lineIndex + 1, formats, globalFilter); // GCTask 行号从 1 起
 
-			let line = editor.getLine(lineIndex);
+			let line = activeEditor.getLine(lineIndex);
 			let task = parse(line, filter);
 
 			// 是复选框任务行但没有全局筛选符：本插件不会管理它。与 Tasks 插件一致，编辑即纳入管理——补上筛选符再打开
@@ -37,7 +44,7 @@ export function registerEditTaskCommand(plugin: GanttCalendarPlugin): void {
 				if (match && parse(line)) {
 					const at = line.lastIndexOf(match.content);
 					line = `${line.slice(0, at)}${filter.trim()} ${line.slice(at)}`;
-					editor.setLine(lineIndex, line);
+					activeEditor.setLine(lineIndex, line);
 					task = parse(line, filter);
 				}
 			}

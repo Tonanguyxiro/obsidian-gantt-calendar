@@ -1,10 +1,9 @@
-import { Fragment, useMemo, useCallback, useEffect, useRef, type JSX } from 'react';
+import { Fragment, useMemo, useCallback, useEffect, useRef, type CSSProperties, type JSX } from 'react';
 import { AnimatePresence, motion, type Variants } from 'motion/react';
 import { taskKey } from '../utils/taskKey';
 import type { DragEvent as ReactDragEvent } from 'react';
 import { Notice } from 'obsidian';
 import { generateMonthCalendar } from '../../calendar/calendarGenerator';
-import type { GCTask } from '../../types';
 import { MonthViewConfig } from '../../components/TaskCard';
 import { MonthViewClasses, setCssProps } from '../../utils/bem';
 import { usePlugin, useApp } from '../pluginContext';
@@ -35,6 +34,7 @@ const SPAN_STRIP_GAP_PX = 4;
  * 条带从此偏移开始，不遮挡日号/农历
  */
 const SPAN_HEADER_OFFSET_PX = 32;
+const EMPTY_FORMATS: string[] = [];
 
 /** dataTransfer.taskId（filePath:lineNumber）→ 任务查找 */
 /**
@@ -87,28 +87,48 @@ export function MonthView(): JSX.Element {
 		prevMonthKeyRef.current = monthKey;
 	}, [monthKey]);
 
-	const startOnMonday = !!plugin.settings.startOnMonday;
-	const dateField = plugin.settings.dateFilterField || 'dueDate';
-	const startField = plugin.settings.ganttStartField || 'startDate';
-	const endField = plugin.settings.ganttEndField || 'dueDate';
-	const tasks = useViewTasks(startField, endField, dateField);
-	const enabledFormats = plugin.settings.enabledTaskFormats || [];
-
-	// 月视图统一使用 timeline 变体：格内卡片与横跨条同一视觉语言
-	const config = useMemo(() => ({
-		...MonthViewConfig,
-		variant: 'timeline' as const,
-		showCheckbox: plugin.settings.monthViewShowCheckbox,
-		showTags: plugin.settings.monthViewShowTags,
-		showPriority: plugin.settings.monthViewShowPriority,
-		showTicktick: plugin.settings.monthViewShowTicktick,
-	}), [plugin.settings]);
+	const startOnMonday = useCalendarStore((s) => !!s.settings.startOnMonday);
+	const dateField = useCalendarStore((s) => s.settings.dateFilterField) || 'dueDate';
+	const startField = useCalendarStore((s) => s.settings.ganttStartField) || 'startDate';
+	const endField = useCalendarStore((s) => s.settings.ganttEndField) || 'dueDate';
+	const enabledFormats = useCalendarStore((s) => s.settings.enabledTaskFormats) || EMPTY_FORMATS;
+	const monthViewShowCheckbox = useCalendarStore((s) => s.settings.monthViewShowCheckbox);
+	const monthViewShowTags = useCalendarStore((s) => s.settings.monthViewShowTags);
+	const monthViewShowPriority = useCalendarStore((s) => s.settings.monthViewShowPriority);
+	const monthViewShowTicktick = useCalendarStore((s) => s.settings.monthViewShowTicktick);
+	const recurringLimit = useCalendarStore((s) => s.settings.recurringTaskDisplayLimit) ?? 5;
+	const monthFontSize = useCalendarStore((s) => s.settings.monthLunarFontSize) || 10;
+	const showLunar = useCalendarStore((s) => s.settings.showLunar);
+	const showFestivals = useCalendarStore((s) => s.settings.showFestivals);
+	const language = useCalendarStore((s) => s.settings.language);
 
 	// todayKey 入依赖：跨午夜后重算 isToday
 	const todayKey = useTodayKey();
 	const monthData = useMemo(() => {
 		return generateMonthCalendar(currentDate.getFullYear(), currentDate.getMonth() + 1, startOnMonday);
 	}, [currentDate, startOnMonday, todayKey]);
+
+	const monthRange = useMemo(() => {
+		const allDays = monthData?.days;
+		if (!allDays || allDays.length === 0) return undefined;
+		const start = new Date(allDays[0].date);
+		start.setHours(0, 0, 0, 0);
+		const end = new Date(allDays[allDays.length - 1].date);
+		end.setHours(23, 59, 59, 999);
+		return { start, end };
+	}, [monthData]);
+
+	const tasks = useViewTasks(startField, endField, dateField, false, monthRange);
+
+	// 月视图统一使用 timeline 变体：格内卡片与横跨条同一视觉语言
+	const config = useMemo(() => ({
+		...MonthViewConfig,
+		variant: 'timeline' as const,
+		showCheckbox: monthViewShowCheckbox,
+		showTags: monthViewShowTags,
+		showPriority: monthViewShowPriority,
+		showTicktick: monthViewShowTicktick,
+	}), [monthViewShowCheckbox, monthViewShowTags, monthViewShowPriority, monthViewShowTicktick]);
 
 	// 全局筛选
 	const advanced = useAdvancedFilters('month');
@@ -129,9 +149,9 @@ export function MonthView(): JSX.Element {
 			monthStart,
 			monthEnd,
 			dateField,
-			plugin.settings.recurringTaskDisplayLimit ?? 5
+			recurringLimit
 		);
-	}, [scoped, monthData, dateField, plugin.settings.recurringTaskDisplayLimit]);
+	}, [scoped, monthData, dateField, recurringLimit]);
 
 	// file-based task 图层：文件横跨条；归类时文件内任务全部收进悬浮卡片（月视图无时间轴）
 	const mergeIcs = useIcsLayer(startField, endField, dateField);
@@ -208,11 +228,11 @@ export function MonthView(): JSX.Element {
 		return <div ref={viewRef} className="gc-view gc-view--month" />;
 	}
 
+	void language;
 	const labelsSunFirst = i18n.t('views.monthView.weekdays') as unknown as string[];
 	const labelsMonFirst = i18n.t('views.monthView.weekdaysMon') as unknown as string[];
 	const weekdayLabels = startOnMonday ? labelsMonFirst : labelsSunFirst;
-
-	const monthFontSize = plugin.settings.monthLunarFontSize || 10;
+	const monthViewStyle = { '--gc-month-weeks': monthData.weeks.length } as CSSProperties;
 
 	return (
 		<FileTaskLayerProvider value={{ tasksByFile: fileLayer.tasksByFile, onRefresh: handleCardRefresh }}>
@@ -222,6 +242,7 @@ export function MonthView(): JSX.Element {
 					key={monthKey}
 					ref={viewRef}
 					className="gc-view gc-view--month"
+					style={monthViewStyle}
 					custom={slideDir}
 					variants={monthSlideVariants}
 					initial="enter"
@@ -297,10 +318,10 @@ export function MonthView(): JSX.Element {
 							].filter(Boolean).join(' ');
 							const key = dayKeys[dayIndex];
 
-							const lunarEl = day.lunarText && plugin.settings.showLunar
+							const lunarEl = day.lunarText && showLunar
 								? (
 									<div
-										className={`${MonthViewClasses.elements.lunarText}${(day.festival || day.festivalType) && plugin.settings.showFestivals ? ` ${MonthViewClasses.modifiers.festival}${day.festivalType ? ` ${festivalClass(day.festivalType)}` : ''}` : ''}`}
+										className={`${MonthViewClasses.elements.lunarText}${(day.festival || day.festivalType) && showFestivals ? ` ${MonthViewClasses.modifiers.festival}${day.festivalType ? ` ${festivalClass(day.festivalType)}` : ''}` : ''}`}
 										style={{ fontSize: `${monthFontSize}px` }}
 									>
 										{day.lunarText}

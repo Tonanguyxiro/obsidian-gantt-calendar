@@ -8,11 +8,14 @@
 import type { GCTask } from '../../types';
 import { formatDate } from '../../dateUtils/dateUtilsIndex';
 import { i18n } from '../../i18n/i18n';
+import { getPriorityMeta } from '../../utils/priorityIcons';
 
 export interface TooltipPropRow {
 	label: string;
 	value: string;
 	valueClass?: string;
+	icon?: string;
+	iconColor?: string;
 	isOverdue?: boolean;
 }
 
@@ -20,15 +23,6 @@ export interface TooltipSection {
 	key: string;
 	rows: TooltipPropRow[];
 }
-
-/** 优先级 emoji 映射（两端共用） */
-const PRIORITY_ICONS: Record<string, string> = {
-	highest: '🔺',
-	high: '⏫',
-	medium: '🔼',
-	low: '🔽',
-	lowest: '⏬',
-};
 
 /** 多级标签聚合后的一组：同一根标签下的所有子路径 */
 export interface TagGroup {
@@ -86,14 +80,19 @@ export function buildTooltipSections(task: GCTask): TooltipSection[] {
 	if (timeRows.length > 0) sections.push({ key: 'time', rows: timeRows });
 
 	if (task.priority && task.priority !== 'normal') {
-		sections.push({
-			key: 'priority',
-			rows: [{
-				label: i18n.t('taskCard.priority'),
-				value: `${PRIORITY_ICONS[task.priority] || ''} ${i18n.t(`common.priority.${task.priority}`)}`,
-				valueClass: `priority-${task.priority}`,
-			}],
-		});
+		const meta = getPriorityMeta(task.priority);
+		if (meta.level !== 'normal') {
+			sections.push({
+				key: 'priority',
+				rows: [{
+					label: i18n.t('taskCard.priority'),
+					value: i18n.t(`common.priority.${meta.level}`),
+					valueClass: `priority-${meta.level}`,
+					icon: meta.icon,
+					iconColor: meta.colorVar,
+				}],
+			});
+		}
 	}
 
 	if (task.tags && task.tags.length > 0) sections.push({ key: 'tags', rows: [] });

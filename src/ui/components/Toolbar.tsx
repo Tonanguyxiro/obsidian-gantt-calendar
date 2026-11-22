@@ -37,9 +37,8 @@ const MONTH_ABBR = () => i18n.t('common.monthsAbbr') as unknown as string[];
  */
 export function ToolbarBar(): JSX.Element {
 	const plugin = usePlugin();
-	// 飞书同步未开启时不显示同步按钮（设置页开启后视图会重新挂载，这里随之更新）
-	useCalendarStore((s) => s.settingsVersion);
-	const feishuEnabled = isFeishuSyncEnabled(plugin.settings.syncConfiguration);
+	const syncConfiguration = useCalendarStore((s) => s.settings.syncConfiguration);
+	const feishuEnabled = isFeishuSyncEnabled(syncConfiguration);
 	const viewType = useCalendarStore((s) => s.viewType);
 	const currentDate = useCalendarStore((s) => s.currentDate);
 	const scope = viewType as ViewScope;
@@ -50,13 +49,18 @@ export function ToolbarBar(): JSX.Element {
 	const setSort = useCalendarStore((s) => s.setSort);
 	const setTasks = useCalendarStore((s) => s.setTasks);
 
-	const showButtonText = plugin.settings.showViewNavButtonText ?? true;
-	const startOnMonday = !!plugin.settings.startOnMonday;
-	// 订阅设置版本号：设置变更（refreshSettings）时重新读取 plugin.settings
-	useCalendarStore((s) => s.settingsVersion);
+	const showButtonText = useCalendarStore((s) => s.settings.showViewNavButtonText) ?? true;
+	const startOnMonday = useCalendarStore((s) => !!s.settings.startOnMonday);
+	const globalTaskFilter = useCalendarStore((s) => s.settings.globalTaskFilter);
+	const enabledTaskFormats = useCalendarStore((s) => s.settings.enabledTaskFormats);
+	const taskStatuses = useCalendarStore((s) => s.settings.taskStatuses);
+	const taskViewTimeFieldFilter = useCalendarStore((s) => s.settings.taskViewTimeFieldFilter);
+	const taskViewDateRangeMode = useCalendarStore((s) => s.settings.taskViewDateRangeMode);
+	const language = useCalendarStore((s) => s.settings.language);
 
 	// ===== 标题 =====
 	const titleText = useMemo(() => {
+		void language;
 		switch (viewType) {
 			case 'year': return String(currentDate.getFullYear());
 			case 'month': return MONTH_ABBR()[currentDate.getMonth()];
@@ -68,7 +72,7 @@ export function ToolbarBar(): JSX.Element {
 			case 'task': return i18n.t('views.taskView.title');
 			case 'gantt': return i18n.t('views.ganttView.title');
 		}
-	}, [viewType, currentDate, startOnMonday]);
+	}, [viewType, currentDate, startOnMonday, language]);
 
 	// ===== 导航 =====
 	const navigate = (dir: -1 | 1) => {
@@ -91,8 +95,8 @@ export function ToolbarBar(): JSX.Element {
 	// ===== 刷新 =====
 	const handleRefresh = async () => {
 		await plugin.taskCache.initialize(
-			plugin.settings.globalTaskFilter,
-			plugin.settings.enabledTaskFormats
+			globalTaskFilter,
+			enabledTaskFormats
 		);
 		setTasks(plugin.taskCache.getAllTasks());
 	};
@@ -115,7 +119,7 @@ export function ToolbarBar(): JSX.Element {
 
 	// ===== 下拉菜单（声明式） =====
 	const statusMenuSections = (): DropdownMenuSection[] => {
-		const statuses: TaskStatus[] = plugin.settings.taskStatuses || DEFAULT_TASK_STATUSES;
+		const statuses: TaskStatus[] = taskStatuses || DEFAULT_TASK_STATUSES;
 		const selected = filter?.status.selectedStatuses || [];
 		const items: MenuItemDef[] = statuses.map((st) => ({
 			key: st.key,
@@ -168,7 +172,7 @@ export function ToolbarBar(): JSX.Element {
 			{ key: 'completionDate', label: i18n.t('toolbar.fieldSelector.completionDate') },
 			{ key: 'cancelledDate', label: i18n.t('toolbar.fieldSelector.cancelledDate') },
 		];
-		const current = plugin.settings.taskViewTimeFieldFilter || 'dueDate';
+		const current = taskViewTimeFieldFilter || 'dueDate';
 		return [{
 			items: fields.map((f) => ({
 				key: f.key,
@@ -187,7 +191,7 @@ export function ToolbarBar(): JSX.Element {
 			{ key: 'week', label: i18n.t('toolbar.dateFilter.week') },
 			{ key: 'month', label: i18n.t('toolbar.dateFilter.month') },
 		];
-		const current = plugin.settings.taskViewDateRangeMode || 'week';
+		const current = taskViewDateRangeMode || 'week';
 		return [{
 			items: modes.map((m) => ({
 				key: m.key,
@@ -198,11 +202,11 @@ export function ToolbarBar(): JSX.Element {
 		}];
 	};
 
-	// ===== 任务视图：写回设置并触发重挂载 =====
+	// ===== 任务视图：写回设置并同步到 store =====
 	const updateTaskViewSettings = async (patch: Partial<GanttCalendarSettings>): Promise<void> => {
 		Object.assign(plugin.settings, patch);
 		await plugin.saveSettings();
-		useCalendarStore.getState().bumpSettings();
+		useCalendarStore.getState().syncSettings(plugin.settings);
 	};
 
 	// ===== 手机端溢出菜单：筛选/排序/视图专属选项/设置/同步/刷新 收纳为"⋯" =====

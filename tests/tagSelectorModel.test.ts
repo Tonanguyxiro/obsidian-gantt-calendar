@@ -1,9 +1,11 @@
 import {
+	applyTagCompletion,
 	buildTagSelectorModel,
 	expandedPathFor,
 	getDrillDownRows,
 	normalizeTagInput,
 	searchTags,
+	suggestTags,
 	toggleExpandedPath,
 } from '../src/ui/modals/tagSelectorModel';
 
@@ -61,6 +63,33 @@ describe('tagSelectorModel', () => {
 		expect(searchTags(model, 'task', 10).map(([t]) => t)).toEqual(['task', 'task/pending', 'task/tools']);
 		expect(searchTags(model, 'e', 2)).toHaveLength(2);
 		expect(normalizeTagInput('  #new/tag ')).toBe('new/tag');
+	});
+
+	test('自动补全建议优先前缀匹配，其次按计数与字典序', () => {
+		expect(suggestTags(model, '', 10)).toEqual([]);
+		expect(suggestTags(model, '  #  ', 10)).toEqual([]);
+		// "co" 同时匹配前缀 coding(1)，以及子串中的其他不含 co 的跳过
+		expect(suggestTags(model, 'co', 10)).toEqual([['coding', 1]]);
+		// "pa" 仅匹配子串 research/paper(2)
+		expect(suggestTags(model, '#pa', 10)).toEqual([['research/paper', 2]]);
+		// 前缀优先于更高计数的子串：先建一个带前缀与高计数子串的模型
+		const ranked = buildTagSelectorModel([
+			{ tags: ['foo/bar'] },
+			{ tags: ['foo/bar'] },
+			{ tags: ['foo/bar'] },
+			{ tags: ['bar'] },
+		]);
+		expect(suggestTags(ranked, 'bar', 10)).toEqual([
+			['bar', 1],
+			['foo/bar', 3],
+		]);
+		expect(suggestTags(model, 'e', 2)).toHaveLength(2);
+	});
+
+	test('补全写入输入框保留前导 # 且不追加斜杠或提交', () => {
+		expect(applyTagCompletion('rel', 'release')).toBe('release');
+		expect(applyTagCompletion('  #rel', 'release')).toBe('#release');
+		expect(applyTagCompletion('#release/v0', 'release/v0-1-0')).toBe('#release/v0-1-0');
 	});
 });
 

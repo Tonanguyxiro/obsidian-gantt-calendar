@@ -9,11 +9,11 @@
 	background-color: var(--background-primary);
 	border: 1px solid var(--background-modifier-border);
 	border-radius: 8px;
-	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+	box-shadow: var(--gc-elev-3);
 	padding: 12px;
 	max-width: 300px;
 	min-width: 250px;
-	font-size: 13px;
+	font-size: var(--gc-font-sm);
 	line-height: 1.47;
 	letter-spacing: -0.01px;
 	pointer-events: none;
@@ -38,7 +38,7 @@
 
 .gc-task-tooltip .gc-task-tooltip__description strong {
 	font-weight: 600;
-	font-size: 14px;
+	font-size: var(--gc-font-md);
 }
 
 /* --- 属性区域 --- */
@@ -68,46 +68,68 @@
 	flex-shrink: 0;
 	min-width: 36px;
 	white-space: nowrap;
-	font-size: 12px;
+	font-size: var(--gc-font-xs);
 	color: var(--text-muted);
 	letter-spacing: -0.01px;
 }
 
 .gc-task-tooltip .gc-task-tooltip__property-value {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	flex-wrap: wrap;
 	color: var(--text-normal);
-	font-size: 13px;
+	font-size: var(--gc-font-sm);
 	word-break: break-word;
 }
 
+.gc-task-tooltip .gc-task-tooltip__priority-icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+}
+
+.gc-task-tooltip .gc-task-tooltip__priority-icon > span {
+	display: inline-flex;
+	align-items: center;
+}
+
+.gc-task-tooltip .gc-task-tooltip__property-value .svg-icon {
+	width: 14px;
+	height: 14px;
+	flex-shrink: 0;
+}
+
 .gc-task-tooltip .gc-task-tooltip__property-value--overdue {
-	color: var(--gc-color-red, #d73a49);
+	color: var(--gc-color-red);
 	font-weight: 600;
 }
 
 .gc-task-tooltip .gc-task-tooltip__property-divider {
 	height: 1px;
-	background-color: rgba(0, 0, 0, 0.06);
+	background-color: var(--gc-border-hairline);
 	margin: 2px 0;
 }
 
 .gc-task-tooltip .priority-highest {
-	color: var(--gc-color-red, #d73a49);
+	color: var(--gc-color-red);
 }
 
 .gc-task-tooltip .priority-high {
-	color: var(--gc-color-orange, #e36209);
+	color: var(--gc-color-orange);
 }
 
 .gc-task-tooltip .priority-medium {
-	color: var(--gc-color-yellow, #ffd33d);
+	color: var(--gc-color-yellow);
 }
 
 .gc-task-tooltip .priority-low {
-	color: var(--gc-color-green, #28a745);
+	color: var(--gc-color-blue);
 }
 
 .gc-task-tooltip .priority-lowest {
-	color: var(--gc-color-blue, #0366d6);
+	color: var(--text-muted);
 }
 
 .gc-task-tooltip .gc-task-tooltip__tags {
@@ -119,7 +141,7 @@
 }
 
 .gc-task-tooltip .gc-task-tooltip__file-location {
-	font-size: 11px;
+	font-size: var(--gc-font-xxs);
 	color: var(--text-muted);
 }
 

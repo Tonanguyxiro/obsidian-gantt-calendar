@@ -57,6 +57,7 @@ export default class GanttCalendarPlugin extends Plugin {
 
 		this.settingsManager = new SettingsManager(this);
 		this.settings = await this.settingsManager.loadSettings();
+		useCalendarStore.getState().syncSettings(this.settings);
 
 		// 视图筛选偏好：从 data.json 水合进 store（先水合后订阅，
 		// 避免水合触发的首次 set 被当成变更写回）；
@@ -149,6 +150,8 @@ export default class GanttCalendarPlugin extends Plugin {
 
 	async saveSettings(): Promise<void> {
 		await this.settingsManager.saveSettings(this.settings);
+		setLanguage(this.settings.language || 'system');
+		useCalendarStore.getState().syncSettings(this.settings);
 		this.fileTaskIndex?.rebuild();
 		if (this.taskCache) {
 			await this.taskCache.updateSettings(
@@ -181,6 +184,7 @@ export default class GanttCalendarPlugin extends Plugin {
 	}
 
 	refreshCalendarViews(): void {
+		useCalendarStore.getState().syncSettings(this.settings);
 		this.viewManager.refreshAllViews();
 	}
 
@@ -255,8 +259,7 @@ export default class GanttCalendarPlugin extends Plugin {
 					Logger.stats('Main', 'Task cache initialized');
 					// P1：此处不再 refreshCalendarViews()——数据推送已由
 					// TaskStore.notifyListeners()（onUpdate）与视图 whenReady 订阅
-					// 承担；旧实现经 bumpSettings()++settingsVersion 触发
-					// AnimatePresence 整视图卸载重挂，数据刚填充即闪烁重排。
+					// 承担；无需触发整视图卸载重挂，避免数据刚填充即闪烁重排。
 					await this.loadLastSyncTime();
 				}).catch(error => {
 					Logger.error('Main', 'Failed to initialize task cache:', error);

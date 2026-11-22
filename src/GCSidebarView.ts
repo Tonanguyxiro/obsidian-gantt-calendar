@@ -44,6 +44,9 @@ export class GCSidebarView extends ItemView {
 	async onOpen(): Promise<void> {
 		// P0 启动解耦：onOpen 不再 await 全库首扫（与 GCMainView 同源修复，
 		// 打断 layout 恢复 ↔ onOpen ↔ onLayoutReady 的循环等待），先挂骨架。
+		if (this.plugin?.settings) {
+			useCalendarStore.getState().syncSettings(this.plugin.settings);
+		}
 		useCalendarStore.setState({
 			currentDate: getTodayInTimezone(),
 		});
@@ -92,10 +95,12 @@ export class GCSidebarView extends ItemView {
 	}
 
 	/**
-	 * 设置变更后触发 React 整体重挂载（重新读取设置）
+	 * 设置变更后同步设置快照到 calendarStore（响应式增量更新）
 	 */
 	public refreshSettings(): void {
-		useCalendarStore.getState().bumpSettings();
+		if (this.plugin?.settings) {
+			useCalendarStore.getState().syncSettings(this.plugin.settings);
+		}
 	}
 
 	async onClose(): Promise<void> {

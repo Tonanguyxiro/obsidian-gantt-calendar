@@ -10,11 +10,11 @@
 /* 填色格子通用：圆角 + 极淡描边环（GitHub 2024 改版同款手法，深色下尤其提升可读性） */
 .gc-year-view__day:not(.outside-month)[class*="heatmap-"] {
 	border-radius: 4px;
-	box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.05);
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gc-shadow-ink) 5%, transparent);
 }
 
 .theme-dark .gc-year-view__day:not(.outside-month)[class*="heatmap-"] {
-	box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gc-highlight-ink) 7%, transparent);
 }
 
 /* ---------- 蓝 ---------- */
@@ -77,26 +77,26 @@
    一档 = 顶部微光；二档 = 一档 + 轻浮起投影。类名保持不变，设置项无需迁移） ---------- */
 .gc-year-view__day:not(.outside-month).heatmap-3d-1[class*="heatmap-"] {
 	box-shadow:
-		inset 0 0 0 1px rgba(0, 0, 0, 0.05),
-		inset 0 1px 0 rgba(255, 255, 255, 0.30);
+		inset 0 0 0 1px color-mix(in srgb, var(--gc-shadow-ink) 5%, transparent),
+		inset 0 1px 0 color-mix(in srgb, var(--gc-highlight-ink) 30%, transparent);
 }
 
 .gc-year-view__day:not(.outside-month).heatmap-3d-2[class*="heatmap-"] {
 	box-shadow:
-		inset 0 0 0 1px rgba(0, 0, 0, 0.05),
-		inset 0 1px 0 rgba(255, 255, 255, 0.30),
-		0 2px 4px rgba(0, 0, 0, 0.15);
+		inset 0 0 0 1px color-mix(in srgb, var(--gc-shadow-ink) 5%, transparent),
+		inset 0 1px 0 color-mix(in srgb, var(--gc-highlight-ink) 30%, transparent),
+		0 2px 4px color-mix(in srgb, var(--gc-shadow-ink) 15%, transparent);
 }
 
 .theme-dark .gc-year-view__day:not(.outside-month).heatmap-3d-1[class*="heatmap-"] {
 	box-shadow:
-		inset 0 0 0 1px rgba(255, 255, 255, 0.07),
-		inset 0 1px 0 rgba(255, 255, 255, 0.16);
+		inset 0 0 0 1px color-mix(in srgb, var(--gc-highlight-ink) 7%, transparent),
+		inset 0 1px 0 color-mix(in srgb, var(--gc-highlight-ink) 16%, transparent);
 }
 
 .theme-dark .gc-year-view__day:not(.outside-month).heatmap-3d-2[class*="heatmap-"] {
 	box-shadow:
-		inset 0 0 0 1px rgba(255, 255, 255, 0.07),
-		inset 0 1px 0 rgba(255, 255, 255, 0.16),
-		0 2px 6px rgba(0, 0, 0, 0.45);
+		inset 0 0 0 1px color-mix(in srgb, var(--gc-highlight-ink) 7%, transparent),
+		inset 0 1px 0 color-mix(in srgb, var(--gc-highlight-ink) 16%, transparent),
+		0 2px 6px color-mix(in srgb, var(--gc-shadow-ink) 45%, transparent);
 }

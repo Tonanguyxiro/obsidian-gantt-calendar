@@ -6,6 +6,7 @@ import type { DateFieldType } from '../../../settings/types';
 import type { TaskCardConfig } from '../../../components/TaskCard/TaskCardConfig';
 import { DayCanvasClasses, ContextMenuClasses, setCssProps } from '../../../utils/bem';
 import { usePlugin, useApp } from '../../pluginContext';
+import { useCalendarStore } from '../../store/calendarStore';
 import { CalendarItemCard } from '../../components/FileTaskCard';
 import { Icon } from '../../components/Icon';
 import { updateTaskProperties } from '../../../tasks/taskUpdater';
@@ -31,6 +32,7 @@ import {
 } from './timelineModel';
 import { useBlockResize, isBlockResizing, setBlockDragMeta, getBlockDragMeta, clearBlockDragMeta } from './useBlockResize';
 import { useCanvasTouchDrag } from './useCanvasTouchDrag';
+import { useEdgeAutoScroll } from './useEdgeAutoScroll';
 import { findTaskById } from '../../utils/taskId';
 import { asSlotTarget, SLOT_DEFAULT_MIN } from '../../../tasks/scheduledFallback';
 import { taskKey } from '../../utils/taskKey';
@@ -50,6 +52,29 @@ function isInsideBlock(target: EventTarget | null): boolean {
 /** 页面上是否存在打开的右键菜单（trigger 截断冒泡，只能直接探测 DOM） */
 function isContextMenuOpen(): boolean {
 	return !!document.querySelector(`.${ContextMenuClasses.container}`);
+}
+
+const EMPTY_FORMATS: string[] = [];
+
+/** 解析日画布所属的纵向滚动容器：日视图中为 `.gc-day-canvas__body`，侧栏中向上回退至 `.gc-sidebar__panel-body` */
+function resolveDayCanvasScrollContainer(
+	canvasEl: HTMLElement | null,
+	bodyEl: HTMLElement | null,
+): HTMLElement | null {
+	const start = bodyEl ?? (canvasEl?.closest(`.${DayCanvasClasses.elements.body}`) as HTMLElement | null);
+	if (!start) return null;
+	let cur: HTMLElement | null = start;
+	while (cur) {
+		const style = typeof window !== 'undefined' && window.getComputedStyle
+			? window.getComputedStyle(cur)
+			: null;
+		const oy = style?.overflowY;
+		if (oy === 'auto' || oy === 'scroll' || cur.scrollHeight > cur.clientHeight) {
+			return cur;
+		}
+		cur = cur.parentElement;
+	}
+	return start;
 }
 
 /** dataTransfer.taskId（filePath:lineNumber）→ 任务查找 */
@@ -81,16 +106,23 @@ export function DayTimelineCanvas({ day, model, config, tasks, refresh }: DayTim
 	const app = useApp();
 
 	const dateField = 'dueDate';
-	const startField = plugin.settings.ganttStartField || 'startDate';
-	const endField = plugin.settings.ganttEndField || 'dueDate';
-	const enabledFormats = plugin.settings.enabledTaskFormats || [];
+	const startField = useCalendarStore((s) => s.settings.ganttStartField) || 'startDate';
+	const endField = useCalendarStore((s) => s.settings.ganttEndField) || 'dueDate';
+	const enabledFormats = useCalendarStore((s) => s.settings.enabledTaskFormats) || EMPTY_FORMATS;
 
+	const bodyRef = useRef<HTMLDivElement | null>(null);
 	const canvasRef = useRef<HTMLDivElement | null>(null);
 	const ghostRef = useRef<HTMLDivElement | null>(null);
 	const ghostLabelRef = useRef<HTMLSpanElement | null>(null);
 	const createRef = useRef<{ anchorMin: number; anchorY: number; lastMin: number; moved: boolean } | null>(null);
+	const createPointerRef = useRef<{ clientY: number } | null>(null);
 	/** pointercancel 清理经 ref 桥接，避免与 finishCreate 形成循环推断 */
 	const cancelCreateRef = useRef<() => void>(() => {});
+
+	const getScrollContainer = useCallback(
+		(): HTMLElement | null => resolveDayCanvasScrollContainer(canvasRef.current, bodyRef.current),
+		[],
+	);
 
 	// ===== 拖放瞬时反馈（独立小 store：dragover 只重渲染指示层，不重渲染整张画布） =====
 	const [feedback] = useState(createDragFeedbackStore);
@@ -161,7 +193,7 @@ export function DayTimelineCanvas({ day, model, config, tasks, refresh }: DayTim
 		})();
 	}, [atMinutes, startField, endField, persistTaskUpdate]);
 
-	const beginResize = useBlockResize(commitResize);
+	const beginResize = useBlockResize(commitResize, { getScrollContainer });
 
 	// ===== 整块拖放落点（minutes = 块上边缘吸附时刻） =====
 	const commitBlockMove = useCallback((task: GCTask, minutes: number): void => {
@@ -218,12 +250,83 @@ export function DayTimelineCanvas({ day, model, config, tasks, refresh }: DayTim
 		void persistTaskUpdate(task, updates, precision, 'views.dayView.updateTimeFailed');
 	}, [atMinutes, startField, endField, dateField, persistTaskUpdate]);
 
-	// 触屏整块拖动（长按 500ms 起拖；单日画布 dayIndex 恒为 0）
-	const beginBlockTouchPress = useCanvasTouchDrag({
+	// 触屏整块拖动（长按 500ms 起拖；单日画布 dayIndex 恒为 0，含边缘自动滚动）
+	const touchDragStateRef = useRef<{ offsetPx: number; durationMin: number; clientY: number; dragging: boolean } | null>(null);
+	const touchAutoScroller = useEdgeAutoScroll({
+		getScrollContainer,
+		onScroll: () => {
+			const st = touchDragStateRef.current;
+			const canvas = canvasRef.current;
+			if (!st || !st.dragging || !canvas) return;
+			const topMin = snapMinutes(pxToMinutes(st.clientY - st.offsetPx - canvas.getBoundingClientRect().top), false);
+			feedback.patch({
+				indicator: {
+					dayIndex: 0,
+					kind: 'preview',
+					startMin: topMin,
+					endMin: Math.min(topMin + st.durationMin, MINUTES_PER_DAY),
+				},
+			});
+		},
+	});
+	const touchListenersRef = useRef<{ move: (ev: PointerEvent) => void; end: () => void } | null>(null);
+	const detachTouchAutoScroll = useCallback(() => {
+		touchAutoScroller.stop();
+		touchDragStateRef.current = null;
+		const listeners = touchListenersRef.current;
+		if (listeners) {
+			document.removeEventListener('pointermove', listeners.move);
+			document.removeEventListener('pointerup', listeners.end);
+			document.removeEventListener('pointercancel', listeners.end);
+			touchListenersRef.current = null;
+		}
+	}, [touchAutoScroller]);
+	useEffect(() => () => detachTouchAutoScroll(), [detachTouchAutoScroll]);
+
+	const setTouchPreview = useCallback((prev: { dayIndex: number; startMin: number; endMin: number } | null) => {
+		if (prev === null) {
+			touchAutoScroller.stop();
+			if (touchDragStateRef.current) touchDragStateRef.current.dragging = false;
+		} else if (touchDragStateRef.current) {
+			touchDragStateRef.current.dragging = true;
+		}
+		feedback.patch({ indicator: prev && { dayIndex: 0, kind: 'preview', startMin: prev.startMin, endMin: prev.endMin } });
+	}, [feedback, touchAutoScroller]);
+
+	const rawBeginTouchPress = useCanvasTouchDrag({
 		onCommit: (task, _dayIndex, minutes) => commitBlockMove(task, minutes),
-		setPreview: (prev) => feedback.patch({ indicator: prev && { dayIndex: 0, kind: 'preview', startMin: prev.startMin, endMin: prev.endMin } }),
+		setPreview: setTouchPreview,
 		columnSelector: `.${DayCanvasClasses.elements.canvas}`,
 	});
+
+	const beginBlockTouchPress = useCallback((e: ReactPointerEvent, block: TimeBlock, blockEl: HTMLElement): void => {
+		rawBeginTouchPress(e, block, blockEl);
+		if (e.pointerType === 'mouse' || block.task.icsEvent) return;
+		detachTouchAutoScroll();
+		const rect = blockEl.getBoundingClientRect();
+		touchDragStateRef.current = {
+			offsetPx: e.clientY - rect.top,
+			durationMin: Math.round((block.end.getTime() - block.start.getTime()) / 60000),
+			clientY: e.clientY,
+			dragging: false,
+		};
+		const move = (ev: PointerEvent) => {
+			const st = touchDragStateRef.current;
+			if (!st) return;
+			st.clientY = ev.clientY;
+			if (st.dragging || document.querySelector('.gc-canvas-drag-chip')) {
+				st.dragging = true;
+				touchAutoScroller.update(ev.clientY);
+			}
+		};
+		const end = () => {
+			detachTouchAutoScroll();
+		};
+		touchListenersRef.current = { move, end };
+		document.addEventListener('pointermove', move);
+		document.addEventListener('pointerup', end);
+		document.addEventListener('pointercancel', end);
+	}, [rawBeginTouchPress, detachTouchAutoScroll, touchAutoScroller]);
 
 	// ===== 空白快速创建（单击 = 前向 1 小时区间，拖拽 = 选区） =====
 
@@ -281,26 +384,44 @@ export function DayTimelineCanvas({ day, model, config, tasks, refresh }: DayTim
 		if (ghost) setCssProps(ghost, { display: 'none' });
 	}, []);
 
+	const updateCreateSelection = useCallback((clientY: number, fromScroll = false): void => {
+		const create = createRef.current;
+		if (!create) return;
+		const minutes = minutesFromEvent(clientY);
+		create.lastMin = minutes;
+		if (!create.moved && (Math.abs(clientY - create.anchorY) > CREATE_DRAG_THRESHOLD_PX || (fromScroll && minutes !== create.anchorMin))) {
+			create.moved = true;
+		}
+		if (!create.moved) {
+			showGhost(create.anchorMin, quickCreateEnd(create.anchorMin), true);
+			return;
+		}
+		showGhost(Math.min(create.anchorMin, minutes), Math.max(create.anchorMin, minutes), true);
+	}, [minutesFromEvent, quickCreateEnd, showGhost]);
+
+	const createAutoScroller = useEdgeAutoScroll({
+		getScrollContainer,
+		onScroll: () => {
+			const ptr = createPointerRef.current;
+			if (ptr) updateCreateSelection(ptr.clientY, true);
+		},
+	});
+
+	const handleDocCreateMove = useCallback((ev: PointerEvent): void => {
+		if (!createRef.current) return;
+		createPointerRef.current = { clientY: ev.clientY };
+		updateCreateSelection(ev.clientY, false);
+		createAutoScroller.update(ev.clientY);
+	}, [updateCreateSelection, createAutoScroller]);
+
 	// ===== hover ghost / 拖拽选区 =====
 	const handlePointerMove = useCallback((e: ReactPointerEvent) => {
+		if (createRef.current) return; // 选区拖拽中由 document pointermove 统一驱动
 		if (isInsideBlock(e.target)) {
-			if (!createRef.current) hideGhost();
+			hideGhost();
 			return;
 		}
 		const minutes = minutesFromEvent(e.clientY);
-		const create = createRef.current;
-		if (create) {
-			create.lastMin = minutes;
-			if (!create.moved && Math.abs(e.clientY - create.anchorY) > CREATE_DRAG_THRESHOLD_PX) {
-				create.moved = true;
-			}
-			if (!create.moved) {
-				showGhost(create.anchorMin, quickCreateEnd(create.anchorMin), true);
-				return;
-			}
-			showGhost(Math.min(create.anchorMin, minutes), Math.max(create.anchorMin, minutes), true);
-			return;
-		}
 		// portal 浮层冒泡 / 菜单与 resize 进行中：不出 hover 提示。
 		// ghost 终点钳到下一个块起点（与点击创建同源判定）：空隙不足 1 小时按空隙收缩，
 		// 光标处即块起点（无空隙）则不显示
@@ -325,9 +446,21 @@ export function DayTimelineCanvas({ day, model, config, tasks, refresh }: DayTim
 		if (!createRef.current) hideGhost();
 	}, [hideGhost]);
 
+	/** 选区创建（独立函数避免 finishCreate 循环依赖） */
+	const onQuickCreateRange = useCallback((anchor: number, last: number) => {
+		handleQuickCreate({
+			type: 'range',
+			startMin: Math.min(anchor, last),
+			endMin: Math.max(anchor, last),
+		});
+	}, [handleQuickCreate]);
+
 	const finishCreate = useCallback((): void => {
 		const create = createRef.current;
 		createRef.current = null;
+		createPointerRef.current = null;
+		createAutoScroller.stop();
+		document.removeEventListener('pointermove', handleDocCreateMove);
 		document.removeEventListener('pointerup', finishCreate);
 		document.removeEventListener('pointercancel', cancelCreateRef.current);
 		hideGhost();
@@ -337,26 +470,20 @@ export function DayTimelineCanvas({ day, model, config, tasks, refresh }: DayTim
 		} else {
 			handleQuickCreate({ type: 'point', min: create.anchorMin });
 		}
-		// eslint 未配置 exhaustive-deps；依赖经下方 ref 桥接
-	}, [hideGhost, handleQuickCreate]);
+	}, [hideGhost, handleQuickCreate, onQuickCreateRange, createAutoScroller, handleDocCreateMove]);
 
 	/** 触屏滚动接管手势（pointercancel）：静默放弃创建，不弹窗 */
 	const cancelCreate = useCallback((): void => {
 		createRef.current = null;
+		createPointerRef.current = null;
+		createAutoScroller.stop();
+		document.removeEventListener('pointermove', handleDocCreateMove);
 		document.removeEventListener('pointerup', finishCreate);
 		document.removeEventListener('pointercancel', cancelCreateRef.current);
 		hideGhost();
-	}, [finishCreate, hideGhost]);
+	}, [finishCreate, hideGhost, createAutoScroller, handleDocCreateMove]);
 	cancelCreateRef.current = cancelCreate;
-
-	/** 选区创建（独立函数避免 finishCreate 循环依赖） */
-	const onQuickCreateRange = useCallback((anchor: number, last: number) => {
-		handleQuickCreate({
-			type: 'range',
-			startMin: Math.min(anchor, last),
-			endMin: Math.max(anchor, last),
-		});
-	}, [handleQuickCreate]);
+	useEffect(() => () => cancelCreateRef.current(), []);
 
 	const handlePointerDown = useCallback((e: ReactPointerEvent) => {
 		if (e.button !== 0 || isInsideBlock(e.target)) return;
@@ -368,16 +495,18 @@ export function DayTimelineCanvas({ day, model, config, tasks, refresh }: DayTim
 		const endMin = quickCreateEnd(anchorMin);
 		if (endMin <= anchorMin) return; // 光标处即下一个块起点：无空隙，不启动创建手势
 		createRef.current = { anchorMin, anchorY: e.clientY, lastMin: anchorMin, moved: false };
+		createPointerRef.current = { clientY: e.clientY };
 		showGhost(anchorMin, endMin, true);
+		document.removeEventListener('pointermove', handleDocCreateMove);
 		document.removeEventListener('pointerup', finishCreate);
 		document.removeEventListener('pointercancel', cancelCreateRef.current);
+		document.addEventListener('pointermove', handleDocCreateMove);
 		document.addEventListener('pointerup', finishCreate);
 		document.addEventListener('pointercancel', cancelCreateRef.current);
-	}, [minutesFromEvent, showGhost, finishCreate, quickCreateEnd]);
+	}, [minutesFromEvent, showGhost, finishCreate, quickCreateEnd, handleDocCreateMove]);
 
 	// ===== HTML5 拖放（块拖动按块边缘落点 + 预览块；外部拖入按指针 + 指示线） =====
-	// dragover 约 50ms 一次（指针不动也触发）：布局读取与反馈写入按帧合并
-	const dragOverFrame = useMemo(() => rafThrottle((clientY: number) => {
+	const updateDragFeedback = useCallback((clientY: number) => {
 		const canvas = canvasRef.current;
 		if (!canvas) return;
 		const top = canvas.getBoundingClientRect().top;
@@ -390,14 +519,50 @@ export function DayTimelineCanvas({ day, model, config, tasks, refresh }: DayTim
 		}
 		const min = snapMinutes(pxToMinutes(clientY - top), false);
 		feedback.patch({ overCol: 0, indicator: { dayIndex: 0, kind: 'line', startMin: min, endMin: min } });
-	}), [feedback]);
+	}, [feedback]);
+
+	const lastDragClientYRef = useRef<number | null>(null);
+	const dragAutoScroller = useEdgeAutoScroll({
+		getScrollContainer,
+		onScroll: () => {
+			if (lastDragClientYRef.current !== null) {
+				updateDragFeedback(lastDragClientYRef.current);
+			}
+		},
+	});
+	const dragCleanupBoundRef = useRef(false);
+	const stopDragAutoScrollRef = useRef<() => void>(() => {});
+	const stopDragAutoScroll = useCallback(() => {
+		dragAutoScroller.stop();
+		lastDragClientYRef.current = null;
+		if (dragCleanupBoundRef.current) {
+			document.removeEventListener('dragend', stopDragAutoScrollRef.current);
+			document.removeEventListener('drop', stopDragAutoScrollRef.current);
+			dragCleanupBoundRef.current = false;
+		}
+	}, [dragAutoScroller]);
+	stopDragAutoScrollRef.current = stopDragAutoScroll;
+
+	const ensureDragEndCleanup = useCallback(() => {
+		if (dragCleanupBoundRef.current) return;
+		dragCleanupBoundRef.current = true;
+		document.addEventListener('dragend', stopDragAutoScrollRef.current);
+		document.addEventListener('drop', stopDragAutoScrollRef.current);
+	}, []);
+	useEffect(() => () => stopDragAutoScrollRef.current(), []);
+
+	// dragover 约 50ms 一次（指针不动也触发）：布局读取与反馈写入按帧合并
+	const dragOverFrame = useMemo(() => rafThrottle(updateDragFeedback), [updateDragFeedback]);
 	useEffect(() => () => dragOverFrame.cancel(), [dragOverFrame]);
 
 	const handleDragOver = useCallback((e: ReactDragEvent) => {
 		e.preventDefault();
 		if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+		lastDragClientYRef.current = e.clientY;
+		ensureDragEndCleanup();
 		dragOverFrame(e.clientY);
-	}, [dragOverFrame]);
+		dragAutoScroller.update(e.clientY);
+	}, [dragOverFrame, ensureDragEndCleanup, dragAutoScroller]);
 
 	const handleDragLeave = useCallback((e: ReactDragEvent) => {
 		const related = e.relatedTarget as Node | null;
@@ -406,9 +571,22 @@ export function DayTimelineCanvas({ day, model, config, tasks, refresh }: DayTim
 		feedback.reset();
 	}, [feedback, dragOverFrame]);
 
+	const handleBodyDragOver = useCallback((e: ReactDragEvent) => {
+		lastDragClientYRef.current = e.clientY;
+		ensureDragEndCleanup();
+		dragAutoScroller.update(e.clientY);
+	}, [ensureDragEndCleanup, dragAutoScroller]);
+
+	const handleBodyDragLeave = useCallback((e: ReactDragEvent) => {
+		const related = e.relatedTarget as Node | null;
+		if (related && e.currentTarget.contains(related)) return;
+		stopDragAutoScroll();
+	}, [stopDragAutoScroll]);
+
 	const handleDrop = useCallback((e: ReactDragEvent) => {
 		e.preventDefault();
 		dragOverFrame.cancel();
+		stopDragAutoScroll();
 		feedback.reset();
 		const taskId = e.dataTransfer?.getData('taskId');
 		if (!taskId) return;
@@ -420,7 +598,7 @@ export function DayTimelineCanvas({ day, model, config, tasks, refresh }: DayTim
 		const meta = getBlockDragMeta();
 		const topEdgeClientY = meta ? e.clientY - meta.offsetPx : e.clientY;
 		commitBlockMove(task, minutesFromEvent(topEdgeClientY));
-	}, [tasks, minutesFromEvent, commitBlockMove, feedback, dragOverFrame]);
+	}, [tasks, minutesFromEvent, commitBlockMove, feedback, dragOverFrame, stopDragAutoScroll]);
 
 	// ===== 当前时间指示线（仅画布日为今天时显示；30s 刷新） =====
 	const todayKey = useTodayKey();
@@ -451,7 +629,13 @@ export function DayTimelineCanvas({ day, model, config, tasks, refresh }: DayTim
 	].filter(Boolean).join(' ');
 
 	return (
-		<div className={DayCanvasClasses.elements.body}>
+		<div
+			ref={bodyRef}
+			className={DayCanvasClasses.elements.body}
+			onDragOver={handleBodyDragOver}
+			onDragLeave={handleBodyDragLeave}
+			onDrop={stopDragAutoScroll}
+		>
 			{/* 时间沟槽 */}
 			<div className={DayCanvasClasses.elements.gutter}>
 				{Array.from({ length: 24 }, (_, hour) => (
@@ -483,6 +667,7 @@ export function DayTimelineCanvas({ day, model, config, tasks, refresh }: DayTim
 						feedback={feedback}
 						beginResize={beginResize}
 						beginTouchPress={beginBlockTouchPress}
+						onDragFinish={stopDragAutoScroll}
 					/>
 				))}
 				{/* 拖放吸附指示线（外部来源）/ 整块拖动落点预览 */}
@@ -516,7 +701,8 @@ interface CanvasTimeBlockProps {
 	canvasRef: RefObject<HTMLDivElement | null>;
 	feedback: DragFeedbackStore;
 	beginResize: ReturnType<typeof useBlockResize>;
-	beginTouchPress: ReturnType<typeof useCanvasTouchDrag>;
+	beginTouchPress: (e: ReactPointerEvent, block: TimeBlock, blockEl: HTMLElement) => void;
+	onDragFinish: () => void;
 }
 
 const CanvasTimeBlock = memo(function CanvasTimeBlock({
@@ -527,6 +713,7 @@ const CanvasTimeBlock = memo(function CanvasTimeBlock({
 	feedback,
 	beginResize,
 	beginTouchPress,
+	onDragFinish,
 }: CanvasTimeBlockProps): JSX.Element {
 	const durationMin = seg.endMin - seg.startMin;
 	const timeLabel = `${formatMinutes(seg.startMin)} – ${formatMinutes(seg.endMin)}`;
@@ -537,13 +724,14 @@ const CanvasTimeBlock = memo(function CanvasTimeBlock({
 		seg.continuesAfter ? DayCanvasClasses.modifiers.blockContinuesAfter : '',
 		seg.stackedIndex > 0 ? DayCanvasClasses.modifiers.blockStacked : '',
 	].filter(Boolean).join(' ');
-	const style: CSSProperties = {
+	const stackShift = seg.stackedIndex > 0 ? Math.min(seg.stackedIndex, 2) * 2 : 0;
+	const style = {
 		top: `${minutesToPx(seg.startMin)}px`,
 		height: `${minutesToPx(durationMin)}px`,
-		left: `calc(${(seg.lane / seg.laneCount) * 100}% + ${(seg.stackedIndex > 0 ? seg.stackedIndex * 3 : 0) + 1}px)`,
-		width: `calc(${100 / seg.laneCount}% - 2px)`,
-		zIndex: seg.lane + (seg.stackedIndex > 0 ? 4 : 1),
-	};
+		left: `calc(${(seg.lane / seg.laneCount) * 100}% + ${stackShift + 1}px)`,
+		width: `calc(${100 / seg.laneCount}% - ${stackShift + 2}px)`,
+		'--gc-block-z': seg.lane + (seg.stackedIndex > 0 ? 4 : 1),
+	} as CSSProperties;
 	return (
 		<div
 			className={cls}
@@ -558,6 +746,7 @@ const CanvasTimeBlock = memo(function CanvasTimeBlock({
 			}}
 			onDragEnd={() => {
 				clearBlockDragMeta();
+				onDragFinish();
 				feedback.reset();
 			}}
 		>

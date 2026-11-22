@@ -89,6 +89,12 @@ export interface IDataSource {
 	 * 销毁数据源，释放资源
 	 */
 	destroy(): void;
+
+	/**
+	 * 立即刷新指定文件的缓存（可选实现，写回后跳过防抖）
+	 * @param filePath - 文件路径
+	 */
+	refreshFile?(filePath: string): Promise<void>;
 }
 
 /**

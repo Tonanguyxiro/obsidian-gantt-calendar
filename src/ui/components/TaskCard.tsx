@@ -1,15 +1,16 @@
 import { memo, useEffect, useMemo, useRef, type CSSProperties, type JSX } from 'react';
 import type { GCTask } from '../../types';
 import type { TaskCardConfig } from '../../components/TaskCard/TaskCardConfig';
-import { TaskCardClasses, TimeBadgeClasses } from '../../utils/bem';
+import { TaskCardClasses, TimeBadgeClasses, PriorityClasses, StatusChipClasses } from '../../utils/bem';
 import { isVirtualTask, getVirtualMetadata } from '../../tasks/virtualTaskGenerator';
 import { getStatusColor, DEFAULT_TASK_STATUSES, getCurrentThemeMode } from '../../tasks/taskStatus';
 import { formatDate } from '../../dateUtils/dateUtilsIndex';
 import { toISOStringLocal } from '../../dateUtils/timezone';
 import { usePlugin, useApp } from '../pluginContext';
-import { globalFilterPrefix } from '../../utils/linkText';
+import { globalFilterPrefix, taskDisplayText } from '../../utils/linkText';
 import { DescriptionWithLinks } from './DescriptionWithLinks';
 import { TagPillSpan } from './TagPillSpan';
+import { Icon } from './Icon';
 import { ContextMenuTrigger, type ContextMenuSection } from './ContextMenu';
 import { useTaskTooltip } from './TooltipProvider';
 import { useDragSource } from '../utils/useDragAndDrop';
@@ -26,13 +27,12 @@ import { restoreTask } from '../../contextMenu/commands/restoreTask';
 import { deleteTask } from '../../contextMenu/commands/deleteTask';
 import { setTaskStatus } from '../../contextMenu/commands/setTaskStatus';
 import { getConfiguredStatuses, getPickerStatuses, isMenuStatus } from '../../tasks/statusTransition';
-import { StatusChipClasses } from '../../utils/bem';
 import { dragTaskId } from '../utils/taskId';
 import { setTaskPriority } from '../../contextMenu/commands/setPriority';
+import { PRIORITY_ORDER, getPriorityMeta } from '../../utils/priorityIcons';
 import { i18n } from '../../i18n/i18n';
 import { Logger } from '../../utils/logger';
 import { unwrapTask } from '../../tasks/scheduledFallback';
-import { taskDisplayText } from '../../utils/linkText';
 
 /** 单击延迟判定窗口：双击有动作时，单击需等待确认不是双击的前半段 */
 const DOUBLE_CLICK_WINDOW_MS = 250;
@@ -48,22 +48,6 @@ export interface ReactTaskCardProps {
 	/** 时间块时段文字（如 "07:00 – 09:15"），渲染在标题之后，由时间线 CSS 决定显隐 */
 	timeLabel?: string;
 }
-
-const PRIORITY_ICONS: Record<string, string> = {
-	highest: '🔺',
-	high: '⏫',
-	medium: '🔼',
-	low: '🔽',
-	lowest: '⏬',
-};
-
-const PRIORITY_CLASSES: Record<string, string> = {
-	highest: 'priority-highest',
-	high: 'priority-high',
-	medium: 'priority-medium',
-	low: 'priority-low',
-	lowest: 'priority-lowest',
-};
 
 function formatDateForDisplay(date: Date, precision?: 'day' | 'time'): string {
 	if (precision === 'time') {
@@ -144,14 +128,11 @@ export const TaskCard = memo(function TaskCard({ task, config, targetDate, onCli
 		const isCancelled = task.cancelled === true;
 		const currentStatusKey = task.status ?? (task.completed ? 'done' : 'todo');
 
-		const priorities: Array<{ value: 'highest' | 'high' | 'medium' | 'low' | 'lowest' | 'normal'; label: string; icon: string }> = [
-			{ value: 'highest', label: i18n.t('common.priority.highest'), icon: '🔺' },
-			{ value: 'high', label: i18n.t('common.priority.high'), icon: '⏫' },
-			{ value: 'medium', label: i18n.t('common.priority.medium'), icon: '🔼' },
-			{ value: 'normal', label: i18n.t('common.priority.normal'), icon: '◽' },
-			{ value: 'low', label: i18n.t('common.priority.low'), icon: '🔽' },
-			{ value: 'lowest', label: i18n.t('common.priority.lowest'), icon: '⏬' },
-		];
+		const priorities = PRIORITY_ORDER.map((value) => ({
+			value,
+			label: i18n.t(`common.priority.${value}`),
+			icon: getPriorityMeta(value).icon,
+		}));
 		const postponeOptions = [
 			{ days: 1, label: i18n.t('contextMenu.postpone.days1') },
 			{ days: 3, label: i18n.t('contextMenu.postpone.days3') },
@@ -197,7 +178,8 @@ export const TaskCard = memo(function TaskCard({ task, config, targetDate, onCli
 			{
 				items: priorities.map((p) => ({
 					key: `priority-${p.value}`,
-					title: `${p.icon} ${p.label}`,
+					title: p.label,
+					icon: p.icon,
 					onClick: () => {
 						void setTaskPriority(app, task, p.value, enabledFormats, refresh);
 					},
@@ -419,11 +401,19 @@ export const TaskCard = memo(function TaskCard({ task, config, targetDate, onCli
 		</div>
 	) : null;
 
-	const priority = config.showPriority && task.priority && PRIORITY_ICONS[task.priority] ? (
+	const priorityMeta = config.showPriority && task.priority ? getPriorityMeta(task.priority) : null;
+	const priorityBadgeClass = priorityMeta && priorityMeta.level !== 'normal'
+		? PriorityClasses[priorityMeta.level]
+		: undefined;
+	const priority = priorityMeta && priorityMeta.level !== 'normal' ? (
 		<div className={TaskCardClasses.elements.priority}>
-			<span className={`${TaskCardClasses.elements.priorityBadge} ${PRIORITY_CLASSES[task.priority]}`}>
-				{PRIORITY_ICONS[task.priority]}
-			</span>
+			<Icon
+				icon={priorityMeta.icon}
+				className={`${TaskCardClasses.elements.priorityBadge}${priorityBadgeClass ? ` ${priorityBadgeClass}` : ''}`}
+				style={{ color: priorityMeta.colorVar }}
+				aria-label={i18n.t(`common.priority.${priorityMeta.level}`)}
+				title={i18n.t(`common.priority.${priorityMeta.level}`)}
+			/>
 		</div>
 	) : null;
 

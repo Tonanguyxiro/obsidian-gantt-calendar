@@ -16,7 +16,10 @@ export function getFirstDayOfMonth(year: number, month: number): number {
  * Format date to string
  * 占位符: yyyy(年) MM(月) dd(日) ddd(星期缩写) HH(24小时) mm(分钟)
  */
-export function formatDate(date: Date, format: string = 'yyyy-MM-dd'): string {
+export function formatDate(date: Date | null | undefined, format: string = 'yyyy-MM-dd'): string {
+	if (!date || typeof date.getFullYear !== 'function' || Number.isNaN(date.getTime())) {
+		return '';
+	}
 	const year = date.getFullYear();
 	const month = String(date.getMonth() + 1).padStart(2, '0');
 	const day = String(date.getDate()).padStart(2, '0');

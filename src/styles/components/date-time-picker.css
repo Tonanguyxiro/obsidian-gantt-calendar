@@ -106,7 +106,7 @@
 	border: 1px solid var(--background-modifier-border);
 	border-radius: var(--gc-radius-md, 10px);
 	background: var(--background-primary);
-	box-shadow: var(--gc-elev-3, 0 4px 16px rgba(0, 0, 0, 0.12));
+	box-shadow: var(--gc-elev-3);
 }
 
 .gc-date-time-picker .gc-date-time-picker__body {
@@ -132,7 +132,7 @@
 .gc-date-time-picker .gc-date-time-picker__month-label {
 	flex: 1;
 	text-align: center;
-	font-size: 13px;
+	font-size: var(--gc-font-sm);
 	font-weight: 600;
 	color: var(--text-normal);
 	background: transparent;
@@ -176,7 +176,7 @@
 	align-items: center;
 	justify-content: center;
 	height: 22px;
-	font-size: 10px;
+	font-size: var(--gc-font-2xs);
 	font-weight: 600;
 	color: var(--text-faint);
 	background: transparent;
@@ -194,7 +194,7 @@
 	background: transparent;
 	box-shadow: none;
 	color: var(--text-normal);
-	font-size: 12px;
+	font-size: var(--gc-font-xs);
 	font-variant-numeric: tabular-nums;
 	cursor: pointer;
 }
@@ -208,7 +208,7 @@
 }
 
 .gc-date-time-picker .gc-date-time-picker__day-cell--today {
-	color: var(--gc-color-red, var(--color-red, #ef4444));
+	color: var(--gc-color-red);
 	font-weight: 600;
 }
 
@@ -256,7 +256,7 @@
 	background: transparent;
 	box-shadow: none;
 	color: var(--text-normal);
-	font-size: 12px;
+	font-size: var(--gc-font-xs);
 	font-variant-numeric: tabular-nums;
 	text-align: center;
 	cursor: pointer;
@@ -289,7 +289,7 @@
 	background: transparent;
 	box-shadow: none;
 	color: var(--interactive-accent);
-	font-size: 12px;
+	font-size: var(--gc-font-xs);
 	cursor: pointer;
 }
 
@@ -304,7 +304,7 @@
 	background: var(--interactive-accent);
 	box-shadow: none;
 	color: var(--text-on-accent);
-	font-size: 12px;
+	font-size: var(--gc-font-xs);
 	cursor: pointer;
 }
 
@@ -325,8 +325,8 @@
 }
 
 /* 移动端原生 datetime-local 输入（DateTimePicker USE_NATIVE_PICKER 分支）：
-   16px 字号规避 iOS WebView 聚焦自动放大；加高触控目标 */
+   16px 字号下限规避 iOS WebView 聚焦自动放大；加高触控目标 */
 .gc-date-time-picker .gc-date-time-picker__input--native {
-	font-size: 16px;
+	font-size: max(16px, var(--gc-font-lg));
 	min-height: 32px;
 }

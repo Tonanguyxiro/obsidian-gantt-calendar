@@ -1045,7 +1045,8 @@
         "removeTag": "移除标签",
         "noMatches": "没有匹配的标签",
         "pressEnterToCreate": "按回车创建 #{{tag}}",
-        "impliedBy": "已由选中的子标签包含——点击浏览其子标签"
+        "impliedBy": "已由选中的子标签包含——点击浏览其子标签",
+        "suggestHint": "↑↓ 选择 · Tab / 点击补全并继续输入 · Enter 确认"
       },
       "createIn": "创建位置",
       "createInDaily": "Daily Note（{{name}}）",
@@ -1748,5 +1749,23 @@
   "taskWarnings": {
     "mixedFormat": "混用任务格式，请修改",
     "unscheduled": "未规划任务时间，请设置"
+  },
+  "emptyGuide": {
+    "title": "欢迎使用甘特日历",
+    "description": "当前库中还没有匹配的任务。您可以在任意 Markdown 笔记中使用 Tasks 或 Dataview 语法添加任务，或点击下方按钮直接创建。",
+    "filterLabel": "当前全局筛选：",
+    "noFilterHint": "将索引所有 Markdown 复选框任务（- [ ]）",
+    "examplesTitle": "任务语法示例",
+    "copy": "复制",
+    "copied": "已复制",
+    "createTaskCta": "创建第一个任务",
+    "examples": {
+      "rangeLabel": "Tasks · 起止区间与优先级",
+      "rangeText": "规划项目冲刺",
+      "slotLabel": "Tasks · 当日时段（Day Planner）",
+      "slotText": "深度工作时段",
+      "dataviewLabel": "Dataview · 行内字段",
+      "dataviewText": "检查发布清单"
+    }
   }
 }

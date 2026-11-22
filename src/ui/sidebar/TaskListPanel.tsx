@@ -1,7 +1,10 @@
-import { useEffect, useMemo, useState, type JSX } from 'react';
+import { useCallback, useEffect, useMemo, useState, type JSX } from 'react';
+import { Virtuoso } from 'react-virtuoso';
 import type { GCTask, StatusFilterState } from '../../types';
 import { DEFAULT_STATUS_FILTER_STATE } from '../../types';
+import { DEFAULT_SETTINGS } from '../../settings/constants';
 import { SidebarClasses } from '../../utils/bem';
+import { PRIORITY_ORDER, getPriorityMeta } from '../../utils/priorityIcons';
 import { buildSidebarConfig } from '../../components/TaskCard';
 import { sortTasks } from '../../tasks/taskSorter';
 import { DEFAULT_TASK_STATUSES } from '../../tasks/taskStatus';
@@ -10,9 +13,10 @@ import { isThisWeek } from '../../dateUtils/week';
 import { isThisMonth } from '../../dateUtils/dateCompare';
 import { i18n } from '../../i18n/i18n';
 import { TagTreeFilter } from '../components/TagTreeFilter';
-import { usePlugin } from '../pluginContext';
 import { useCalendarStore } from '../store/calendarStore';
+import { taskKey } from '../utils/taskKey';
 import { TaskCard } from '../components/TaskCard';
+import { EmptyVaultGuide } from '../components/EmptyVaultGuide';
 import { DropdownMenu, type DropdownMenuSection } from '../components/DropdownMenu';
 import { Icon } from '../components/Icon';
 
@@ -22,15 +26,14 @@ type SortField = 'priority' | 'dueDate' | 'startDate';
 type SortOrder = 'asc' | 'desc';
 
 // 文案在模块加载时求值会固化（i18n 尚未初始化或语言已切换）——改为调用时求值
-function getPriorities(): Array<{ key: PriorityFilter; label: string }> {
+function getPriorities(): Array<{ key: PriorityFilter; label: string; icon?: string }> {
 	return [
-	{ key: 'all', label: i18n.t('sidebar.taskList.priority.all') },
-	{ key: 'highest', label: i18n.t('sidebar.taskList.priority.highest') },
-	{ key: 'high', label: i18n.t('sidebar.taskList.priority.high') },
-	{ key: 'medium', label: i18n.t('sidebar.taskList.priority.medium') },
-	{ key: 'normal', label: i18n.t('sidebar.taskList.priority.normal') },
-	{ key: 'low', label: i18n.t('sidebar.taskList.priority.low') },
-	{ key: 'lowest', label: i18n.t('sidebar.taskList.priority.lowest') },
+		{ key: 'all', label: i18n.t('sidebar.taskList.priority.all') },
+		...PRIORITY_ORDER.map((level) => ({
+			key: level,
+			label: i18n.t(`sidebar.taskList.priority.${level}`),
+			icon: getPriorityMeta(level).icon,
+		})),
 	];
 }
 
@@ -125,8 +128,17 @@ function filterTasks(
  * 搜索、状态/优先级/标签/日期筛选、排序，复用 React TaskCard
  */
 export function TaskListPanel(): JSX.Element {
-	const plugin = usePlugin();
 	const tasks = useCalendarStore((s) => s.tasks);
+	const isEmptyVault = useCalendarStore((s) => s.tasksReady && s.tasks.length === 0);
+	const refreshTasks = useCalendarStore((s) => s.refreshTasks);
+	const handleCardRefresh = useCallback(() => refreshTasks(), [refreshTasks]);
+	const sidebarShowCheckbox = useCalendarStore((s) => s.settings.sidebarShowCheckbox);
+	const sidebarShowTags = useCalendarStore((s) => s.settings.sidebarShowTags);
+	const sidebarShowPriority = useCalendarStore((s) => s.settings.sidebarShowPriority);
+	const sidebarShowFileLocation = useCalendarStore((s) => s.settings.sidebarShowFileLocation);
+	const sidebarShowTicktick = useCalendarStore((s) => s.settings.sidebarShowTicktick);
+	const sidebarShowDueDate = useCalendarStore((s) => s.settings.sidebarShowDueDate);
+	const language = useCalendarStore((s) => s.settings.language);
 
 	const [searchQuery, setSearchQuery] = useState('');
 	const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -176,7 +188,25 @@ export function TaskListPanel(): JSX.Element {
 		return sortTasks(result, { field, order: sortOrder });
 	}, [tasks, statusFilter, priorityFilter, selectedTags, tagOperator, dateFilter, debouncedQuery, sortBy, sortOrder]);
 
-	const config = useMemo(() => buildSidebarConfig(plugin.settings), [plugin.settings]);
+	const config = useMemo(
+		() => buildSidebarConfig({
+			...DEFAULT_SETTINGS,
+			sidebarShowCheckbox,
+			sidebarShowTags,
+			sidebarShowPriority,
+			sidebarShowFileLocation,
+			sidebarShowTicktick,
+			sidebarShowDueDate,
+		}),
+		[
+			sidebarShowCheckbox,
+			sidebarShowTags,
+			sidebarShowPriority,
+			sidebarShowFileLocation,
+			sidebarShowTicktick,
+			sidebarShowDueDate,
+		],
+	);
 
 	const hasStatusFilter = statusFilter.selectedStatuses.length > 0;
 	const hasTagFilter = selectedTags.length > 0;
@@ -201,46 +231,55 @@ export function TaskListPanel(): JSX.Element {
 	}], [statusFilter.selectedStatuses]);
 
 	// 优先级筛选菜单
-	const prioritySections: DropdownMenuSection[] = useMemo(() => [{
-		items: getPriorities().map((p) => ({
-			key: `priority-${p.key}`,
-			title: p.label,
-			icon: p.key === 'all' ? undefined : 'flame',
-			checked: priorityFilter === p.key,
-			onClick: () => setPriorityFilter(p.key),
-		})),
-	}], [priorityFilter]);
+	const prioritySections: DropdownMenuSection[] = useMemo(() => {
+		void language;
+		return [{
+			items: getPriorities().map((p) => ({
+				key: `priority-${p.key}`,
+				title: p.label,
+				icon: p.icon,
+				checked: priorityFilter === p.key,
+				onClick: () => setPriorityFilter(p.key),
+			})),
+		}];
+	}, [priorityFilter, language]);
 
 	// 排序菜单（点击同项切换升降序）
-	const sortSections: DropdownMenuSection[] = useMemo(() => [{
-		items: getSortOptions().map((opt) => ({
-			key: `sort-${opt.key}`,
-			title: opt.label,
-			icon: sortBy === opt.key
-				? (sortOrder === 'asc' ? 'arrow-up' : 'arrow-down')
-				: 'arrow-up-down',
-			checked: sortBy === opt.key,
-			onClick: () => {
-				if (sortBy === opt.key) {
-					setSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'));
-				} else {
-					setSortBy(opt.key);
-					setSortOrder('asc');
-				}
-			},
-		})),
-	}], [sortBy, sortOrder]);
+	const sortSections: DropdownMenuSection[] = useMemo(() => {
+		void language;
+		return [{
+			items: getSortOptions().map((opt) => ({
+				key: `sort-${opt.key}`,
+				title: opt.label,
+				icon: sortBy === opt.key
+					? (sortOrder === 'asc' ? 'arrow-up' : 'arrow-down')
+					: 'arrow-up-down',
+				checked: sortBy === opt.key,
+				onClick: () => {
+					if (sortBy === opt.key) {
+						setSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'));
+					} else {
+						setSortBy(opt.key);
+						setSortOrder('asc');
+					}
+				},
+			})),
+		}];
+	}, [sortBy, sortOrder, language]);
 
 	// 日期筛选菜单
-	const dateSections: DropdownMenuSection[] = useMemo(() => [{
-		items: getDateOptions().map((opt) => ({
-			key: `date-${opt.key}`,
-			title: opt.label,
-			icon: opt.icon,
-			checked: dateFilter === opt.key,
-			onClick: () => setDateFilter(opt.key),
-		})),
-	}], [dateFilter]);
+	const dateSections: DropdownMenuSection[] = useMemo(() => {
+		void language;
+		return [{
+			items: getDateOptions().map((opt) => ({
+				key: `date-${opt.key}`,
+				title: opt.label,
+				icon: opt.icon,
+				checked: dateFilter === opt.key,
+				onClick: () => setDateFilter(opt.key),
+			})),
+		}];
+	}, [dateFilter, language]);
 
 	// 标签筛选菜单内容（共享 TagTreeFilter 组件）
 
@@ -337,18 +376,28 @@ export function TaskListPanel(): JSX.Element {
 
 			<div className={SidebarClasses.elements.panelBody}>
 				<div className={SidebarClasses.elements.taskList}>
-					{sortedTasks.length === 0 ? (
+					{isEmptyVault ? (
+						<EmptyVaultGuide compact />
+					) : sortedTasks.length === 0 ? (
 						<div className={SidebarClasses.elements.emptyState}>
 							{debouncedQuery ? i18n.t('sidebar.taskList.noMatchingTasks') : i18n.t('sidebar.taskList.noTasks')}
 						</div>
 					) : (
-						sortedTasks.map((task) => (
-							<TaskCard
-								key={`${task.filePath}:${task.lineNumber}`}
-								task={task}
-								config={config}
-							/>
-						))
+						<Virtuoso
+							style={{ height: '100%' }}
+							data={sortedTasks}
+							initialItemCount={Math.min(sortedTasks.length, 20)}
+							computeItemKey={(_index, task) => taskKey(task)}
+							itemContent={(_index, task) => (
+								<div className={SidebarClasses.elements.taskRow}>
+									<TaskCard
+										task={task}
+										config={config}
+										onRefresh={handleCardRefresh}
+									/>
+								</div>
+							)}
+						/>
 					)}
 				</div>
 			</div>

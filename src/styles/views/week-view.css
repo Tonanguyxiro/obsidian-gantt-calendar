@@ -3,6 +3,23 @@
     任务悬浮卡片已迁至 components/tooltip.css；
     平铺列 tasks-column 已随双模式移除，剩余时间线样式在下方） */
 
+/* ==================== Week View Full-Fill ==================== */
+.gc-view.gc-view--week {
+	width: 100%;
+	height: 100%;
+	flex: 1 1 auto;
+	min-height: 0;
+	min-width: 0;
+}
+
+.gc-week-view__grid {
+	width: 100%;
+	height: 100%;
+	flex: 1 1 auto;
+	min-height: 0;
+	min-width: 0;
+}
+
 .gc-week-view__header-cell {
 	padding: 12px 8px;
 	text-align: center;
@@ -13,6 +30,7 @@
 	align-items: center;
 	justify-content: space-between;
 	gap: 6px;
+	min-width: 0;
 	background-color: var(--background-primary);
 	position: sticky;
 	top: 0;
@@ -25,7 +43,7 @@
 
 .gc-week-view__day-name {
 	flex: 1;
-	font-size: 16px;
+	font-size: var(--gc-font-lg);
 	font-weight: 500;
 	color: var(--text-normal);
 	text-align: left;
@@ -33,7 +51,7 @@
 
 .gc-week-view__day-number {
 	flex: 1;
-	font-size: 16px;
+	font-size: var(--gc-font-lg);
 	font-weight: 500;
 	color: var(--text-normal);
 	text-align: center;
@@ -42,7 +60,7 @@
 .gc-week-view__lunar-text {
 	flex: 1;
 	min-width: 0;
-	font-size: 16px;
+	font-size: var(--gc-font-lg);
 	font-weight: 500;
 	color: var(--text-normal);
 	text-align: right;
@@ -56,13 +74,16 @@
 /* 1 小时高度由 --gc-tl-hour-h 驱动（组件内联注入，单一来源 HOUR_PX） */
 .gc-week-view__tasks-grid {
 	display: grid;
-	grid-template-columns: 48px repeat(7, 1fr);
+	grid-template-columns: 48px repeat(7, minmax(0, 1fr));
 	grid-template-rows: 52px auto auto;
 	align-content: start;
 	overflow-y: auto;
 	overflow-x: hidden;
+	width: 100%;
+	height: 100%;
 	flex: 1 1 auto;
 	min-height: 0;
+	min-width: 0;
 	position: relative;
 }
 
@@ -100,7 +121,7 @@
 	padding: 2px 6px 0 0;
 	text-align: right;
 	box-sizing: border-box;
-	font-size: 11px;
+	font-size: var(--gc-font-xxs);
 	color: var(--text-muted);
 	font-variant-numeric: tabular-nums;
 }
@@ -111,11 +132,15 @@
 	align-items: center;
 	justify-content: flex-end;
 	padding: 4px 6px 0 0;
-	font-size: 11px;
+	font-size: var(--gc-font-xxs);
 	color: var(--text-muted);
 	border-right: 1px solid var(--background-modifier-border);
 	border-bottom: 1px solid var(--background-modifier-border);
 	background-color: var(--background-primary-alt);
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 /* 全天行（第 2-8 列第 2 行）：背景日格 + 绝对定位横跨条 */
@@ -149,10 +174,26 @@
 	height: var(--gc-tl-card-h);
 	z-index: 1;
 	min-width: 0;
+	container: gc-week-allday / inline-size;
 }
 
 .gc-week-view__allday-bar .gc-task-card--timeline {
 	height: 100%;
+}
+
+@container gc-week-allday (max-width: 160px) {
+	.gc-week-view__allday-bar .gc-task-card.gc-task-card--timeline {
+		padding-inline: 3px;
+		gap: 2px;
+	}
+
+	.gc-week-view__allday-bar .gc-task-card__text {
+		margin-inline: 0;
+	}
+
+	.gc-week-view__allday-bar .gc-task-card__tags {
+		max-width: 25%;
+	}
 }
 
 /* 长区间任务（≥24h）的起止时刻标注，如 "22:00 → 03:00" */
@@ -161,7 +202,7 @@
 	top: 2px;
 	right: 4px;
 	z-index: 2;
-	font-size: 10px;
+	font-size: var(--gc-font-2xs);
 	line-height: 1.3;
 	padding: 0 3px;
 	border-radius: 3px;
@@ -173,7 +214,7 @@
 }
 
 .gc-week-view__allday-bar--stacked {
-	box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+	box-shadow: var(--gc-elev-2);
 }
 
 /* 延续指示箭头（跨日/跨周延续的横跨条） */
@@ -182,7 +223,7 @@
 	position: absolute;
 	top: 50%;
 	transform: translateY(-50%);
-	font-size: 10px;
+	font-size: var(--gc-font-2xs);
 	line-height: 1;
 	color: var(--text-muted);
 	background-color: var(--background-primary);
@@ -204,6 +245,8 @@
 /* 日列（连续画布）：整点实线 + 半点浅线网格，块按分钟绝对定位 */
 .gc-week-view__day-col {
 	position: relative;
+	min-width: 0;
+	isolation: isolate;
 	border-right: 1px solid var(--background-modifier-border);
 	background-image:
 		repeating-linear-gradient(
@@ -236,12 +279,68 @@
 	border-radius: 6px;
 	overflow: hidden;
 	min-width: 0;
+	z-index: var(--gc-block-z, 1);
+	container: gc-block gc-time-block / size;
+}
+
+.gc-week-view__time-block:hover,
+.gc-week-view__time-block:focus-within {
+	z-index: 20;
+	box-shadow: var(--gc-elev-3);
+	outline: 1px solid color-mix(in srgb, var(--interactive-accent) 45%, transparent);
+	outline-offset: -1px;
 }
 
 /* 块内卡片高度由块容器按时长撑开（timeline 变体默认固定 24px，此处覆盖） */
 .gc-week-view__time-block .gc-task-card--timeline {
-	height: 100%;
-	min-height: var(--gc-tl-card-h);
+	height: calc(100% - 1px);
+	min-height: 0;
+}
+
+/* 窄列自适应（分屏或重叠并排 lane ≤ 110px / ≤ 68px）：按容器高限制行数，防末行纵切 */
+@container gc-block (max-width: 110px) {
+	.gc-week-view__time-block .gc-task-card--timeline {
+		padding: 2px 2px 2px 3px;
+		gap: 2px;
+		row-gap: 1px;
+		column-gap: 2px;
+	}
+	.gc-week-view__time-block .gc-task-card--timeline :is(.gc-task-card__tags, .gc-task-card__metadata, .gc-task-card__ticktick, .gc-task-card__file) {
+		display: none;
+	}
+	.gc-week-view__time-block .gc-week-view__time-block-time {
+		display: none;
+	}
+	.gc-week-view__time-block .gc-task-card--timeline .gc-task-card__text {
+		display: -webkit-box;
+		-webkit-box-orient: vertical;
+		-webkit-line-clamp: var(--gc-narrow-lines, 2);
+		overflow: hidden;
+		white-space: normal;
+		word-break: break-word;
+		overflow-wrap: anywhere;
+		text-overflow: ellipsis;
+		line-height: 1.2;
+		min-width: 0;
+		width: 100%;
+	}
+}
+
+@container gc-block (max-width: 68px) {
+	.gc-week-view__time-block .gc-task-card--timeline {
+		padding: 1px 2px 1px 3px;
+		gap: 1px;
+	}
+	.gc-week-view__time-block .gc-task-card--timeline :is(.gc-task-card__checkbox, .gc-task-card__priority, .gc-task-card__priority-badge, .gc-task-card__repeat-indicator, .gc-task-card__times, .gc-task-card__block-time),
+	.gc-week-view__time-block .gc-week-view__time-block-time {
+		display: none;
+	}
+	.gc-week-view__time-block .gc-task-card--timeline .gc-task-card__text {
+		font-size: var(--gc-font-xxs);
+		line-height: 1.15;
+		min-width: 0;
+		width: 100%;
+	}
 }
 
 /* 延续分段：平角 + 箭头指示（延续自前一日/次日） */
@@ -260,7 +359,7 @@
 	position: absolute;
 	left: 50%;
 	transform: translateX(-50%);
-	font-size: 9px;
+	font-size: var(--gc-font-2xs);
 	line-height: 1;
 	color: var(--text-muted);
 	z-index: 2;
@@ -279,7 +378,7 @@
 
 /* 超出 lane 上限的叠加块：加阴影区分 */
 .gc-week-view__time-block--stacked {
-	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+	box-shadow: var(--gc-elev-2);
 }
 
 /* 块右上角时刻标签 */
@@ -288,9 +387,9 @@
 	top: 1px;
 	right: 3px;
 	z-index: 2;
-	/* 固定 10px：ICS 事件卡 padding-top:14px 按「标签 13px 盒高」让位，
+	/* 上限 10px（--gc-font-2xs = clamp(9px, 0.625rem, 10px)）：ICS 事件卡按「标签 13px 盒高」让位，
 	   放大字号会撑高标签盒并与 ICS 标题相交（真机 check-timeblock-overlap 已复现） */
-	font-size: 10px;
+	font-size: var(--gc-font-2xs);
 	line-height: 1.3;
 	padding: 0 2px;
 	border-radius: 3px;
@@ -366,7 +465,7 @@
 	position: absolute;
 	top: 2px;
 	left: 3px;
-	font-size: 10px;
+	font-size: var(--gc-font-2xs);
 	line-height: 1.3;
 	padding: 0 3px;
 	border-radius: 3px;
@@ -436,10 +535,10 @@
 	border: 1px solid var(--background-modifier-border);
 	border-radius: var(--gc-radius-xs, 4px);
 	padding: 2px 6px;
-	font-size: 11px;
+	font-size: var(--gc-font-xxs);
 	color: var(--text-normal);
 	font-variant-numeric: tabular-nums;
-	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+	box-shadow: var(--gc-elev-3);
 	white-space: nowrap;
 }
 
@@ -490,7 +589,7 @@
 	display: flex;
 	align-items: center;
 	padding: 0 8px;
-	font-size: 11px;
+	font-size: var(--gc-font-xxs);
 	color: var(--text-muted);
 	background-color: var(--background-primary-alt);
 	border: 1px dashed var(--background-modifier-border);
@@ -503,4 +602,36 @@
 .gc-week-view__allday-more:hover {
 	background-color: var(--background-modifier-hover);
 	color: var(--text-normal);
+}
+
+/* 窄分屏表头（如 368px 宽）：隐藏农历并纵排星期与日号，避免列头溢出 */
+@container gc-app (max-width: 760px) {
+	.gc-week-view__header-cell {
+		padding: 6px 4px;
+		gap: 2px;
+	}
+	.gc-week-view__lunar-text {
+		display: none;
+	}
+}
+
+@container gc-app (max-width: 480px) {
+	.gc-week-view__header-cell {
+		padding: 4px 2px;
+		flex-direction: column;
+		justify-content: center;
+		gap: 1px;
+	}
+	.gc-week-view__day-name,
+	.gc-week-view__day-number {
+		flex: 0 0 auto;
+		font-size: var(--gc-font-xs);
+		line-height: 1.15;
+		text-align: center;
+	}
+	.gc-week-view__header-cell--today .gc-week-view__day-number {
+		min-width: 22px;
+		height: 22px;
+		padding: 0 4px;
+	}
 }

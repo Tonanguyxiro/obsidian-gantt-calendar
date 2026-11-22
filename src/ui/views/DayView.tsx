@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import { Notice } from 'obsidian';
 import type { Component } from 'obsidian';
-import type { GCTask } from '../../types';
 import type { DailyNoteIndex } from '../../utils/dailyNoteSettingsBridge';
 import { DayViewClasses, EmbeddedEditorClasses, withModifiers } from '../../utils/bem';
 import { DayViewConfig } from '../../components/TaskCard';
 import { usePlugin, useApp } from '../pluginContext';
 import { useCalendarStore, selectViewFilter } from '../store/calendarStore';
-import { isPhoneNow, useElementNarrow, useIsNarrow } from '../utils/platform';
+import { isPhoneNow, useElementNarrow, useElementWidth, useIsNarrow } from '../utils/platform';
 import { applyStatusFilter, applyTagFilter, applySort } from '../utils/taskFilters';
 import { CalendarItemCard, FileTaskLayerProvider } from '../components/FileTaskCard';
 import { useFileTaskLayer } from '../utils/useFileTaskLayer';
@@ -20,7 +19,7 @@ import { updateTaskProperties } from '../../tasks/taskUpdater';
 import { sortTasks } from '../../tasks/taskSorter';
 import { generateVirtualInstances } from '../../tasks/virtualTaskGenerator';
 import { EmbeddedNoteEditor } from '../../views/EmbeddedNoteEditor';
-import { buildDayTimelineModel, getTaskInterval, isOnTimeAxis } from './week/timelineModel';
+import { buildDayTimelineModel, computeMaxLanesForWidth, getTaskInterval, isOnTimeAxis } from './week/timelineModel';
 import { DayTimelineCanvas } from './week/DayTimelineCanvas';
 import { i18n } from '../../i18n/i18n';
 import { Logger } from '../../utils/logger';
@@ -28,6 +27,8 @@ import { RegularExpressions } from '../../utils/RegularExpressions';
 import type { DateFieldType } from '../../settings/types';
 import { useViewTasks } from '../utils/useViewTasks';
 import { findTaskById } from '../utils/taskId';
+
+const EMPTY_FORMATS: string[] = [];
 
 /** dataTransfer.taskId（filePath:lineNumber）→ 任务查找 */
 /**
@@ -44,33 +45,54 @@ export function DayView(): JSX.Element {
 	// 稳定回调：TaskCard 已 memo，内联箭头函数会使 memo 失效
 	const handleCardRefresh = useCallback(() => refreshTasks(), [refreshTasks]);
 
-	const enableDailyNote = plugin.settings.enableDailyNote !== false;
+	const enableDailyNote = useCalendarStore((s) => s.settings.enableDailyNote) !== false;
+	const dayViewLayout = useCalendarStore((s) => s.settings.dayViewLayout) || 'horizontal';
+	const dateField = useCalendarStore((s) => s.settings.dateFilterField) || 'dueDate';
+	const startField = useCalendarStore((s) => s.settings.ganttStartField) || 'startDate';
+	const endField = useCalendarStore((s) => s.settings.ganttEndField) || 'dueDate';
+	const dayViewShowCheckbox = useCalendarStore((s) => s.settings.dayViewShowCheckbox) ?? true;
+	const dayViewShowTags = useCalendarStore((s) => s.settings.dayViewShowTags) ?? true;
+	const dayViewShowPriority = useCalendarStore((s) => s.settings.dayViewShowPriority) ?? true;
+	const dayViewShowTicktick = useCalendarStore((s) => s.settings.dayViewShowTicktick) ?? true;
+	const recurringLimit = useCalendarStore((s) => s.settings.recurringTaskDisplayLimit) ?? 5;
+	const enabledFormats = useCalendarStore((s) => s.settings.enabledTaskFormats) || EMPTY_FORMATS;
+	const dailyNoteSource = useCalendarStore((s) => s.settings.dailyNoteSource);
+	const dailyNotePath = useCalendarStore((s) => s.settings.dailyNotePath);
+	const dailyNoteNameFormat = useCalendarStore((s) => s.settings.dailyNoteNameFormat);
+	const dailyNoteTemplatePath = useCalendarStore((s) => s.settings.dailyNoteTemplatePath);
+
 	// 手机端与桌面窄窗口都强制上下分屏：这是空间适配，左右分屏在两侧各 ~160px 时不可用
 	const viewRef = useRef<HTMLDivElement>(null);
+	const tasksSectionRef = useRef<HTMLDivElement | null>(null);
+	const notesSectionRef = useRef<HTMLDivElement | null>(null);
 	const isPaneNarrow = useElementNarrow(viewRef, 520);
 	const isNarrow = useIsNarrow() || isPaneNarrow;
-	const layout = isPhoneNow() || isNarrow ? 'vertical' : (plugin.settings.dayViewLayout || 'horizontal');
-	const dateField = plugin.settings.dateFilterField || 'dueDate';
-	const startField = plugin.settings.ganttStartField || 'startDate';
-	const endField = plugin.settings.ganttEndField || 'dueDate';
-	const tasks = useViewTasks(startField, endField, dateField, true);
-
-	const timelineConfig = useMemo(() => ({
-		...DayViewConfig,
-		enableDrag: true,
-		enableTooltip: true,
-		showCheckbox: plugin.settings.dayViewShowCheckbox ?? true,
-		showTags: plugin.settings.dayViewShowTags ?? true,
-		showPriority: plugin.settings.dayViewShowPriority ?? true,
-		showTicktick: plugin.settings.dayViewShowTicktick ?? true,
-		variant: 'timeline' as const,
-	}), [plugin.settings]);
+	const layout = isPhoneNow() || isNarrow ? 'vertical' : dayViewLayout;
+	const containerWidth = useElementWidth(enableDailyNote ? tasksSectionRef : viewRef);
+	const maxLane = useMemo(
+		() => computeMaxLanesForWidth(containerWidth > 48 ? containerWidth - 48 : 0),
+		[containerWidth],
+	);
 
 	const normalized = useMemo(() => {
 		const d = new Date(currentDate);
 		d.setHours(0, 0, 0, 0);
 		return d;
 	}, [currentDate]);
+
+	const dayRange = useMemo(() => ({ start: normalized, end: normalized }), [normalized]);
+	const tasks = useViewTasks(startField, endField, dateField, true, dayRange);
+
+	const timelineConfig = useMemo(() => ({
+		...DayViewConfig,
+		enableDrag: true,
+		enableTooltip: true,
+		showCheckbox: dayViewShowCheckbox,
+		showTags: dayViewShowTags,
+		showPriority: dayViewShowPriority,
+		showTicktick: dayViewShowTicktick,
+		variant: 'timeline' as const,
+	}), [dayViewShowCheckbox, dayViewShowTags, dayViewShowPriority, dayViewShowTicktick]);
 
 	// ===== 任务数据：视图筛选 + 虚拟周期实例 → 单日连续画布模型 =====
 	const advanced = useAdvancedFilters('day');
@@ -86,14 +108,14 @@ export function DayView(): JSX.Element {
 			normalized,
 			normalized,
 			dateField,
-			plugin.settings.recurringTaskDisplayLimit ?? 5
+			recurringLimit
 		);
 		const combined = sortTasks([...scoped, ...virtualInstances], filter.sort).filter((t) => !t.cancelled);
 		return buildDayTimelineModel(
 			mergeIcs(fileLayer.merge(combined, (t) => isOnTimeAxis(t, startField, endField, dateField))),
-			normalized, startField, endField, dateField,
+			normalized, startField, endField, dateField, maxLane,
 		);
-	}, [scoped, fileLayer, mergeIcs, filter.sort, normalized, dateField, startField, endField, plugin.settings.recurringTaskDisplayLimit]);
+	}, [scoped, fileLayer, mergeIcs, filter.sort, normalized, dateField, startField, endField, recurringLimit, maxLane]);
 
 	// 任务全集（拖放源查找）
 	const dragLookupTasks = useMemo(() => tasks.filter((t) => !t.cancelled), [tasks]);
@@ -116,7 +138,7 @@ export function DayView(): JSX.Element {
 		void (async () => {
 			try {
 				const taskToUpdate = { ...task, datePrecision: { ...task.datePrecision, ...precision } };
-				await updateTaskProperties(app, taskToUpdate, updates, plugin.settings.enabledTaskFormats || []);
+				await updateTaskProperties(app, taskToUpdate, updates, enabledFormats);
 				await plugin.taskCache.refreshFile(task.filePath);
 				refreshTasks();
 			} catch (error) {
@@ -124,7 +146,7 @@ export function DayView(): JSX.Element {
 				new Notice(i18n.t('views.dayView.updateTaskFailed'));
 			}
 		})();
-	}, [dragLookupTasks, normalized, app, plugin, startField, endField, dateField, refreshTasks]);
+	}, [dragLookupTasks, normalized, app, plugin, startField, endField, dateField, enabledFormats, refreshTasks]);
 
 	const allDayDropProps = useDropTarget({
 		onDrop: (taskId) => handleAllDayDrop(taskId),
@@ -132,8 +154,6 @@ export function DayView(): JSX.Element {
 	});
 
 	// ===== 分割线拖拽（水平/垂直） =====
-	const tasksSectionRef = useRef<HTMLDivElement | null>(null);
-	const notesSectionRef = useRef<HTMLDivElement | null>(null);
 
 	const handleDividerMouseDown = useResizeDivider({
 		direction: 'horizontal',
@@ -175,7 +195,13 @@ export function DayView(): JSX.Element {
 			await editor.openDate(
 				new Date(normalized),
 				plugin.dailyNoteIndex as DailyNoteIndex,
-				plugin.settings,
+				{
+					...useCalendarStore.getState().settings,
+					dailyNoteSource,
+					dailyNotePath,
+					dailyNoteNameFormat,
+					dailyNoteTemplatePath,
+				},
 				plugin.calendarView as unknown as Component
 			);
 			if (cancelled) return;
@@ -191,7 +217,7 @@ export function DayView(): JSX.Element {
 		return () => {
 			cancelled = true;
 		};
-	}, [app, plugin, normalized, enableDailyNote, layout]);
+	}, [app, plugin, normalized, enableDailyNote, layout, dailyNoteSource, dailyNotePath, dailyNoteNameFormat, dailyNoteTemplatePath]);
 
 	const handleModeToggle = useCallback(() => {
 		const editor = editorRef.current;

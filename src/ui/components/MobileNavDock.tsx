@@ -34,8 +34,11 @@ export function MobileNavDock(): JSX.Element {
 	const plugin = usePlugin();
 	const viewType = useCalendarStore((s) => s.viewType);
 	const currentDate = useCalendarStore((s) => s.currentDate);
-	const startOnMonday = !!plugin.settings.startOnMonday;
-	useCalendarStore((s) => s.settingsVersion);
+	const startOnMonday = useCalendarStore((s) => !!s.settings.startOnMonday);
+	const globalTaskFilter = useCalendarStore((s) => s.settings.globalTaskFilter);
+	const enabledTaskFormats = useCalendarStore((s) => s.settings.enabledTaskFormats);
+	const syncConfiguration = useCalendarStore((s) => s.settings.syncConfiguration);
+	const language = useCalendarStore((s) => s.settings.language);
 
 	const [open, setOpen] = useState(false);
 	const fabRef = useRef<HTMLButtonElement | null>(null);
@@ -64,6 +67,7 @@ export function MobileNavDock(): JSX.Element {
 
 	// ===== 标题（与桌面工具栏同源，给面板顶部提供当前日期上下文） =====
 	const titleText = useMemo(() => {
+		void language;
 		switch (viewType) {
 			case 'year': return String(currentDate.getFullYear());
 			case 'month': return (i18n.t('common.monthsAbbr') as unknown as string[])[currentDate.getMonth()];
@@ -75,7 +79,7 @@ export function MobileNavDock(): JSX.Element {
 			case 'task': return i18n.t('views.taskView.title');
 			default: return '';
 		}
-	}, [viewType, currentDate, startOnMonday]);
+	}, [viewType, currentDate, startOnMonday, language]);
 
 	// ===== 日期导航（task 视图无日期概念，隐藏导航段） =====
 	const isCalendar = viewType === 'year' || viewType === 'month' || viewType === 'week' || viewType === 'day';
@@ -114,8 +118,8 @@ export function MobileNavDock(): JSX.Element {
 
 	const handleRefresh = async () => {
 		await plugin.taskCache.initialize(
-			plugin.settings.globalTaskFilter,
-			plugin.settings.enabledTaskFormats
+			globalTaskFilter,
+			enabledTaskFormats
 		);
 		useCalendarStore.getState().setTasks(plugin.taskCache.getAllTasks());
 	};
@@ -195,7 +199,7 @@ export function MobileNavDock(): JSX.Element {
 
 								<div className={ContextMenuClasses.section}>
 									{renderItem('act-create', 'plus', i18n.t('toolbar.createTask.ariaLabel'), openCreateTask)}
-									{isFeishuSyncEnabled(plugin.settings.syncConfiguration)
+									{isFeishuSyncEnabled(syncConfiguration)
 										? renderItem('act-sync', 'cloud-download', i18n.t('toolbar.syncButton.defaultTitle'), () => void syncFeishuTasks(plugin as GanttCalendarPlugin))
 										: null}
 									{renderItem('act-refresh', 'refresh-cw', i18n.t('toolbar.refresh.refreshTask'), () => void handleRefresh())}

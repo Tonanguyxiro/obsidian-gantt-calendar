@@ -4,13 +4,14 @@
  */
 
 import type { GCTask, SortField, SortState } from '../types';
+import { getPriorityMeta } from '../utils/priorityIcons';
 
 /**
  * 排序选项配置
  * 每个选项包含字段标识、显示图标和标签
  */
 export const SORT_OPTIONS: Array<{ field: SortField; icon: string; label: string }> = [
-	{ field: 'priority', icon: '🔺', label: '优先级' },
+	{ field: 'priority', icon: getPriorityMeta('highest').icon, label: '优先级' },
 	{ field: 'description', icon: '🔤', label: '字母排序' },
 	{ field: 'createdDate', icon: '➕', label: '创建时间' },
 	{ field: 'startDate', icon: '🛫', label: '开始时间' },

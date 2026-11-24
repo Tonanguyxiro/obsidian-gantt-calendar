@@ -1046,7 +1046,8 @@
         "noMatches": "没有匹配的标签",
         "pressEnterToCreate": "按回车创建 #{{tag}}",
         "impliedBy": "已由选中的子标签包含——点击浏览其子标签",
-        "suggestHint": "↑↓ 选择 · Tab / 点击补全并继续输入 · Enter 确认"
+        "suggestHint": "↑↓ 选择 · Tab / 点击补全并继续输入 · Enter 确认",
+        "fileFrequentLabel": "本文件常用标签："
       },
       "createIn": "创建位置",
       "createInDaily": "Daily Note（{{name}}）",
@@ -1156,7 +1157,11 @@
       "summaryDateFormat": "M月D日",
       "notSet": "未设置，点击选择",
       "today": "今天",
-      "allDay": "全天"
+      "allDay": "全天",
+      "subtasks": "子任务",
+      "addBulletNotes": "添加子条目 / 备注",
+      "bulletNotesPlaceholder": "输入多级纯文字或列表（如 - 要点，Tab 缩进）...",
+      "bulletNotesHint": "多级列表 / 纯文字 · Enter 换行 · Tab 缩进 · Ctrl/⌘+Enter 保存"
     },
     "when": {
       "today": "今天",
@@ -1498,6 +1503,7 @@
       "feishuSyncComplete": "飞书同步完成: {{summary}}"
     },
     "icsSync": "ICS 日历订阅同步",
+    "refreshTasks": "刷新任务缓存",
     "editTask": "编辑任务",
     "editTaskNotATask": "光标所在行不是任务"
   },

@@ -94,11 +94,18 @@ export function ToolbarBar(): JSX.Element {
 
 	// ===== 刷新 =====
 	const handleRefresh = async () => {
-		await plugin.taskCache.initialize(
-			globalTaskFilter,
-			enabledTaskFormats
-		);
-		setTasks(plugin.taskCache.getAllTasks());
+		if (typeof plugin.taskCache.reloadAll === 'function') {
+			await plugin.taskCache.reloadAll();
+		} else {
+			await plugin.taskCache.initialize(
+				globalTaskFilter,
+				enabledTaskFormats
+			);
+		}
+		plugin.fileTaskIndex?.rebuild();
+		const latest = plugin.taskCache.getAllTasks();
+		useCalendarStore.getState().notifyTasksUpdated([...latest]);
+		setTasks(latest);
 	};
 
 	// ===== 创建任务 / 设置 / 同步 =====

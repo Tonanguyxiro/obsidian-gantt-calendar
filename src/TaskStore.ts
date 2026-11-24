@@ -20,6 +20,7 @@ import {
 } from './data-layer/DataviewDataSource';
 import { IDataSource } from './data-layer/IDataSource';
 import { DataSourceConfig } from './data-layer/types';
+import { flushDirtyMarkdownViews } from './utils/liveEditorHelper';
 
 export type TaskStoreUpdateListener = (filePath?: string) => void;
 
@@ -139,7 +140,9 @@ export class TaskStore {
 			// 从 taskId 解析 filePath (格式: "filePath:lineNumber")
 			const deleteData = data as { taskId?: string } | undefined;
 			const taskId = deleteData?.taskId;
-			const filePath = taskId ? String(taskId).split(':')[0] : undefined;
+			const idStr = taskId ? String(taskId) : '';
+			const sep = idStr.lastIndexOf(':');
+			const filePath = sep > 0 ? idStr.slice(0, sep) : (idStr || undefined);
 			Logger.debug('TaskStore', `Event: task:deleted from ${filePath || 'unknown'}`);
 			this.invalidateCache();
 			this.notifyListenersDebounced(filePath);
@@ -512,9 +515,56 @@ export class TaskStore {
 		} else {
 			await (this.markdownSource as unknown as { processFileModification: (p: string) => Promise<void> }).processFileModification(filePath);
 		}
+		// 即使 L3 缓存无差异，也用该文件的权威 ID 快照对仓库执行静默自愈，彻底清除残留 key
+		if (this.activeSource.getCachedFileTaskIds) {
+			this.repository.reconcileFileSnapshot(filePath, this.activeSource.getCachedFileTaskIds(filePath));
+		}
 		// 立即通知视图（跳过 75ms 防抖），确保返回最新数据
 		this.invalidateCache();
 		this.notifyListeners(filePath);
+	}
+
+	/**
+	 * 手动/强制全量刷新任务缓存：
+	 * 1. 先冲刷当前打开且有未保存改动的 Markdown 编辑器到磁盘
+	 * 2. 清空数据源缓存与 TaskRepository，彻底消除任何残留 key
+	 * 3. 重新扫描全库，并对所有打开的 Markdown 笔记执行一次直接文件刷新（防止 Dataview 后台 Worker 尚未追上刚落盘的改动）
+	 * 4. 立即通知所有订阅视图
+	 */
+	async reloadAll(): Promise<void> {
+		await flushDirtyMarkdownViews(this.app);
+		this.activeSource.clearCache?.();
+		this.repository.clear();
+		this.invalidateCache();
+		await this.initialize(this.globalTaskFilter, this.enabledFormats);
+
+		// 对当前工作区已打开的 Markdown 笔记补做一次单文件直读对账，确保刚落盘的笔记无需等待 Dataview Worker
+		const openPaths = new Set<string>();
+		const ws = (this.app as unknown as {
+			workspace?: {
+				getActiveFile?: () => { path?: string } | null;
+				getLeavesOfType?: (type: string) => Array<{ view?: { file?: { path?: string } | null } }>;
+			};
+		}).workspace;
+		const activeFile = ws?.getActiveFile?.();
+		if (typeof activeFile?.path === 'string' && activeFile.path.endsWith('.md')) {
+			openPaths.add(activeFile.path);
+		}
+		const leaves = ws?.getLeavesOfType?.('markdown') || [];
+		for (const leaf of leaves) {
+			const p = leaf?.view?.file?.path;
+			if (typeof p === 'string' && p.endsWith('.md')) {
+				openPaths.add(p);
+			}
+		}
+		for (const path of openPaths) {
+			if (this.activeSource.refreshFile) {
+				await this.activeSource.refreshFile(path);
+			}
+		}
+
+		this.invalidateCache();
+		this.notifyListeners();
 	}
 
 	/**
@@ -570,6 +620,11 @@ export class TaskStore {
 	 * @param filePath - 变更的文件路径（可选），用于增量更新
 	 */
 	private notifyListeners(filePath?: string): void {
+		if (this.updateDebounceTimer !== null) {
+			window.clearTimeout(this.updateDebounceTimer);
+			this.updateDebounceTimer = null;
+		}
+		this.updateDebounceFirstAt = null;
 		this.updateListeners.forEach(listener => {
 			try {
 				listener(filePath);

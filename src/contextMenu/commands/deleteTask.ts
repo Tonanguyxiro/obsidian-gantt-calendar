@@ -1,6 +1,7 @@
 import { App, Notice, TFile } from 'obsidian';
 import type { GCTask } from '../../types';
 import { refreshTaskView, withFileLock, getGlobalTaskFilter, locateTaskLine } from '../../tasks/taskUpdater';
+import { flushDirtyMarkdownViews } from '../../utils/liveEditorHelper';
 import { taskUndo } from '../../tasks/taskUndo';
 import { Logger } from '../../utils/logger';
 import { i18n } from '../../i18n/i18n';
@@ -39,7 +40,8 @@ export async function deleteTask(
 		if (!confirmed) return;
 
 		await withFileLock(task.filePath, async () => {
-			// 锁内重读，防止确认期间或并发操作后基于旧内容删行
+			// 锁内先冲刷未保存的编辑器修改再重读，防止确认期间或并发操作后基于旧内容删行
+			await flushDirtyMarkdownViews(app, task.filePath);
 			const content = await app.vault.read(file);
 			const lines = content.split('\n');
 			const taskLineIndex = locateTaskLine(lines, task, getGlobalTaskFilter(app));

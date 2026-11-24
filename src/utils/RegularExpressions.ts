@@ -98,6 +98,26 @@ export class RegularExpressions {
         'u',
     );
 
+    /**
+     * 普通列表项（bullet / 有序列表，排除复选框任务行）
+     * 捕获组：1=缩进，2=列表标记，3=正文
+     */
+    public static readonly bulletItemRegex = new RegExp(
+        RegularExpressions.indentationRegex.source +
+            RegularExpressions.listMarkerRegex.source +
+            ' +(?!\\[.\\])(.*)$',
+        'u',
+    );
+
+    /** 引用块前缀拆分（提取连续的 `>` 与至多一个紧随空格，其余前导空白作为列表缩进） */
+    public static readonly blockquotePrefixRegex = /^((?:\s*> ?)*)([\s\t]*)/;
+
+    /** 纯空白或仅含引用标记 `>` 的空行 */
+    public static readonly blankOrQuoteOnlyRegex = /^[\s\t>]*$/;
+
+    /** 编辑框中单行 bullet 的前导空白、可选列表标记与正文 */
+    public static readonly editorBulletLineRegex = /^([\t ]*)(?:([-*+]|\d+[.)]) +)?(.*)$/u;
+
     // ==================== Tasks 格式正则表达式 ====================
 
     /**

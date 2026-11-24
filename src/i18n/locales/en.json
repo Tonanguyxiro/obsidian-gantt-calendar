@@ -1046,7 +1046,8 @@
         "noMatches": "No matching tags",
         "pressEnterToCreate": "Press Enter to create #{{tag}}",
         "impliedBy": "Already included by a selected sub-tag — click to browse its children",
-        "suggestHint": "↑↓ Navigate · Tab / Click to complete · Enter to confirm"
+        "suggestHint": "↑↓ Navigate · Tab / Click to complete · Enter to confirm",
+        "fileFrequentLabel": "Frequent in this file:"
       },
       "createIn": "Create in",
       "createInDaily": "Daily note ({{name}})",
@@ -1156,7 +1157,11 @@
       "summaryDateFormat": "MMM D",
       "notSet": "Not set — click to choose",
       "today": "Today",
-      "allDay": "All day"
+      "allDay": "All day",
+      "subtasks": "Subtasks",
+      "addBulletNotes": "Add bullet notes",
+      "bulletNotesPlaceholder": "Add multi-level text or bullets (e.g. - note, Tab to indent)...",
+      "bulletNotesHint": "Multi-level bullets / text · Enter newline · Tab indent · Ctrl/⌘+Enter save"
     },
     "when": {
       "today": "Today",
@@ -1498,6 +1503,7 @@
       "feishuSyncComplete": "Feishu sync complete: {{summary}}"
     },
     "icsSync": "ICS Calendar Subscription Sync",
+    "refreshTasks": "Refresh tasks",
     "editTask": "Edit task",
     "editTaskNotATask": "The cursor is not on a task line"
   },

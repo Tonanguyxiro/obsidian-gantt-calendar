@@ -2,8 +2,10 @@ import { App, MarkdownView, TFile } from 'obsidian';
 import { GCTask } from '../types';
 import { serializeTask, TaskUpdates } from './taskSerializer';
 import { parseSingleTaskLine } from './taskParser/main';
+import { applyTaskChildrenUpdates } from './taskParser/children';
 import { resolveScheduledProxyUpdates } from './scheduledFallback';
 import { migrateLegacyTimes } from './legacyTimes';
+import { flushDirtyMarkdownViews } from '../utils/liveEditorHelper';
 import { Logger } from '../utils/logger';
 
 // ==================== 文件级写锁 ====================
@@ -61,9 +63,16 @@ interface PluginTaskCache {
 
 function getPluginTaskCache(app: App): PluginTaskCache | null {
 	const appWithPlugins = app as App & {
-		plugins?: { getPlugin?: (id: string) => { taskCache?: PluginTaskCache } | null };
+		plugins?: {
+			getPlugin?: (id: string) => { taskCache?: PluginTaskCache } | null;
+			plugins?: Record<string, { taskCache?: PluginTaskCache } | undefined>;
+		};
 	};
-	return appWithPlugins.plugins?.getPlugin?.('gantt-calendar')?.taskCache ?? null;
+	return (
+		appWithPlugins.plugins?.getPlugin?.('gantt-calendar')?.taskCache ??
+		appWithPlugins.plugins?.plugins?.['gantt-calendar']?.taskCache ??
+		null
+	);
 }
 
 /**
@@ -85,9 +94,15 @@ export async function refreshTaskView(app: App, filePath: string): Promise<void>
 
 export function getGlobalTaskFilter(app: App): string {
 	const appWithPlugins = app as App & {
-		plugins?: { getPlugin?: (id: string) => { settings?: { globalTaskFilter?: string } } | null };
+		plugins?: {
+			getPlugin?: (id: string) => { settings?: { globalTaskFilter?: string } } | null;
+			plugins?: Record<string, { settings?: { globalTaskFilter?: string } } | undefined>;
+		};
 	};
-	return appWithPlugins.plugins?.getPlugin?.('gantt-calendar')?.settings?.globalTaskFilter || '';
+	const plugin =
+		appWithPlugins.plugins?.getPlugin?.('gantt-calendar') ??
+		appWithPlugins.plugins?.plugins?.['gantt-calendar'];
+	return plugin?.settings?.globalTaskFilter || '';
 }
 
 function lineMatchesTask(line: string, task: GCTask, globalFilter: string): boolean {
@@ -143,12 +158,13 @@ async function readTaskLine(app: App, task: GCTask): Promise<{ file: TFile; cont
 		throw new Error(`File not found: ${task.filePath}`);
 	}
 
+	await flushDirtyMarkdownViews(app, task.filePath);
 	const content = await app.vault.read(file);
 	const lines = content.split('\n');
 
-	// 获取任务行的索引（lineNumber 是 1-based）
+	// 获取任务行的索引（lineNumber 是 1-based）；若上方删行导致越界，交由后续行内容校验重定位
 	const taskLineIndex = task.lineNumber - 1;
-	if (taskLineIndex < 0 || taskLineIndex >= lines.length) {
+	if (taskLineIndex < 0) {
 		throw new Error(`Invalid line number: ${task.lineNumber}`);
 	}
 
@@ -334,14 +350,16 @@ export async function updateTaskProperties(
 
 		const { file, lines, taskLineIndex: rawIndex } = await readTaskLine(app, task);
 
-		// 行号漂移校验（P0）：文件被并发编辑后 lineNumber 可能指向别的行。
-		// 校验失败时在文件内重定位；找不到则报错刷新缓存，绝不盲写。
+		// 行号漂移校验（P0）：文件被并发编辑后 lineNumber 可能指向别的行或越界（上方删行）。
+		// 校验失败时在文件内重定位；找不到则报错并自动刷新缓存，绝不盲写。
 		const globalFilter = getGlobalTaskFilter(app);
 		let taskLineIndex = rawIndex;
-		if (!lineMatchesTask(lines[taskLineIndex], task, globalFilter)) {
+		const inBounds = taskLineIndex >= 0 && taskLineIndex < lines.length;
+		if (!inBounds || !lineMatchesTask(lines[taskLineIndex], task, globalFilter)) {
 			Logger.warn('taskUpdater', `Line drift detected at ${task.filePath}:${task.lineNumber}, relocating...`);
 			const found = lines.findIndex(line => lineMatchesTask(line, task, globalFilter));
 			if (found === -1) {
+				void refreshTaskView(app, task.filePath);
 				throw new Error(
 					`Task not found in file ${task.filePath}:${task.lineNumber}. ` +
 					`File changed externally; task cache will refresh.`
@@ -354,45 +372,59 @@ export async function updateTaskProperties(
 
 		Logger.debug('taskUpdater', 'Original task line:', taskLine);
 
-		// 确定任务格式
-		const formatToUse = determineTaskFormat(task, taskLine, enabledFormats);
-
-		// 提取列表标记和缩进。与 step1 解析正则保持一致：
-		// 支持 -/*/+/数字列表、引用块前缀（>）、自定义单字符复选框状态
-		const listMatch = taskLine.match(/^([\s\t>]*)([-*+]|\d+[.)])\s+\[.\]\s*/);
-		if (!listMatch) {
-			throw new Error('Invalid task format: cannot find list marker');
-		}
-
-		const indent = listMatch[1];  // 缩进（含引用前缀）
-		const listMarker = listMatch[2];  // 列表标记
-
-		// 使用新的序列化函数重建任务行（只返回任务内容部分，不包含列表标记）
-		// 序列化函数会直接从插件设置中获取全局过滤器
-		const taskContent = serializeTask(
-			app,
-			task,
-			updates,
-			formatToUse
+		const hasParentUpdates = Object.keys(updates).some(
+			(k) => k !== 'subtaskToggles' && k !== 'bulletText'
 		);
 
-		Logger.debug('taskUpdater', 'Serialized task content:', taskContent);
+		if (hasParentUpdates) {
+			// 确定任务格式
+			const formatToUse = determineTaskFormat(task, taskLine, enabledFormats);
 
-		// 拼接完整的任务行：缩进 + 列表标记 + 空格 + 任务内容
-		let finalTaskLine = `${indent}${listMarker} ${taskContent}`;
+			// 提取列表标记和缩进。与 step1 解析正则保持一致：
+			// 支持 -/*/+/数字列表、引用块前缀（>）、自定义单字符复选框状态
+			const listMatch = taskLine.match(/^([\s\t>]*)([-*+]|\d+[.)])\s+\[.\]\s*/);
+			if (!listMatch) {
+				throw new Error('Invalid task format: cannot find list marker');
+			}
 
-		// 保留未识别字段（P0 混合格式数据丢失）：未知的 [key:: value]
-		// 内联字段与 %%注释%% 不参与序列化，从原行原样追加
-		const preservedTokens = extractUnrecognizedTokens(taskLine)
-			.filter(token => !finalTaskLine.includes(token));
-		if (preservedTokens.length > 0) {
-			finalTaskLine = `${finalTaskLine} ${preservedTokens.join(' ')}`;
+			const indent = listMatch[1];  // 缩进（含引用前缀）
+			const listMarker = listMatch[2];  // 列表标记
+
+			// 使用新的序列化函数重建任务行（只返回任务内容部分，不包含列表标记）
+			// 序列化函数会直接从插件设置中获取全局过滤器
+			const taskContent = serializeTask(
+				app,
+				task,
+				updates,
+				formatToUse
+			);
+
+			Logger.debug('taskUpdater', 'Serialized task content:', taskContent);
+
+			// 拼接完整的任务行：缩进 + 列表标记 + 空格 + 任务内容
+			let finalTaskLine = `${indent}${listMarker} ${taskContent}`;
+
+			// 保留未识别字段（P0 混合格式数据丢失）：未知的 [key:: value]
+			// 内联字段与 %%注释%% 不参与序列化，从原行原样追加
+			const preservedTokens = extractUnrecognizedTokens(taskLine)
+				.filter(token => !finalTaskLine.includes(token));
+			if (preservedTokens.length > 0) {
+				finalTaskLine = `${finalTaskLine} ${preservedTokens.join(' ')}`;
+			}
+
+			Logger.debug('taskUpdater', 'Final task line:', finalTaskLine);
+
+			// 写回父任务行
+			lines[taskLineIndex] = finalTaskLine;
 		}
 
-		Logger.debug('taskUpdater', 'Final task line:', finalTaskLine);
+		// 同步应用一级子任务勾选变更与多级 bullet items 更新（完整保留未改动子任务及其下级）
+		applyTaskChildrenUpdates(lines, taskLineIndex, {
+			subtaskToggles: updates.subtaskToggles,
+			bulletText: updates.bulletText,
+			lineDelta: taskLineIndex - rawIndex,
+		});
 
-		// 写回文件
-		lines[taskLineIndex] = finalTaskLine;
 		const newContent = lines.join('\n');
 
 		// 写回前快照当前编辑器位置（仅当活动编辑器正是目标文件时）
@@ -406,4 +438,6 @@ export async function updateTaskProperties(
 		const totalElapsed = performance.now() - startTime;
 		Logger.debug('taskUpdater', `Task updated in ${totalElapsed.toFixed(2)}ms (write: ${writeElapsed.toFixed(2)}ms)`);
 	});
+	// 写回完成后统一立即刷新该文件的缓存并通知视图，确保所有调用入口（含编辑弹窗、甘特拖拽等）即时生效
+	await refreshTaskView(app, task.filePath);
 }

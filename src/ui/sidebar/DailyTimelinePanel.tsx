@@ -19,6 +19,7 @@ import { CalendarItemCard } from '../components/FileTaskCard';
 import { useIcsLayer } from '../utils/useIcsLayer';
 import { useViewTasks } from '../utils/useViewTasks';
 import { findTaskById } from '../utils/taskId';
+import { taskKey } from '../utils/taskKey';
 import { useElementWidth } from '../utils/platform';
 
 /** dataTransfer.taskId（filePath:lineNumber）→ 任务查找 */
@@ -69,12 +70,15 @@ export function DailyTimelinePanel(): JSX.Element {
 			const fresh = atMidnight(getTodayInTimezone());
 			setToday((prev) => (prev.getTime() === fresh.getTime() ? prev : fresh));
 		};
+		syncToday();
 		const onWake = (): void => {
 			if (!document.hidden) syncToday();
 		};
+		const timer = window.setInterval(syncToday, 60_000);
 		document.addEventListener('visibilitychange', onWake);
 		window.addEventListener('focus', onWake);
 		return () => {
+			window.clearInterval(timer);
 			document.removeEventListener('visibilitychange', onWake);
 			window.removeEventListener('focus', onWake);
 		};
@@ -210,8 +214,8 @@ export function DailyTimelinePanel(): JSX.Element {
 					</div>
 					<div className={SidebarClasses.elements.timelineAllDayTasks}>
 						{model.allday.map(({ task, timeLabel }) => (
-							<div key={`${task.filePath}:${task.lineNumber}`} className={SidebarClasses.elements.timelineAllDayItem}>
-								<CalendarItemCard task={task} config={timelineConfig} />
+							<div key={taskKey(task)} className={SidebarClasses.elements.timelineAllDayItem}>
+								<CalendarItemCard task={task} config={timelineConfig} onRefresh={handleRefresh} />
 								{timeLabel ? (
 									<span className={SidebarClasses.elements.timelineAllDayTime}>{timeLabel}</span>
 								) : null}

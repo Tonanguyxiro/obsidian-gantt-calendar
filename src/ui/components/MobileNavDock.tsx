@@ -117,11 +117,15 @@ export function MobileNavDock(): JSX.Element {
 	};
 
 	const handleRefresh = async () => {
-		await plugin.taskCache.initialize(
-			globalTaskFilter,
-			enabledTaskFormats
-		);
-		useCalendarStore.getState().setTasks(plugin.taskCache.getAllTasks());
+		if (typeof plugin.taskCache.reloadAll === 'function') {
+			await plugin.taskCache.reloadAll();
+		} else {
+			await plugin.taskCache.initialize(
+				globalTaskFilter,
+				enabledTaskFormats
+			);
+		}
+		useCalendarStore.getState().notifyTasksUpdated([...plugin.taskCache.getAllTasks()]);
 	};
 
 	const renderItem = (key: string, icon: string, label: string, onClick: () => void) => (

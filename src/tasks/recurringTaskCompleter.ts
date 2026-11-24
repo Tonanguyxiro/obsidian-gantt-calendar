@@ -8,10 +8,10 @@
 import { App, TFile } from 'obsidian';
 import { GCTask, getTaskDateField } from '../types';
 import type { DateFieldType } from '../settings/types';
-import { determineTaskFormat } from './taskUpdater';
+import { determineTaskFormat, getGlobalTaskFilter, locateTaskLine, refreshTaskView, updateTaskCompletion, withFileLock } from './taskUpdater';
 import { serializeTask, TaskUpdates } from './taskSerializer';
-import { updateTaskCompletion, withFileLock } from './taskUpdater';
 import { parseRepeatRule, getNextOccurrence } from './recurrenceCalculator';
+import { flushDirtyMarkdownViews } from '../utils/liveEditorHelper';
 import { Logger } from '../utils/logger';
 
 /**
@@ -64,12 +64,17 @@ export async function completeRecurringTask(
         throw new Error(`File not found: ${task.filePath}`);
     }
 
+    await flushDirtyMarkdownViews(app, task.filePath);
     const content = await app.vault.read(file);
     const lines = content.split('\n');
-    const taskLineIndex = task.lineNumber - 1;
+    let taskLineIndex = task.lineNumber - 1;
 
     if (taskLineIndex < 0 || taskLineIndex >= lines.length) {
-        throw new Error(`Invalid line number: ${task.lineNumber}`);
+        const relocated = locateTaskLine(lines, task, getGlobalTaskFilter(app));
+        if (relocated === -1) {
+            throw new Error(`Invalid line number: ${task.lineNumber}`);
+        }
+        taskLineIndex = relocated;
     }
 
     const taskLine = lines[taskLineIndex];
@@ -120,6 +125,7 @@ export async function completeRecurringTask(
         newLine: newTaskLine,
     });
     }); // withFileLock
+    await refreshTaskView(app, task.filePath);
 }
 
 /**

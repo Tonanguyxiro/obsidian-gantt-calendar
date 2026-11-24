@@ -668,6 +668,7 @@ export function DayTimelineCanvas({ day, model, config, tasks, refresh }: DayTim
 						beginResize={beginResize}
 						beginTouchPress={beginBlockTouchPress}
 						onDragFinish={stopDragAutoScroll}
+						onRefresh={refresh}
 					/>
 				))}
 				{/* 拖放吸附指示线（外部来源）/ 整块拖动落点预览 */}
@@ -703,6 +704,7 @@ interface CanvasTimeBlockProps {
 	beginResize: ReturnType<typeof useBlockResize>;
 	beginTouchPress: (e: ReactPointerEvent, block: TimeBlock, blockEl: HTMLElement) => void;
 	onDragFinish: () => void;
+	onRefresh: () => void;
 }
 
 const CanvasTimeBlock = memo(function CanvasTimeBlock({
@@ -714,6 +716,7 @@ const CanvasTimeBlock = memo(function CanvasTimeBlock({
 	beginResize,
 	beginTouchPress,
 	onDragFinish,
+	onRefresh,
 }: CanvasTimeBlockProps): JSX.Element {
 	const durationMin = seg.endMin - seg.startMin;
 	const timeLabel = `${formatMinutes(seg.startMin)} – ${formatMinutes(seg.endMin)}`;
@@ -755,7 +758,7 @@ const CanvasTimeBlock = memo(function CanvasTimeBlock({
 				<span className={DayCanvasClasses.elements.blockTime}>{timeLabel}</span>
 			) : null}
 			<CalendarItemCard
-				timeLabel={timeLabel} task={block.task} config={config} disableLongPressMenu />
+				timeLabel={timeLabel} task={block.task} config={config} onRefresh={onRefresh} disableLongPressMenu />
 			{!seg.continuesBefore && resizable ? (
 				<div
 					className={`${DayCanvasClasses.elements.handle} ${DayCanvasClasses.modifiers.handleTop}`}

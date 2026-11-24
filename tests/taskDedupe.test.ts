@@ -266,6 +266,35 @@ describe('任务重复：剩余路径', () => {
 		const internals = env.repo as unknown as { taskCache: Map<string, GCTask> };
 		expect(Array.from(internals.taskCache.keys()).sort()).toEqual([`${PATH}:1`, `${PATH}:3`]);
 	});
+
+	it('重初始化（手动刷新）：文件修改且行号漂移后再次 initialize，不留下旧行号副本', async () => {
+		const env = setup({ [PATH]: body([]) });
+		await env.init();
+		expect(keysOf(env.repo.getAllTasks())).toEqual([`${PATH}:1`, `${PATH}:3`]);
+
+		// 文件在磁盘上被修改（上方插行 + 任务内容修改），随后触发重初始化
+		env.write(
+			PATH,
+			['# 标题', '新增行', '- [ ] 19:00 - 23:00 Update **gantt calendar plugin** ⏳ 2026-11-12', '正文', OTHER].join('\n')
+		);
+		await env.init();
+
+		const tasks = env.repo.getAllTasks();
+		expect(tasks).toHaveLength(2);
+		expect(keysOf(tasks)).toEqual([`${PATH}:3`, `${PATH}:5`]);
+		expect(tasks.find(t => t.lineNumber === 3)?.description).toContain('**gantt calendar plugin**');
+	});
+
+	it('重初始化（手动刷新）：原含任务的文件删空任务后再次 initialize，旧任务被清除', async () => {
+		const env = setup({ [PATH]: body([]) });
+		await env.init();
+		expect(env.repo.getAllTasks()).toHaveLength(2);
+
+		env.write(PATH, '# 只有正文没有任务了');
+		await env.init();
+
+		expect(env.repo.getAllTasks()).toEqual([]);
+	});
 });
 
 describe('输出端去重兜底', () => {

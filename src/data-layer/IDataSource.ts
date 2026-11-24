@@ -95,6 +95,16 @@ export interface IDataSource {
 	 * @param filePath - 文件路径
 	 */
 	refreshFile?(filePath: string): Promise<void>;
+
+	/**
+	 * 清空数据源内部缓存（供手动全量刷新强制重扫）
+	 */
+	clearCache?(): void;
+
+	/**
+	 * 获取某文件当前 L3 缓存记录的权威任务 ID 列表（供 TaskRepository 静默对账残留 key）
+	 */
+	getCachedFileTaskIds?(filePath: string): string[];
 }
 
 /**

@@ -78,6 +78,24 @@ export class GCSidebarView extends ItemView {
 		};
 		this.plugin?.taskCache?.onUpdate(this.cacheUpdateListener);
 
+		// 自动刷新：焦点叶切换（如从笔记编辑器点击侧边栏或切换笔记）时自动刷新当前活动笔记的任务
+		let lastActivePath: string | null = this.app?.workspace?.getActiveFile?.()?.path ?? null;
+		if (typeof this.registerEvent === 'function' && typeof this.app?.workspace?.on === 'function') {
+			this.registerEvent(
+				this.app.workspace.on('active-leaf-change', () => {
+					const prevPath = lastActivePath;
+					const nextPath = this.app?.workspace?.getActiveFile?.()?.path ?? null;
+					lastActivePath = nextPath;
+					if (prevPath && prevPath.endsWith('.md')) {
+						void this.plugin?.taskCache?.refreshFile?.(prevPath);
+					}
+					if (nextPath && nextPath !== prevPath && nextPath.endsWith('.md')) {
+						void this.plugin?.taskCache?.refreshFile?.(nextPath);
+					}
+				})
+			);
+		}
+
 		// 数据就绪后推入（不阻塞 onOpen）；失败兜底：空任务集解除骨架（P0''）
 		const ready = this.plugin?.taskCache?.whenReady?.();
 		if (ready) {

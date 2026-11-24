@@ -10,7 +10,10 @@
 import { App, EventRef, ListItemCache, TFile } from 'obsidian';
 import { parseSingleTaskLine, parseTasksFromListItems } from '../tasks/taskParser/main';
 import { parseTaskLine } from '../tasks/taskParser/step1';
+import { extractTaskChildrenFromDataview, type DataviewChildItemLike } from '../tasks/taskParser/children';
 import type { TaskFormatType } from '../tasks/taskSerializerSymbols';
+import { isDescriptionEditorOwner } from '../ui/components/DescriptionEditor';
+import { getDirtyEditorContent, readLiveOrVaultContent } from '../utils/liveEditorHelper';
 import { EventBus } from './EventBus';
 import type { GCTask } from '../types';
 import type { DataSourceChanges, DataSourceConfig, SyncStatus, TaskChanges } from './types';
@@ -25,6 +28,7 @@ export interface DataviewTaskLike {
 	symbol?: unknown;
 	text?: unknown;
 	completed?: unknown;
+	children?: DataviewChildItemLike['children'];
 }
 
 interface DataviewDataArrayLike<T> extends Iterable<T> {
@@ -99,6 +103,8 @@ function fingerprintTask(task: GCTask): string {
 		task.completionDate?.getTime() ?? '',
 		task.datePrecision ? JSON.stringify(task.datePrecision) : '',
 		task.metadataFields ? JSON.stringify(task.metadataFields) : '',
+		task.subtasks ? JSON.stringify(task.subtasks.map((s) => [s.checkboxSymbol, s.description])) : '',
+		task.bulletItems ? JSON.stringify(task.bulletItems.map((b) => [b.level, b.marker, b.text])) : '',
 	].join('|');
 }
 
@@ -173,8 +179,20 @@ export class DataviewDataSource implements IDataSource {
 	private cache: Map<string, DataviewFileCache> = new Map();
 	private runningRuns: Map<string, Promise<void>> = new Map();
 	private queuedRuns: Map<string, Promise<void>> = new Map();
+	private queuedTaskFns: Map<string, () => Promise<void>> = new Map();
+	/** 已通过直接读盘/读编辑器刷新过的文件路径（含删空任务的笔记），防止延迟到达的旧 Dataview 事件回滚或复活已删任务 */
+	private directRefreshedPaths: Set<string> = new Set();
+	private debounceTimers: Map<string, number> = new Map();
+	private debounceFirstAt: Map<string, number> = new Map();
+	private readonly DEBOUNCE_MS = 50;
+	private readonly EDITOR_DEBOUNCE_MS = 250;
+	private readonly MAX_WAIT_MS = 500;
 	private metadataEventRefs: EventRef[] = [];
+	private vaultEventRefs: EventRef[] = [];
+	private workspaceEventRefs: EventRef[] = [];
 	private watchersRegistered = false;
+	/** 代际计数器：clearCache / destroy 递增，令在途异步读取完成后自动作废，防止旧版本回写残留 key */
+	private generation = 0;
 
 	constructor(
 		app: App,
@@ -204,7 +222,7 @@ export class DataviewDataSource implements IDataSource {
 		const scanStartTime = performance.now();
 		const { tasksByFile, allTasks } = this.readGroupedTasksFromDataview();
 
-		if (this.cache.size === 0) {
+		if (this.cache.size === 0 && this.directRefreshedPaths.size === 0) {
 			for (const [filePath, tasks] of tasksByFile) {
 				this.cache.set(filePath, this.buildFileCache(filePath, tasks, 'dataview'));
 			}
@@ -266,7 +284,51 @@ export class DataviewDataSource implements IDataSource {
 	 * 随后 Dataview Worker 完成并触发 `dataview:metadata-change` 时指纹已一致，自动跳过无重复事件。
 	 */
 	refreshFile(filePath: string): Promise<void> {
+		this.clearFileDebounce(filePath);
 		return this.enqueueFileRun(filePath, () => this.runDirectFileRefresh(filePath));
+	}
+
+	/**
+	 * 清空 L3 缓存（供手动全量刷新强制重扫）：
+	 * 同步递增代际并清理直读标记与待发防抖，阻断在途异步读回写旧 key。
+	 */
+	clearCache(): void {
+		this.generation++;
+		this.debounceTimers.forEach((timer) => window.clearTimeout(timer));
+		this.debounceTimers.clear();
+		this.debounceFirstAt.clear();
+		this.directRefreshedPaths.clear();
+		this.cache.clear();
+	}
+
+	getCachedFileTaskIds(filePath: string): string[] {
+		return this.cache.get(filePath)?.taskIds ?? [];
+	}
+
+	private scheduleFileDebounce(path: string, run: () => void, debounceMs: number = this.DEBOUNCE_MS): void {
+		const now = Date.now();
+		const firstAt = this.debounceFirstAt.get(path) ?? now;
+		this.debounceFirstAt.set(path, firstAt);
+		const delay = Math.min(debounceMs, Math.max(0, this.MAX_WAIT_MS - (now - firstAt)));
+
+		const existing = this.debounceTimers.get(path);
+		if (existing !== undefined) window.clearTimeout(existing);
+
+		const timer = window.setTimeout(() => {
+			this.debounceTimers.delete(path);
+			this.debounceFirstAt.delete(path);
+			run();
+		}, delay);
+		this.debounceTimers.set(path, timer);
+	}
+
+	private clearFileDebounce(path: string): void {
+		const existing = this.debounceTimers.get(path);
+		if (existing !== undefined) {
+			window.clearTimeout(existing);
+			this.debounceTimers.delete(path);
+		}
+		this.debounceFirstAt.delete(path);
 	}
 
 	destroy(): void {
@@ -274,9 +336,23 @@ export class DataviewDataSource implements IDataSource {
 			this.app.metadataCache?.offref?.(ref);
 		}
 		this.metadataEventRefs = [];
+		for (const ref of this.vaultEventRefs) {
+			this.app.vault?.offref?.(ref);
+		}
+		this.vaultEventRefs = [];
+		for (const ref of this.workspaceEventRefs) {
+			(this.app.workspace as unknown as { offref?: (ref: EventRef) => void } | undefined)?.offref?.(ref);
+		}
+		this.workspaceEventRefs = [];
 		this.watchersRegistered = false;
+		this.generation++;
+		this.debounceTimers.forEach((timer) => window.clearTimeout(timer));
+		this.debounceTimers.clear();
+		this.debounceFirstAt.clear();
 		this.runningRuns.clear();
 		this.queuedRuns.clear();
+		this.queuedTaskFns.clear();
+		this.directRefreshedPaths.clear();
 		this.cache.clear();
 	}
 
@@ -378,7 +454,7 @@ export class DataviewDataSource implements IDataSource {
 		const fileName = this.resolveFileBasename(filePath);
 		const enabledFormats = (this.config.enabledFormats as TaskFormatType[] | undefined) || ['tasks', 'dataview'];
 
-		return parseSingleTaskLine(
+		const parsed = parseSingleTaskLine(
 			reconstructedLine,
 			filePath,
 			fileName,
@@ -386,6 +462,22 @@ export class DataviewDataSource implements IDataSource {
 			enabledFormats,
 			this.config.globalFilter
 		);
+		if (!parsed) return null;
+
+		if (rawTask.children) {
+			const { subtasks, bulletItems } = extractTaskChildrenFromDataview(
+				rawTask.children,
+				this.config.globalFilter
+			);
+			if (subtasks.length > 0) {
+				parsed.subtasks = subtasks;
+			}
+			if (bulletItems.length > 0) {
+				parsed.bulletItems = bulletItems;
+			}
+		}
+
+		return parsed;
 	}
 
 	private resolveFileBasename(filePath: string): string {
@@ -435,12 +527,89 @@ export class DataviewDataSource implements IDataSource {
 		const metadataCache = this.app.metadataCache as unknown as {
 			on?: (name: string, cb: (...args: unknown[]) => void) => EventRef;
 		};
-		if (typeof metadataCache?.on !== 'function') return;
+		if (typeof metadataCache?.on === 'function') {
+			const ref = metadataCache.on('dataview:metadata-change', (op: unknown, file?: unknown, oldPath?: unknown) => {
+				this.handleMetadataChange(op, file, oldPath);
+			});
+			this.metadataEventRefs.push(ref);
+		}
 
-		const ref = metadataCache.on('dataview:metadata-change', (op: unknown, file?: unknown, oldPath?: unknown) => {
-			this.handleMetadataChange(op, file, oldPath);
-		});
-		this.metadataEventRefs.push(ref);
+		// 同时监听 vault 的 modify / create / delete / rename：
+		// Dataview 后台 Worker 依赖 metadataCache 'resolve'，且在同文件并发修改时
+		// Dataview FileImporter.reloadSet 会丢弃后续重载请求；直接监听 vault 事件并单文件直读可保证 50ms 内可靠刷新
+		const vault = this.app.vault as unknown as {
+			on?: (name: string, cb: (...args: unknown[]) => void) => EventRef;
+		} | undefined;
+		if (typeof vault?.on === 'function') {
+			this.vaultEventRefs.push(
+				vault.on('modify', (file: unknown) => {
+					if (file instanceof TFile && file.extension === 'md') {
+						this.scheduleFileDebounce(file.path, () => {
+							void this.refreshFile(file.path);
+						});
+					}
+				})
+			);
+			this.vaultEventRefs.push(
+				vault.on('create', (file: unknown) => {
+					if (file instanceof TFile && file.extension === 'md') {
+						this.scheduleFileDebounce(file.path, () => {
+							void this.refreshFile(file.path);
+						});
+					}
+				})
+			);
+			this.vaultEventRefs.push(
+				vault.on('delete', (file: unknown) => {
+					if (file instanceof TFile && file.extension === 'md') {
+						this.clearFileDebounce(file.path);
+						this.directRefreshedPaths.delete(file.path);
+						void this.enqueueFileRun(file.path, () => this.runFileDeletion(file.path));
+					}
+				})
+			);
+			this.vaultEventRefs.push(
+				vault.on('rename', (file: unknown, oldPath: unknown) => {
+					if (file instanceof TFile && file.extension === 'md') {
+						if (typeof oldPath === 'string') {
+							this.clearFileDebounce(oldPath);
+							this.directRefreshedPaths.delete(oldPath);
+							void this.enqueueFileRun(oldPath, () => this.runFileDeletion(oldPath));
+						}
+						this.clearFileDebounce(file.path);
+						void this.refreshFile(file.path);
+					}
+				})
+			);
+		}
+
+		// 监听 Markdown 编辑器实时输入：用户在笔记内编辑任务但尚未触发 Obsidian 2s 自动落盘时，
+		// 自动从内存编辑器读取最新内容刷新侧边栏与日历（排除弹窗内嵌 DescriptionEditor 伪宿主）
+		const ws = this.app.workspace as unknown as {
+			on?: (name: string, cb: (...args: unknown[]) => void) => EventRef;
+		} | undefined;
+		if (typeof ws?.on === 'function') {
+			this.workspaceEventRefs.push(
+				ws.on('editor-change', (_editor: unknown, info: unknown) => {
+					if (!info || typeof info !== 'object' || isDescriptionEditorOwner(info)) return;
+					const file = (info as { file?: unknown }).file;
+					const path =
+						file instanceof TFile && file.extension === 'md'
+							? file.path
+							: file && typeof (file as { path?: unknown }).path === 'string' && (file as { path: string }).path.endsWith('.md')
+								? (file as { path: string }).path
+								: null;
+					if (!path) return;
+					this.scheduleFileDebounce(
+						path,
+						() => {
+							void this.refreshFile(path);
+						},
+						this.EDITOR_DEBOUNCE_MS
+					);
+				})
+			);
+		}
 	}
 
 	private handleMetadataChange(op: unknown, file?: unknown, oldPath?: unknown): void {
@@ -500,15 +669,21 @@ export class DataviewDataSource implements IDataSource {
 	}
 
 	private enqueueFileRun(filePath: string, taskFn: () => Promise<void>): Promise<void> {
+		this.queuedTaskFns.set(filePath, taskFn);
 		const queued = this.queuedRuns.get(filePath);
 		if (queued) return queued;
 
 		const running = this.runningRuns.get(filePath);
-		if (!running) return this.startFileRun(filePath, taskFn);
-
-		const next = running.then(() => {
-			this.queuedRuns.delete(filePath);
+		if (!running) {
+			this.queuedTaskFns.delete(filePath);
 			return this.startFileRun(filePath, taskFn);
+		}
+
+		const next = running.catch(() => {}).then(() => {
+			this.queuedRuns.delete(filePath);
+			const latestFn = this.queuedTaskFns.get(filePath) ?? taskFn;
+			this.queuedTaskFns.delete(filePath);
+			return this.startFileRun(filePath, latestFn);
 		});
 		this.queuedRuns.set(filePath, next);
 		return next;
@@ -525,9 +700,11 @@ export class DataviewDataSource implements IDataSource {
 	}
 
 	private async runFileDeletion(filePath: string): Promise<void> {
-		const oldCache = this.cache.get(filePath);
+		const gen = this.generation;
 		this.cache.delete(filePath);
-		if (oldCache && this.changeHandler) {
+		this.directRefreshedPaths.delete(filePath);
+		if (gen !== this.generation) return;
+		if (this.changeHandler) {
 			await this.changeHandler({
 				sourceId: this.sourceId,
 				created: [],
@@ -539,6 +716,7 @@ export class DataviewDataSource implements IDataSource {
 	}
 
 	private async runDataviewFileUpdate(filePath: string): Promise<void> {
+		const gen = this.generation;
 		try {
 			if (!isDataviewPluginEnabled(this.app)) {
 				throw new Error('Dataview plugin disabled or unavailable');
@@ -549,16 +727,28 @@ export class DataviewDataSource implements IDataSource {
 			const hasVaultLookup = typeof this.app.vault?.getAbstractFileByPath === 'function';
 			const currentFile = hasVaultLookup ? this.app.vault.getAbstractFileByPath(filePath) : undefined;
 
-			// 若 vault 已不存在该文件且 Dataview 也不再包含该页 → 视为已删除/重命名清理
-			if (hasVaultLookup && !currentFile && !page) {
+			// 若 vault 已不存在该文件 → 无论 Dataview 内存里是否仍有旧 page，一律按删除/重命名清理，绝不复活旧 key
+			if (hasVaultLookup && !currentFile) {
 				await this.runFileDeletion(filePath);
 				return;
 			}
 
-			// 若此前通过 refreshFile 直接解析了更新的磁盘版本，忽略较早 mtime 的 Dataview 延迟事件
-			const dvMtime = extractMtimeMs(page?.file?.mtime);
-			if (oldCache?.source === 'direct' && dvMtime !== null && dvMtime < oldCache.lastModified) {
-				return;
+			// 若该文件已走过直读刷新（含删空了任务的笔记）或当前编辑器有未保存修改：
+			// 一律走直接读取文件内容对账，绝不采用 Dataview 延迟 Worker 快照（避免时区偏移 mtime 或同毫秒写入回滚/复活旧任务）
+			if (
+				oldCache?.source === 'direct' ||
+				this.directRefreshedPaths.has(filePath) ||
+				getDirtyEditorContent(this.app, filePath) !== null
+			) {
+				const dvMtime = extractMtimeMs(page?.file?.mtime);
+				if (oldCache?.source === 'direct' && dvMtime !== null && dvMtime < oldCache.lastModified) {
+					return;
+				}
+				const vaultReader = this.app.vault as unknown as { read?: (file: object) => Promise<string> } | undefined;
+				if (currentFile && typeof vaultReader?.read === 'function') {
+					await this.runDirectFileRefresh(filePath);
+					return;
+				}
 			}
 
 			const rawTasks = toArray(page?.file?.tasks);
@@ -573,7 +763,8 @@ export class DataviewDataSource implements IDataSource {
 			}
 			newTasks.sort((a, b) => a.lineNumber - b.lineNumber);
 
-			await this.commitFileTasks(filePath, oldCache, newTasks, 'dataview', page);
+			if (gen !== this.generation) return;
+			await this.commitFileTasks(filePath, this.cache.get(filePath), newTasks, 'dataview', page);
 		} catch (error) {
 			Logger.error('DataviewDataSource', `Error processing dataview update for ${filePath}:`, error);
 			this.onFatalError?.(error);
@@ -581,8 +772,8 @@ export class DataviewDataSource implements IDataSource {
 	}
 
 	private async runDirectFileRefresh(filePath: string): Promise<void> {
+		const gen = this.generation;
 		const abstractFile = this.app.vault?.getAbstractFileByPath?.(filePath);
-		const oldCache = this.cache.get(filePath);
 
 		if (typeof this.app.vault?.getAbstractFileByPath === 'function' && !abstractFile) {
 			await this.runFileDeletion(filePath);
@@ -595,7 +786,35 @@ export class DataviewDataSource implements IDataSource {
 
 		const vaultReader = this.app.vault as unknown as { read?: (file: object) => Promise<string> } | undefined;
 		if (isFileLike && typeof vaultReader?.read === 'function') {
-			const content = await vaultReader.read(abstractFile);
+			this.directRefreshedPaths.add(filePath);
+			let content: string;
+			try {
+				content =
+					abstractFile instanceof TFile
+						? await readLiveOrVaultContent(this.app, abstractFile)
+						: await vaultReader.read(abstractFile);
+			} catch (err) {
+				if (gen !== this.generation) return;
+				// 文件在读取瞬间已被删除/重命名（常见于关页触发 refreshFile 与 vault.delete 并发 → ENOENT）：
+				// 静默按删除清理，绝不抛错中断串行队列或残留旧 key
+				if (typeof this.app.vault?.getAbstractFileByPath === 'function' && !this.app.vault.getAbstractFileByPath(filePath)) {
+					await this.runFileDeletion(filePath);
+					return;
+				}
+				const msg = err instanceof Error ? err.message : String(err);
+				if (msg.includes('ENOENT')) {
+					await this.runFileDeletion(filePath);
+					return;
+				}
+				Logger.warn('DataviewDataSource', `Direct read failed for ${filePath}:`, err);
+				return;
+			}
+			if (gen !== this.generation) return;
+			// 读盘期间文件被删或改名 → 放弃旧快照，按删除清理
+			if (typeof this.app.vault?.getAbstractFileByPath === 'function' && !this.app.vault.getAbstractFileByPath(filePath)) {
+				await this.runFileDeletion(filePath);
+				return;
+			}
 			const lines = content.split('\n');
 			const listItems: ListItemCache[] = [];
 			for (let i = 0; i < lines.length; i++) {
@@ -616,7 +835,7 @@ export class DataviewDataSource implements IDataSource {
 					? parseTasksFromListItems(fileRef, lines, listItems, enabledFormats, this.config.globalFilter)
 					: [];
 
-			await this.commitFileTasks(filePath, oldCache, newTasks, 'direct');
+			await this.commitFileTasks(filePath, this.cache.get(filePath), newTasks, 'direct');
 			return;
 		}
 
@@ -650,7 +869,12 @@ export class DataviewDataSource implements IDataSource {
 	private async reconcileGroupedTasks(tasksByFile: Map<string, GCTask[]>, initial: boolean): Promise<void> {
 		const deletedFilePaths: string[] = [];
 		for (const cachedPath of Array.from(this.cache.keys())) {
-			if (!tasksByFile.has(cachedPath)) {
+			if (
+				!tasksByFile.has(cachedPath) &&
+				!this.directRefreshedPaths.has(cachedPath) &&
+				!this.runningRuns.has(cachedPath) &&
+				!this.queuedRuns.has(cachedPath)
+			) {
 				this.cache.delete(cachedPath);
 				deletedFilePaths.push(cachedPath);
 			}
@@ -662,6 +886,13 @@ export class DataviewDataSource implements IDataSource {
 		const fileSnapshots: NonNullable<DataSourceChanges['fileSnapshots']> = [];
 
 		for (const [filePath, newTasks] of tasksByFile) {
+			if (
+				this.directRefreshedPaths.has(filePath) ||
+				this.runningRuns.has(filePath) ||
+				this.queuedRuns.has(filePath)
+			) {
+				continue;
+			}
 			const oldCache = this.cache.get(filePath);
 			const nextCache = this.buildFileCache(filePath, newTasks, 'dataview');
 			this.cache.set(filePath, nextCache);
@@ -693,6 +924,11 @@ export class DataviewDataSource implements IDataSource {
 				},
 				initial ? { initial: true } : undefined
 			);
+		}
+
+		// 对曾走过直读刷新的文件，直接读最新文件/编辑器内容对账，防止 Dataview 内存旧快照覆盖
+		for (const directPath of Array.from(this.directRefreshedPaths)) {
+			await this.refreshFile(directPath);
 		}
 	}
 

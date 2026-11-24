@@ -13,6 +13,33 @@ export interface MetadataField {
 	value: string;
 }
 
+/** 任务的一级子任务（只支持显示一级） */
+export interface TaskSubtask {
+	/** 1-based 行号 */
+	lineNumber: number;
+	/** 复选框字符（' ' / 'x' / '/' / '-' 等） */
+	checkboxSymbol: string;
+	completed: boolean;
+	cancelled?: boolean;
+	status?: TaskStatusType;
+	/** 清理后的显示文本 */
+	description: string;
+	/** 复选框后的原始文本 */
+	rawContent: string;
+}
+
+/** 任务下方的非任务 bullet item（支持多级纯文字，不含子任务及其下级） */
+export interface TaskBulletItem {
+	/** 1-based 行号 */
+	lineNumber: number;
+	/** 相对任务直接子级的缩进层级：0 = 一级，1 = 二级，2 = 三级… */
+	level: number;
+	/** 列表标记（如 '-', '*', '+', '1.'） */
+	marker: string;
+	/** 列表项正文（不含列表标记） */
+	text: string;
+}
+
 export type CalendarViewType = 'year' | 'month' | 'week' | 'day' | 'task' | 'gantt';
 
 // 甘特图时间颗粒度类型（仅支持周视图）
@@ -144,6 +171,10 @@ export interface GCTask {
 	fileTask?: FileTask;
 	/** 视图层占位：ICS 订阅事件（只读，内存态，不对应任何任务行） */
 	icsEvent?: IcsEventInfo;
+	/** 直接子任务列表（仅一级，不含二级及以下子任务） */
+	subtasks?: TaskSubtask[];
+	/** 任务下方的 bullet items（多级纯文字，已过滤子任务及其下级内容） */
+	bulletItems?: TaskBulletItem[];
 }
 
 /** ICS 事件占位任务的附加信息 */
@@ -354,6 +385,7 @@ export interface IPluginContext {
 		offUpdate(handler: (filePath?: string) => void): void;
 		refreshFile(filePath: string): Promise<void>;
 		initialize(globalTaskFilter: string, enabledFormats?: string[], retryCount?: number): Promise<void>;
+		reloadAll?(): Promise<void>;
 	};
 	calendarView?: {
 		selectDate(date: Date, viewType?: CalendarViewType): void;
@@ -361,5 +393,8 @@ export interface IPluginContext {
 	};
 	app: App;
 	dailyNoteIndex?: DailyNoteIndex;
+	fileTaskIndex?: {
+		rebuild(): void;
+	};
 	refreshCalendarViews(): void;
 }

@@ -21,6 +21,7 @@ import {
 } from './dailyNoteSettingsBridge';
 import { getDailyNote as getDailyNoteFromIndex, createDailyNote } from 'obsidian-daily-notes-interface';
 import { showConfirmDialog } from '../ui/modals/ConfirmDialog';
+import { flushDirtyMarkdownViews } from './liveEditorHelper';
 
 /**
  * 搜索结果接口
@@ -339,6 +340,7 @@ async function insertTaskToFile(
 	taskData: CreateTaskData,
 	heading?: string
 ): Promise<void> {
+	await flushDirtyMarkdownViews(app, file.path);
 	const content = await app.vault.read(file);
 	const lines = content.split('\n');
 
@@ -382,6 +384,7 @@ export async function createTaskInFile(
 	// 手输时允许省略 .md 或只写笔记名（按链接解析）
 	const file = app.vault.getFileByPath(filePath) ?? app.metadataCache.getFirstLinkpathDest(filePath, '');
 	if (!file || file.extension !== 'md') return null;
+	await flushDirtyMarkdownViews(app, file.path);
 	const lines = (await app.vault.read(file)).split('\n');
 	const taskLine = serializeNewTask(taskData, app);
 
@@ -547,6 +550,7 @@ export interface CreateAtLine {
 export async function createTaskAtLine(app: App, at: CreateAtLine, taskData: CreateTaskData): Promise<string | null> {
 	const file = app.vault.getFileByPath(at.filePath);
 	if (!file) return null;
+	await flushDirtyMarkdownViews(app, file.path);
 	const taskLine = at.indent + serializeNewTask(taskData, app);
 	await app.vault.process(file, (data) => {
 		const lines = data.split('\n');

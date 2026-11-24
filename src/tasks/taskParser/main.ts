@@ -31,6 +31,7 @@ import { passesGlobalFilter, removeGlobalFilter } from './step2';
 import { detectFormat } from './step3';
 import { parseCheckboxStatus, parseTaskAttributes } from './step4';
 import { extractTaskDescription, extractTags, extractTicktick, findMetadataValue, parsePlannerTime } from './utils';
+import { extractTaskChildrenFromLines } from './children';
 
 // ==================== 主解析函数 ====================
 
@@ -177,6 +178,15 @@ export function parseTasksFromListItems(
             !task.completionDate
         ) {
             task.warning = i18n.t('taskWarnings.unscheduled');
+        }
+
+        // ==================== 解析一级子任务与多级 bullet items ====================
+        const { subtasks, bulletItems } = extractTaskChildrenFromLines(lines, lineNumber, globalTaskFilter);
+        if (subtasks.length > 0) {
+            task.subtasks = subtasks;
+        }
+        if (bulletItems.length > 0) {
+            task.bulletItems = bulletItems;
         }
 
         tasks.push(task);

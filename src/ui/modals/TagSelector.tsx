@@ -9,6 +9,7 @@ import {
 	applyTagCompletion,
 	buildTagSelectorModel,
 	getDrillDownRows,
+	getFileFrequentTags,
 	normalizeTagInput,
 	searchTags,
 	suggestTags,
@@ -21,12 +22,18 @@ import {
 export interface TagSelectorProps {
 	/** 所有任务（用于计算推荐标签） */
 	allTasks: GCTask[];
+	/** 当前任务所在文件路径（用于在标签选择器下方推荐本文件常用标签） */
+	currentFilePath?: string;
+	/** 推荐时排除的精确标签（如全局筛选符裸标签 #task） */
+	excludeFrequentTags?: string[];
 	/** 初始已选标签 */
 	initialTags?: string[];
 	/** 标签变化回调 */
 	onChange: (tags: string[]) => void;
 }
 
+/** 本文件常用标签推荐上限（4-5 个） */
+const MAX_FILE_FREQUENT_TAGS = 5;
 /** 搜索结果展示上限 */
 const MAX_SEARCH_RESULTS = 40;
 /** 自动补全下拉展示上限 */
@@ -44,7 +51,7 @@ const VIEWPORT_MARGIN = 8;
  *   面包屑「全部标签 › #a › #a/b」可一键收起到任一层级。
  * - 输入关键词时改为扁平列出任意层级的匹配标签；回车按输入精确切换/创建标签。
  */
-export function TagSelector({ allTasks, initialTags, onChange }: TagSelectorProps): JSX.Element {
+export function TagSelector({ allTasks, currentFilePath, excludeFrequentTags, initialTags, onChange }: TagSelectorProps): JSX.Element {
 	const [selectedTags, setSelectedTags] = useState<Set<string>>(() => new Set(mergeTagSet(initialTags || [])));
 	const [query, setQuery] = useState('');
 	/** 当前展开路径：[一级, 二级, …]，每项为完整路径 */
@@ -58,6 +65,10 @@ export function TagSelector({ allTasks, initialTags, onChange }: TagSelectorProp
 	const popupRef = useRef<HTMLDivElement | null>(null);
 
 	const model = useMemo(() => buildTagSelectorModel(allTasks), [allTasks]);
+	const fileFrequentTags = useMemo(
+		() => getFileFrequentTags(allTasks, currentFilePath, MAX_FILE_FREQUENT_TAGS, excludeFrequentTags),
+		[allTasks, currentFilePath, excludeFrequentTags]
+	);
 	const rows = useMemo(() => getDrillDownRows(model, expandedPath), [model, expandedPath]);
 	const searchResults = useMemo(
 		() => searchTags(model, query, MAX_SEARCH_RESULTS),
@@ -388,6 +399,28 @@ export function TagSelector({ allTasks, initialTags, onChange }: TagSelectorProp
 					</>
 				)}
 			</div>
+
+			{/* 本文件常用标签推荐（4-5 个，位于标签选择器下方） */}
+			{fileFrequentTags.length > 0 ? (
+				<div className={TagSelectorClasses.elements.fileFrequentSection}>
+					<small className={TagSelectorClasses.elements.label}>
+						<Icon icon="file-text" />
+						{i18n.t('modals.createTask.tags.fileFrequentLabel')}
+					</small>
+					<div className={TagSelectorClasses.elements.pills}>
+						{fileFrequentTags.map(([tag, count]) => (
+							<TagPillChip
+								key={tag}
+								fullPath={tag}
+								selected={selectedTags.has(tag)}
+								implied={isImpliedTag(tag, selectedTags)}
+								count={count}
+								onToggle={() => toggleTag(tag)}
+							/>
+						))}
+					</div>
+				</div>
+			) : null}
 		</div>
 	);
 }

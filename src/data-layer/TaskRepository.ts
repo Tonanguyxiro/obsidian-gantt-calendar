@@ -92,6 +92,8 @@ export class TaskRepository {
 	 * @param sourceId - 数据源ID
 	 */
 	unregisterDataSource(sourceId: string): void {
+		const source = this.dataSources.get(sourceId);
+		source?.onChange(() => {});
 		this.dataSources.delete(sourceId);
 	}
 
@@ -297,17 +299,38 @@ export class TaskRepository {
 
 		const result: GCTask[] = [];
 		const seenIdentity = new Set<string>();
+		const orphanBucketIds: string[] = [];
 		for (const id of candidateIds) {
 			const task = this.taskCache.get(id);
-			if (!task) continue;
+			if (!task) {
+				orphanBucketIds.push(id);
+				continue;
+			}
+			const identity = generateTaskId(task);
+			if (identity !== id) {
+				// 发现历史残留错位 key：立即执行全局去重自愈
+				this.dedupeOutput();
+				const healed = this.taskCache.get(identity);
+				if (!healed) continue;
+				if (dateField !== undefined) {
+					const date = healed[dateField] as unknown;
+					if (!isValidDateValue(date) || date < start || date > end) continue;
+				}
+				if (seenIdentity.has(identity)) continue;
+				seenIdentity.add(identity);
+				result.push(healed);
+				continue;
+			}
 			if (dateField !== undefined) {
 				const date = task[dateField] as unknown;
 				if (!isValidDateValue(date) || date < start || date > end) continue;
 			}
-			const identity = generateTaskId(task);
 			if (seenIdentity.has(identity)) continue;
 			seenIdentity.add(identity);
 			result.push(task);
+		}
+		for (const orphanId of orphanBucketIds) {
+			this.unindexTask(orphanId);
 		}
 		return result;
 	}
@@ -322,6 +345,24 @@ export class TaskRepository {
 		return Array.from(taskIds)
 			.map(id => this.taskCache.get(id)!)
 			.filter(Boolean);
+	}
+
+	/**
+	 * 静默对账某文件的权威任务 ID 快照：删除仓库中该文件下已不在快照中的残留 key。
+	 * 无残留时零事件开销；发现残留时立即清理并发布 task:deleted。
+	 */
+	reconcileFileSnapshot(filePath: string, taskIds: readonly string[]): number {
+		const indexed = this.fileIndex.get(filePath);
+		if (!indexed) return 0;
+		const keep = new Set(taskIds);
+		const stale = Array.from(indexed).filter((id) => !keep.has(id));
+		if (stale.length === 0) return 0;
+		Logger.warn('TaskRepository', `Stale task keys purged for ${filePath}:`, stale);
+		for (const taskId of stale) {
+			this.removeKey(taskId, filePath);
+			this.eventBus.emit('task:deleted', { taskId });
+		}
+		return stale.length;
 	}
 
 	/**
@@ -408,52 +449,62 @@ export class TaskRepository {
 			deletedFilePaths: changes.deletedFilePaths?.length || 0
 		});
 
-		// 处理新增任务
+		// 两阶段原子更新：先移除全部失效/删除的旧 key，再写入全部新增/更新后的任务，
+		// 防止链式行号漂移（如 10→12 与 12→14）或 created+updated 同 key 时后一次 removeKey 误删刚写入的新任务。
+		const toPut: Array<{ id: string; task: GCTask; event: 'created' | 'updated' }> = [];
+		const deletedIds: string[] = [];
+
+		// 收集新增任务
 		for (const task of changes.created) {
 			const taskId = generateTaskId(task);
-			this.putTask(taskId, task);
-
-			// 首扫只维护缓存，等批量加载完成后统一通知，避免大库产生任务数级别的定时器 churn
-			if (!isInitialLoad) {
-				this.eventBus.emit('task:created', { task });
-			}
+			toPut.push({ id: taskId, task, event: 'created' });
 		}
 
-		// 处理更新任务
+		// 收集更新任务（含行号漂移换 key）
+		const movedOldKeys: Array<{ id: string; filePath?: string }> = [];
 		for (const { id, changes: taskChanges, task: newTask } of changes.updated) {
-			let updatedTask: GCTask | undefined;
-
-			// 优先使用完整的新任务对象（如果提供）
 			if (newTask) {
-				updatedTask = newTask;
-				// 行号漂移的指纹重配以旧 ID 发 updated：换到新 key，否则旧 key 残留成重复任务
 				const newId = generateTaskId(newTask);
 				if (newId !== id) {
-					this.removeKey(id, newTask.filePath);
+					movedOldKeys.push({ id, filePath: newTask.filePath });
 				}
-				// 同 key 也走 putTask：仓库此前缺该 key 时补上文件索引
-				this.putTask(newId, newTask);
+				toPut.push({ id: newId, task: newTask, event: 'updated' });
 			} else {
-				// 否则使用增量更新
 				const task = this.taskCache.get(id);
 				if (task) {
-					updatedTask = { ...task, ...taskChanges };
-					this.putTask(id, updatedTask);
+					const updatedTask = { ...task, ...taskChanges };
+					const newId = generateTaskId(updatedTask);
+					if (newId !== id) {
+						movedOldKeys.push({ id, filePath: updatedTask.filePath });
+					}
+					toPut.push({ id: newId, task: updatedTask, event: 'updated' });
 				}
-			}
-
-			if (updatedTask) {
-				// 发布事件
-				this.eventBus.emit('task:updated', { task: updatedTask });
 			}
 		}
 
-		// 处理删除任务
+		// Phase 1: 先移除删除项与漂移旧 key
 		for (const task of changes.deleted) {
 			const taskId = generateTaskId(task);
 			this.removeKey(taskId, task.filePath);
+			deletedIds.push(taskId);
+		}
+		for (const { id, filePath } of movedOldKeys) {
+			this.removeKey(id, filePath);
+		}
 
-			// 发布事件
+		// Phase 2: 写入全部新/更新任务并发布事件
+		for (const { id, task, event } of toPut) {
+			this.putTask(id, task);
+			if (event === 'created') {
+				// 首扫只维护缓存，等批量加载完成后统一通知，避免大库产生任务数级别的定时器 churn
+				if (!isInitialLoad) {
+					this.eventBus.emit('task:created', { task });
+				}
+			} else {
+				this.eventBus.emit('task:updated', { task });
+			}
+		}
+		for (const taskId of deletedIds) {
 			this.eventBus.emit('task:deleted', { taskId });
 		}
 
@@ -474,16 +525,7 @@ export class TaskRepository {
 		// 按数据源给出的权威快照对账：删除该文件下数据源已不认识的残留 key
 		if (changes.fileSnapshots) {
 			for (const { filePath, taskIds } of changes.fileSnapshots) {
-				const indexed = this.fileIndex.get(filePath);
-				if (!indexed) continue;
-				const keep = new Set(taskIds);
-				const stale = Array.from(indexed).filter(id => !keep.has(id));
-				if (stale.length === 0) continue;
-				Logger.warn('TaskRepository', `Stale task keys purged for ${filePath}:`, stale);
-				for (const taskId of stale) {
-					this.removeKey(taskId, filePath);
-					this.eventBus.emit('task:deleted', { taskId });
-				}
+				this.reconcileFileSnapshot(filePath, taskIds);
 			}
 		}
 

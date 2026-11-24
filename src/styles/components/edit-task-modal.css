@@ -4,7 +4,7 @@
 		width: 100%;
 	}
 	.gc-edit-task-modal__scroll-container {
-		max-height: 65vh;
+		max-height: min(60vh, calc(100vh - clamp(72px, 14vh, 152px) - 180px));
 		overflow-y: auto;
 		overflow-x: hidden;
 		margin-right: -12px;
@@ -342,10 +342,16 @@
 
 .gc-edit-task-modal__desc-container .gc-desc-editor__native {
 	min-height: 64px;
-	border: 1px solid transparent;
+	border: 1px solid var(--background-modifier-border);
 	border-radius: var(--radius-m, 8px);
-	background: var(--background-modifier-form-field, var(--background-secondary));
+	background: var(--background-secondary);
 	font-size: var(--font-ui-medium);
+	transition: border-color var(--gc-dur-fast, 0.12s) var(--gc-ease-out, ease),
+		box-shadow var(--gc-dur-fast, 0.12s) var(--gc-ease-out, ease);
+}
+
+.gc-edit-task-modal__desc-container .gc-desc-editor__native:hover {
+	border-color: var(--background-modifier-border-hover, var(--text-faint));
 }
 
 .gc-edit-task-modal__desc-container .gc-desc-editor__native:focus-within {
@@ -631,4 +637,156 @@
 	border-top: 1px solid var(--background-modifier-border);
 	color: var(--text-faint);
 	font-size: var(--font-ui-smaller);
+}
+
+/* ==================== 本文件常用标签推荐（标签选择器下方） ==================== */
+.gc-tag-selector__file-frequent-section {
+	margin-top: 8px;
+	padding-top: 8px;
+	border-top: 1px dashed var(--background-modifier-border);
+}
+
+.gc-tag-selector__file-frequent-section .gc-tag-selector__label .svg-icon {
+	width: 12px;
+	height: 12px;
+	color: var(--text-faint);
+}
+
+/* ==================== 任务下方的多级 bullet items（兼容任务编辑框） ==================== */
+.gc-edit-task-modal__bullet-notes {
+	margin-top: 8px;
+}
+
+.gc-edit-task-modal__bullet-notes .gc-desc-editor__native {
+	min-height: 44px;
+	max-height: 168px;
+	overflow-y: auto;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m, 8px);
+	background: var(--background-secondary);
+	font-size: var(--font-ui-small);
+}
+
+.gc-edit-task-modal__bullet-notes .gc-desc-editor__native:focus-within {
+	border-color: var(--background-modifier-border-focus, var(--interactive-accent));
+	box-shadow: 0 0 0 2px var(--background-modifier-box-shadow, transparent);
+}
+
+.gc-edit-task-modal__bullet-notes .gc-desc-editor__native.markdown-source-view.mod-cm6 .cm-content {
+	padding: 8px 12px;
+	font-size: var(--font-ui-small);
+	line-height: 1.5;
+}
+
+.gc-edit-task-modal__bullet-notes .gc-edit-task-modal__desc-textarea {
+	min-height: 56px;
+	max-height: 168px;
+	resize: vertical;
+	font-size: var(--font-ui-small);
+	line-height: 1.5;
+}
+
+.gc-edit-task-modal button.gc-edit-task-modal__bullet-notes-toggle {
+	display: inline-flex;
+	align-items: center;
+	justify-content: flex-start;
+	gap: 5px;
+	height: auto;
+	margin-top: 6px;
+	padding: 3px 8px;
+	border: 1px dashed var(--background-modifier-border);
+	border-radius: var(--radius-s, 6px);
+	background: transparent;
+	box-shadow: none;
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	cursor: pointer;
+}
+
+.gc-edit-task-modal button.gc-edit-task-modal__bullet-notes-toggle:hover {
+	background: var(--background-modifier-hover);
+	border-color: var(--text-muted);
+	color: var(--text-normal);
+}
+
+.gc-edit-task-modal button.gc-edit-task-modal__bullet-notes-toggle .svg-icon {
+	width: 13px;
+	height: 13px;
+}
+
+/* ==================== 编辑框下方的一级子任务列表 ==================== */
+.gc-edit-task-modal__subtasks {
+	margin-top: 10px;
+	padding: 8px 10px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m, 8px);
+	background: var(--background-secondary);
+}
+
+.gc-edit-task-modal__subtasks-header {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-bottom: 6px;
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+	font-weight: 600;
+}
+
+.gc-edit-task-modal__subtasks-header .svg-icon {
+	width: 14px;
+	height: 14px;
+	color: var(--text-faint);
+}
+
+.gc-edit-task-modal__subtasks-count {
+	margin-left: auto;
+	padding: 0 6px;
+	border-radius: var(--gc-radius-full, 999px);
+	background: var(--background-modifier-hover);
+	color: var(--text-muted);
+	font-size: var(--gc-font-2xs);
+	font-weight: 500;
+}
+
+.gc-edit-task-modal__subtasks-list {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	max-height: 140px;
+	overflow-y: auto;
+}
+
+.gc-edit-task-modal__subtask-item {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	padding: 3px 4px;
+	border-radius: var(--radius-s, 4px);
+	color: var(--text-normal);
+	font-size: var(--font-ui-small);
+	line-height: 1.4;
+	cursor: pointer;
+}
+
+.gc-edit-task-modal__subtask-item:hover {
+	background: var(--background-modifier-hover);
+}
+
+.gc-edit-task-modal__subtask-checkbox {
+	flex: none;
+	margin: 2px 0 0;
+	cursor: pointer;
+}
+
+.gc-edit-task-modal__subtask-text {
+	flex: 1;
+	min-width: 0;
+	word-break: break-word;
+	overflow-wrap: anywhere;
+}
+
+.gc-edit-task-modal__subtask-item--completed .gc-edit-task-modal__subtask-text {
+	color: var(--text-muted);
+	text-decoration: line-through;
 }

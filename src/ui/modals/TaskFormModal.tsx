@@ -7,7 +7,7 @@ import type { CreateTaskData } from '../../utils/dailyNoteHelper';
 import { createTaskInDailyNote, createTaskInWeeklyNote, createTaskInFile, createTaskAtLine, type CreateAtLine } from '../../utils/dailyNoteHelper';
 import { getDailyNotePathForDate, getWeeklyNoteConfig, getWeeklyNotePath } from '../../utils/dailyNoteSettingsBridge';
 import type { TaskUpdates } from '../../tasks/taskSerializer';
-import { updateTaskProperties } from '../../tasks/taskUpdater';
+import { refreshTaskView, updateTaskProperties } from '../../tasks/taskUpdater';
 import { Logger } from '../../utils/logger';
 import { i18n } from '../../i18n/i18n';
 import { EditTaskModalClasses, ModalClasses, TaskKindClasses } from '../../utils/bem';
@@ -16,6 +16,7 @@ import { TagSelector } from './TagSelector';
 import { RepeatSection } from './RepeatSection';
 import { DateTimePicker } from '../components/DateTimePicker';
 import { DescriptionEditor } from '../components/DescriptionEditor';
+import { DescriptionWithLinks } from '../components/DescriptionWithLinks';
 import { Popover } from '../components/Popover';
 import { WhenPicker, type WhenValue } from '../components/WhenPicker';
 import { formatDuration, formatHm, hmToMin, minToHm, type TimeFormat } from '../../utils/timeOfDay';
@@ -23,6 +24,7 @@ import { Icon } from '../components/Icon';
 import { statusTransitionUpdates, getConfiguredStatuses, getPickerStatuses } from '../../tasks/statusTransition';
 import { legacyDaySlot, rewritePlannerPrefix } from '../../tasks/scheduledFallback';
 import { stripPlannerTime } from '../../tasks/taskParser/utils';
+import { formatBulletItemsForEditor, type SubtaskTogglePatch } from '../../tasks/taskParser/children';
 import { getStatusColor, getCurrentThemeMode } from '../../tasks/taskStatus';
 import { openReactModal } from './modalHost';
 import { useCalendarStore } from '../store/calendarStore';
@@ -249,6 +251,26 @@ export function TaskFormModal({
 	const [selectedTags, setSelectedTags] = useState<string[]>(mode === 'edit' ? (task?.tags || []) : []);
 	// 描述不含行首时间前缀：时刻由下方「时间片」管理，保存时再写回前缀
 	const [description, setDescription] = useState(mode === 'edit' ? stripPlannerTime(task?.description || '').trim() : (initialDescription ?? ''));
+	// 任务下方的非任务 bullet items（多级纯文字/列表，兼容 Live Preview 编辑框；已过滤子任务及其下级）
+	const initialBulletText = useMemo(
+		() => (mode === 'edit' ? formatBulletItemsForEditor(task?.bulletItems) : ''),
+		[mode, task]
+	);
+	const [bulletText, setBulletText] = useState(initialBulletText);
+	const [bulletsChanged, setBulletsChanged] = useState(false);
+	const [showBulletEditor, setShowBulletEditor] = useState(initialBulletText.length > 0);
+	// 任务下方的直接一级子任务（仅显示一级，支持在编辑框下方直接勾选状态）
+	const initialSubtasks = useMemo(
+		() => (mode === 'edit' ? task?.subtasks || [] : []),
+		[mode, task]
+	);
+	const [subtaskStates, setSubtaskStates] = useState<Record<number, boolean>>(() => {
+		const map: Record<number, boolean> = {};
+		for (const sub of initialSubtasks) {
+			map[sub.lineNumber] = sub.completed;
+		}
+		return map;
+	});
 	// 当日任务的时刻（写成行首时间前缀 "09:00 - 10:30"）；时间段任务不涉及时刻
 	const [slotStart, setSlotStart] = useState(initialSlot.start);
 	const [slotEnd, setSlotEnd] = useState(initialSlot.end);
@@ -411,6 +433,8 @@ export function TaskFormModal({
 					useCalendarStore.getState().notifyTasksUpdated(
 						plugin.taskCache.getAllTasks(), targetFilePath
 					);
+				} else {
+					await refreshTaskView(app, targetFilePath);
 				}
 				new Notice(i18n.t('modals.createTask.success'));
 				onSuccess();
@@ -477,6 +501,15 @@ export function TaskFormModal({
 			}
 			if (contentChanged || slotChanged) updates.content = rewritePlannerPrefix(description, slotPrefix);
 			if (tagsChanged) updates.tags = selectedTags;
+			if (bulletsChanged) updates.bulletText = bulletText;
+			const subtaskToggles: SubtaskTogglePatch[] = initialSubtasks
+				.filter((sub) => (subtaskStates[sub.lineNumber] ?? sub.completed) !== sub.completed)
+				.map((sub) => ({
+					lineNumber: sub.lineNumber,
+					rawContent: sub.rawContent,
+					completed: subtaskStates[sub.lineNumber] ?? sub.completed,
+				}));
+			if (subtaskToggles.length > 0) updates.subtaskToggles = subtaskToggles;
 
 			if (Object.keys(updates).length === 0) {
 				handleClose();
@@ -493,6 +526,8 @@ export function TaskFormModal({
 				useCalendarStore.getState().notifyTasksUpdated(
 					plugin.taskCache.getAllTasks(), taskToUpdate.filePath
 				);
+			} else {
+				await refreshTaskView(app, taskToUpdate.filePath);
 			}
 			onSuccess();
 			handleClose();
@@ -514,6 +549,37 @@ export function TaskFormModal({
 			?.plugins?.['gantt-calendar'] as { taskCache?: { getAllTasks: () => GCTask[] } } | undefined;
 		return internal?.taskCache?.getAllTasks() || [];
 	}, [mode, plugin, app]);
+
+	// 当前任务所在文件路径（用于标签选择器下方推荐本文件常用 4-5 个标签）
+	const currentFilePath = useMemo(() => {
+		if (mode === 'edit') return task?.filePath;
+		if (createAt?.filePath) return createAt.filePath;
+		const settings = plugin?.settings;
+		if (!settings) return undefined;
+		const day = dayStartOf(targetDate ?? new Date());
+		if (createTarget === 'daily') return getDailyNotePathForDate(app, settings, day);
+		if (createTarget === 'weekly') {
+			const weekly = getWeeklyNoteConfig(app, settings);
+			return weekly ? getWeeklyNotePath(weekly, day) : undefined;
+		}
+		if (createTarget === 'other') return otherPath.trim() || undefined;
+		return createTarget || undefined;
+	}, [mode, task?.filePath, createAt?.filePath, plugin?.settings, targetDate, createTarget, app, otherPath]);
+
+	// 排除全局筛选符裸标签（如 #task），避免占掉本文件常用标签名额（子标签如 #task/geek/obsidian 照常保留）
+	const excludeFrequentTags = useMemo(() => {
+		const rawFilter =
+			plugin?.settings.globalTaskFilter ??
+			(app as unknown as { plugins?: { plugins?: Record<string, { settings?: { globalTaskFilter?: string } }> } })
+				.plugins?.plugins?.['gantt-calendar']?.settings?.globalTaskFilter;
+		const trimmed = (rawFilter || '').trim();
+		return trimmed.startsWith('#') ? [trimmed] : undefined;
+	}, [plugin?.settings.globalTaskFilter, app]);
+
+	const completedSubtasksCount = useMemo(
+		() => initialSubtasks.filter((s) => subtaskStates[s.lineNumber] ?? s.completed).length,
+		[initialSubtasks, subtaskStates]
+	);
 
 	// 「时间」行的摘要（选择器收在弹层里，切换类型时弹窗高度不变、控件不移动）
 	// 「时间」面板的值与回写：严格对应 Tasks 字段（时间段 🛫/📅，当日 ⏳ + 时间前缀）
@@ -585,6 +651,83 @@ export function TaskFormModal({
 							<div className={EditTaskModalClasses.elements.sectionHint}>
 								{isEdit ? i18n.t('modals.editTask.submitHint') : i18n.t('modals.createTask.submitHint')}
 							</div>
+
+							{/* 任务下方的多级 bullet items（兼容任务编辑框，已过滤子任务及其下级） */}
+							{isEdit && showBulletEditor ? (
+								<div className={EditTaskModalClasses.elements.bulletNotes}>
+									<DescriptionEditor
+										app={app}
+										sourcePath={task?.filePath}
+										placeholder={i18n.t('modals.task.bulletNotesPlaceholder')}
+										value={bulletText}
+										multiline
+										hideHint
+										onChange={(v) => {
+											setBulletText(v);
+											setBulletsChanged(true);
+										}}
+										onSubmit={() => void saveTask()}
+									/>
+									<div className={EditTaskModalClasses.elements.sectionHint}>
+										{i18n.t('modals.task.bulletNotesHint')}
+									</div>
+								</div>
+							) : isEdit ? (
+								<button
+									type="button"
+									className={EditTaskModalClasses.elements.bulletNotesToggle}
+									onClick={() => setShowBulletEditor(true)}
+								>
+									<Icon icon="list" />
+									<span>{i18n.t('modals.task.addBulletNotes')}</span>
+								</button>
+							) : null}
+
+							{/* 直接一级子任务（在编辑框下面显示，只支持一级） */}
+							{isEdit && initialSubtasks.length > 0 ? (
+								<div className={EditTaskModalClasses.elements.subtasksSection}>
+									<div className={EditTaskModalClasses.elements.subtasksHeader}>
+										<Icon icon="list-checks" />
+										<span>{i18n.t('modals.task.subtasks')}</span>
+										<span className={EditTaskModalClasses.elements.subtasksCount}>
+											{`${completedSubtasksCount}/${initialSubtasks.length}`}
+										</span>
+									</div>
+									<div className={EditTaskModalClasses.elements.subtasksList}>
+										{initialSubtasks.map((sub) => {
+											const checked = subtaskStates[sub.lineNumber] ?? sub.completed;
+											return (
+												<label
+													key={sub.lineNumber}
+													className={[
+														EditTaskModalClasses.elements.subtaskItem,
+														...(checked ? [EditTaskModalClasses.elements.subtaskItemCompleted] : []),
+													].join(' ')}
+												>
+													<input
+														type="checkbox"
+														className={EditTaskModalClasses.elements.subtaskCheckbox}
+														checked={checked}
+														onChange={() =>
+															setSubtaskStates((prev) => ({
+																...prev,
+																[sub.lineNumber]: !(prev[sub.lineNumber] ?? sub.completed),
+															}))
+														}
+													/>
+													<span className={EditTaskModalClasses.elements.subtaskText}>
+														<DescriptionWithLinks
+															text={sub.description}
+															app={app}
+															sourcePath={task?.filePath}
+														/>
+													</span>
+												</label>
+											);
+										})}
+									</div>
+								</div>
+							) : null}
 						</div>
 					) : null}
 
@@ -710,6 +853,8 @@ export function TaskFormModal({
 						<PropRow icon="tags" label={i18n.t('modals.task.tags')}>
 							<TagSelector
 								allTasks={allTasksForTags}
+								currentFilePath={currentFilePath}
+								excludeFrequentTags={excludeFrequentTags}
 								initialTags={selectedTags}
 								onChange={(tags) => {
 									setSelectedTags(tags);

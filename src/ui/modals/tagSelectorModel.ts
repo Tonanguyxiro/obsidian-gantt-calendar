@@ -142,3 +142,47 @@ export function addTagMerged(selected: string[], tag: string): string[] {
 export function mergeTagSet(tags: string[]): string[] {
 	return tags.reduce<string[]>((acc, t) => addTagMerged(acc, t), []);
 }
+
+/**
+ * 统计当前文件内最常用的具体标签（供任务弹窗在标签选择器下方推荐 4-5 个）。
+ * - 仅统计 `task.filePath === filePath` 的任务；
+ * - 按任务显式携带的具体标签计数（不向上展开祖先前缀，避免父级前缀占满名额）；
+ * - 同一任务内大小写不敏感去重，保留首次出现的大小写；
+ * - `excludeTags` 仅精确排除自身（如裸全局筛选符 `#task`），不排除其子标签（如 `#task/geek/obsidian`）。
+ */
+export function getFileFrequentTags(
+	allTasks: ReadonlyArray<Pick<GCTask, 'filePath' | 'tags'>>,
+	filePath: string | undefined,
+	limit = 5,
+	excludeTags?: readonly string[]
+): Array<[string, number]> {
+	if (!filePath || limit <= 0) return [];
+
+	const excludeSet = new Set(
+		(excludeTags || [])
+			.map((t) => normalizeTagInput(t).toLowerCase())
+			.filter(Boolean)
+	);
+
+	const counts = new Map<string, number>();
+	const canonical = new Map<string, string>();
+
+	for (const task of allTasks) {
+		if (task.filePath !== filePath || !task.tags || task.tags.length === 0) continue;
+		const seenInTask = new Set<string>();
+		for (const raw of task.tags) {
+			const clean = normalizeTagInput(raw);
+			if (!clean) continue;
+			const key = clean.toLowerCase();
+			if (excludeSet.has(key) || seenInTask.has(key)) continue;
+			seenInTask.add(key);
+			if (!canonical.has(key)) canonical.set(key, clean);
+			counts.set(key, (counts.get(key) || 0) + 1);
+		}
+	}
+
+	return Array.from(counts.entries())
+		.map(([key, count]): [string, number] => [canonical.get(key) || key, count])
+		.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+		.slice(0, limit);
+}

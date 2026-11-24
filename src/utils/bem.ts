@@ -768,6 +768,18 @@ export const EditTaskModalClasses = {
 		// 任务描述板块
 		descContainer: bem(BLOCKS.EDIT_TASK_MODAL, 'desc-container'),
 		descTextarea: bem(BLOCKS.EDIT_TASK_MODAL, 'desc-textarea'),
+		/** 任务编辑框内的多级 bullet items 编辑区 */
+		bulletNotes: bem(BLOCKS.EDIT_TASK_MODAL, 'bullet-notes'),
+		bulletNotesToggle: bem(BLOCKS.EDIT_TASK_MODAL, 'bullet-notes-toggle'),
+		/** 编辑框下方的一级子任务列表 */
+		subtasksSection: bem(BLOCKS.EDIT_TASK_MODAL, 'subtasks'),
+		subtasksHeader: bem(BLOCKS.EDIT_TASK_MODAL, 'subtasks-header'),
+		subtasksCount: bem(BLOCKS.EDIT_TASK_MODAL, 'subtasks-count'),
+		subtasksList: bem(BLOCKS.EDIT_TASK_MODAL, 'subtasks-list'),
+		subtaskItem: bem(BLOCKS.EDIT_TASK_MODAL, 'subtask-item'),
+		subtaskItemCompleted: bem(BLOCKS.EDIT_TASK_MODAL, 'subtask-item', 'completed'),
+		subtaskCheckbox: bem(BLOCKS.EDIT_TASK_MODAL, 'subtask-checkbox'),
+		subtaskText: bem(BLOCKS.EDIT_TASK_MODAL, 'subtask-text'),
 
 		// 优先级板块
 		priorityContainer: bem(BLOCKS.EDIT_TASK_MODAL, 'priority-container'),
@@ -1048,6 +1060,7 @@ export const SidebarClasses = {
 		tabBar: bem(BLOCKS.SIDEBAR, 'tab-bar'),
 		tabBtn: bem(BLOCKS.SIDEBAR, 'tab-btn'),
 		tabBtnActive: bem(BLOCKS.SIDEBAR, 'tab-btn', 'active'),
+		refreshBtn: bem(BLOCKS.SIDEBAR, 'refresh-btn'),
 		content: bem(BLOCKS.SIDEBAR, 'content'),
 		/** 面板（flex 列：固定头部 + 可滚动主体） */
 		panel: bem(BLOCKS.SIDEBAR, 'panel'),
@@ -1081,6 +1094,7 @@ export const SidebarClasses = {
 	modifiers: {
 		taskListTab: bem(BLOCKS.SIDEBAR, undefined, 'task-list'),
 		timelineTab: bem(BLOCKS.SIDEBAR, undefined, 'timeline'),
+		refreshBtnSpinning: bem(BLOCKS.SIDEBAR, 'refresh-btn', 'spinning'),
 		// 每日时间线连续画布
 	},
 };
@@ -1236,6 +1250,8 @@ export const TagSelectorClasses = {
 	elements: {
 		recommendedSection: bem(BLOCKS.TAG_SELECTOR, 'recommended-section'),
 		selectedSection: bem(BLOCKS.TAG_SELECTOR, 'selected-section'),
+		/** 本文件常用标签推荐区（位于标签选择器下方） */
+		fileFrequentSection: bem(BLOCKS.TAG_SELECTOR, 'file-frequent-section'),
 		label: bem(BLOCKS.TAG_SELECTOR, 'label'),
 		/** 搜索/创建合一输入框 */
 		searchInput: bem(BLOCKS.TAG_SELECTOR, 'search-input'),

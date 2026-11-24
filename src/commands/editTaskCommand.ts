@@ -7,6 +7,7 @@
 import { MarkdownView, Notice, type Editor, type MarkdownFileInfo } from 'obsidian';
 import type GanttCalendarPlugin from '../../main';
 import { parseSingleTaskLine } from '../tasks/taskParser/main';
+import { extractTaskChildrenFromLines } from '../tasks/taskParser/children';
 import { parseTaskLine } from '../tasks/taskParser/step1';
 import type { TaskFormatType } from '../tasks/taskSerializerSymbols';
 import { isDescriptionEditorOwner } from '../ui/components/DescriptionEditor';
@@ -66,6 +67,13 @@ export function registerEditTaskCommand(plugin: GanttCalendarPlugin): void {
 					onSuccess: () => plugin.refreshCalendarViews(),
 				});
 				return;
+			}
+
+			if (typeof activeEditor.getValue === 'function') {
+				const allLines = activeEditor.getValue().split('\n');
+				const { subtasks, bulletItems } = extractTaskChildrenFromLines(allLines, lineIndex, filter);
+				if (subtasks.length > 0) task.subtasks = subtasks;
+				if (bulletItems.length > 0) task.bulletItems = bulletItems;
 			}
 
 			openEditTaskModal(plugin.app, task, formats, () => {

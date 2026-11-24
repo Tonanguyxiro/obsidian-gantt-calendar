@@ -46,4 +46,22 @@ export function registerCommonCommands(plugin: GanttCalendarPlugin): void {
 		}
 	});
 
+	// 手动刷新任务缓存
+	plugin.addCommand({
+		id: 'refresh-tasks',
+		name: i18n.t('commands.refreshTasks'),
+		callback: async () => {
+			if (typeof plugin.taskCache?.reloadAll === 'function') {
+				await plugin.taskCache.reloadAll();
+			} else if (plugin.taskCache) {
+				await plugin.taskCache.initialize(
+					plugin.settings.globalTaskFilter,
+					plugin.settings.enabledTaskFormats
+				);
+			}
+			plugin.fileTaskIndex?.rebuild();
+			const { useCalendarStore } = await import('../ui/store/calendarStore');
+			useCalendarStore.getState().notifyTasksUpdated([...(plugin.taskCache?.getAllTasks() || [])]);
+		}
+	});
 }

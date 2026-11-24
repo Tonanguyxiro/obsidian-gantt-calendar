@@ -389,6 +389,105 @@ describe('DataviewDataSource 解析一致性与增量更新', () => {
 
 		ds.destroy();
 	});
+
+	it('写回或直读刷新后，即使延迟到达的 Dataview 事件携带更大 mtime（时区偏移）与旧行号任务，也不会回滚或产生重复任务', async () => {
+		const env = makeMockObsidianEnv({
+			files: {
+				'a.md': '- [/] #task 20:00 - 23:00 Update gantt calendar plugin ⏳ 2026-11-12',
+			},
+			dataviewTasks: [
+				{
+					path: 'a.md',
+					line: 0,
+					symbol: '-',
+					status: '/',
+					text: '#task 20:00 - 23:00 Update gantt calendar plugin ⏳ 2026-11-12',
+				},
+			],
+		});
+
+		const bus = new EventBus();
+		const repo = new TaskRepository(bus);
+		const config = {
+			enabled: true,
+			syncDirection: 'import-only' as const,
+			autoSync: true,
+			conflictResolution: 'local-win' as const,
+			globalFilter: '#task',
+			enabledFormats: ['tasks', 'dataview'],
+		};
+		const ds = new DataviewDataSource(env.app, bus, config);
+		repo.registerDataSource(ds);
+		await ds.initialize(config);
+		expect(repo.getAllTasks()).toHaveLength(1);
+
+		// 用户插行并修改任务后触发 refreshFile
+		env.setFileContent(
+			'a.md',
+			'# 标题\n\n- [/] #task 19:00 - 23:00 Update **gantt calendar plugin** ⏳ 2026-11-12'
+		);
+		await ds.refreshFile('a.md');
+		expect(repo.getAllTasks().map((t) => `${t.filePath}:${t.lineNumber}:${t.description}`)).toEqual([
+			'a.md:3:19:00 - 23:00 Update **gantt calendar plugin**',
+		]);
+
+		// 模拟 Dataview IndexedDB 时区偏移导致 page.file.mtime 比磁盘 stat.mtime 大 18 小时，且仍携带旧行号 0 的旧任务
+		const tf = env.tfiles.get('a.md') as unknown as { stat: { mtime: number } };
+		tf.stat.mtime = 999999999;
+		env.triggerMetadata('dataview:metadata-change', 'update', { path: 'a.md' });
+		await new Promise((r) => setTimeout(r, 15));
+
+		const finalTasks = repo.getAllTasks();
+		expect(finalTasks).toHaveLength(1);
+		expect(finalTasks[0].lineNumber).toBe(3);
+		expect(finalTasks[0].description).toBe('19:00 - 23:00 Update **gantt calendar plugin**');
+
+		ds.destroy();
+	});
+
+	it('TaskStore.reloadAll 强制冲刷未保存编辑器并清空重建缓存，彻底消除残留重复项', async () => {
+		const env = makeMockObsidianEnv({
+			files: {
+				'a.md': '- [ ] #task OldTask 📅 2026-11-12',
+			},
+			dataviewTasks: [
+				{ path: 'a.md', line: 0, symbol: '-', status: ' ', text: '#task OldTask 📅 2026-11-12' },
+			],
+		});
+
+		let savedByReload = false;
+		const dirtyView = {
+			file: { path: 'a.md', extension: 'md' },
+			dirty: true,
+			editor: {
+				getValue: () => '# Header\n- [ ] #task EditedInDirtyEditor 📅 2026-11-12',
+			},
+			save: async () => {
+				savedByReload = true;
+				dirtyView.dirty = false;
+				env.setFileContent('a.md', '# Header\n- [ ] #task EditedInDirtyEditor 📅 2026-11-12');
+			},
+		};
+		(env.app as unknown as { workspace: unknown }).workspace = {
+			getActiveFile: () => ({ path: 'a.md', extension: 'md' }),
+			getLeavesOfType: (type: string) => (type === 'markdown' ? [{ view: dirtyView }] : []),
+		};
+
+		const store = new TaskStore(env.app);
+		await store.initialize('#task', ['tasks']);
+		expect(store.getAllTasks().map((t) => `${t.filePath}:${t.lineNumber}:${t.description}`)).toEqual([
+			'a.md:1:OldTask',
+		]);
+
+		// 手动全量刷新：即使 Dataview 内存索引里仍是旧行号 0 的 OldTask，reloadAll 也会先落盘脏编辑器并直读打开的笔记
+		await store.reloadAll();
+		expect(savedByReload).toBe(true);
+		expect(store.getAllTasks().map((t) => `${t.filePath}:${t.lineNumber}:${t.description}`)).toEqual([
+			'a.md:2:EditedInDirtyEditor',
+		]);
+
+		store.clear();
+	});
 });
 
 describe('TaskStore Dataview 优先与自动回退机制', () => {

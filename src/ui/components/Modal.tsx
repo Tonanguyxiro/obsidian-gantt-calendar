@@ -32,6 +32,12 @@ const EXTERNAL_PORTAL_SELECTOR = [
 	`.${DropdownMenuClasses.container}`,
 	`.${ContextMenuClasses.container}`,
 	`.${TagSelectorTreeClasses.elements.suggest}`,
+	'#editingToolbarModalBar',
+	'#editingToolbarPopoverBar',
+	'.editingToolbarModalBar',
+	'.editingToolbarPopoverBar',
+	'#cMenuModalBar',
+	'#cMenuPopoverBar',
 ].join(', ');
 
 function isFocusableVisible(el: HTMLElement, boundary: HTMLElement): boolean {

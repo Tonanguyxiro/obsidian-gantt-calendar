@@ -1,26 +1,50 @@
-import { useState, type JSX } from 'react';
+import { useCallback, useState, type JSX } from 'react';
 import { SidebarClasses, withModifiers } from '../../utils/bem';
 import { i18n } from '../../i18n/i18n';
 import { Icon } from '../components/Icon';
 import { TaskListPanel } from './TaskListPanel';
 import { DailyTimelinePanel } from './DailyTimelinePanel';
 import { CalendarSkeleton } from '../components/CalendarSkeleton';
+import { usePlugin } from '../pluginContext';
 import { useCalendarStore } from '../store/calendarStore';
 
 type SidebarTab = 'taskList' | 'dailyTimeline';
 
 /**
- * 侧边栏 React 外壳：Tab 切换 + 内容区
+ * 侧边栏 React 外壳：Tab 切换 + 手动刷新按钮 + 内容区
  * 两个面板同时挂载，通过 display 显隐切换（保留各面板内部状态）
  */
 export function SidebarApp(): JSX.Element {
+	const plugin = usePlugin();
 	const [tab, setTab] = useState<SidebarTab>('dailyTimeline');
+	const [refreshing, setRefreshing] = useState(false);
 	const tasksReady = useCalendarStore((s) => s.tasksReady);
 
 	const switchTab = (next: SidebarTab) => {
 		if (tab === next) return;
 		setTab(next);
 	};
+
+	const handleManualRefresh = useCallback(async () => {
+		if (refreshing || !plugin?.taskCache) return;
+		setRefreshing(true);
+		try {
+			if (typeof plugin.taskCache.reloadAll === 'function') {
+				await plugin.taskCache.reloadAll();
+			} else {
+				await plugin.taskCache.initialize(
+					plugin.settings.globalTaskFilter,
+					plugin.settings.enabledTaskFormats
+				);
+			}
+			plugin.fileTaskIndex?.rebuild();
+			useCalendarStore.getState().notifyTasksUpdated([...plugin.taskCache.getAllTasks()]);
+		} finally {
+			setRefreshing(false);
+		}
+	}, [plugin, refreshing]);
+
+	const refreshLabel = i18n.t('toolbar.refresh.refreshTask');
 
 	return (
 		<div className={SidebarClasses.block}>
@@ -45,6 +69,19 @@ export function SidebarApp(): JSX.Element {
 					<Icon icon="clock" />
 					<span> {i18n.t('sidebar.tabTitles.dailyTimeline')}</span>
 				</div>
+				<button
+					type="button"
+					className={withModifiers(
+						`clickable-icon ${SidebarClasses.elements.refreshBtn}`,
+						refreshing ? SidebarClasses.modifiers.refreshBtnSpinning : undefined
+					)}
+					aria-label={refreshLabel}
+					title={refreshLabel}
+					disabled={refreshing}
+					onClick={() => void handleManualRefresh()}
+				>
+					<Icon icon="refresh-cw" />
+				</button>
 			</div>
 			<div className={SidebarClasses.elements.content}>
 				{tasksReady ? (
